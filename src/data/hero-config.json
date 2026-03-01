@@ -1,0 +1,148 @@
+{
+  "global": {
+    "maxConcurrentPulses": 5,
+    "cooldownMinMs": 5000,
+    "cooldownMaxMs": 15000,
+    "lambda": 0.033,
+    "lambdaRetry": 0.167,
+    "stepDurationMs": 3000,
+    "pulseSpeedMin": 0.25,
+    "pulseSpeedMax": 0.5,
+    "gridStepPx": 25,
+    "specialNodeMinDistance": 8,
+    "boundaryMargin": 3,
+    "waypointMin": 2,
+    "waypointMax": 5,
+    "exclusionZone": {
+      "rowStartPct": 0.30,
+      "rowEndPct": 0.70,
+      "colStartPct": 0.15,
+      "colEndPct": 0.85
+    },
+    "showIdleEdges": true,
+    "idleEdgeOpacity": 0.05,
+    "hubWeight": 3.0,
+    "nodeEdgeGap": 2
+  },
+  "specialNodes": [
+    {
+      "id": "cern",
+      "org": "CERN",
+      "software": "CERNBox",
+      "fqdn": "cernbox.cern.ch",
+      "instanceUrl": "https://cernbox.cern.ch",
+      "iconType": "logo",
+      "capabilities": ["exchange-token", "notifications", "http-sig"],
+      "preferredNeighbors": ["sunet", "surf", "geant"],
+      "exclusive": false
+    },
+    {
+      "id": "sunet",
+      "org": "SUNET",
+      "software": "Nextcloud",
+      "fqdn": "drive.sunet.se",
+      "instanceUrl": "https://drive.sunet.se",
+      "iconType": "sdf",
+      "shapeId": 1,
+      "capabilities": ["invites", "notifications"],
+      "preferredNeighbors": ["cern", "surf", "geant"],
+      "exclusive": false
+    },
+    {
+      "id": "surf",
+      "org": "SURF",
+      "software": "Nextcloud",
+      "fqdn": "surf.nl",
+      "instanceUrl": "https://surf.nl",
+      "iconType": "sdf",
+      "shapeId": 2,
+      "capabilities": ["notifications"],
+      "preferredNeighbors": ["cern", "sunet", "geant"],
+      "exclusive": false
+    },
+    {
+      "id": "cesnet",
+      "org": "CESNET",
+      "software": "ownCloud",
+      "fqdn": "cesnet.cz",
+      "instanceUrl": "https://cesnet.cz",
+      "iconType": "sdf",
+      "shapeId": 3,
+      "capabilities": ["webdav-uri"],
+      "preferredNeighbors": ["stfc", "geant"],
+      "exclusive": false
+    },
+    {
+      "id": "garr",
+      "org": "GARR",
+      "software": "Seafile",
+      "fqdn": "garr.it",
+      "instanceUrl": "https://garr.it",
+      "iconType": "sdf",
+      "shapeId": 4,
+      "capabilities": ["notifications"],
+      "preferredNeighbors": ["csic"],
+      "exclusive": true
+    },
+    {
+      "id": "fzj",
+      "org": "FZJ",
+      "software": "CERNBox",
+      "fqdn": "fz-juelich.de",
+      "instanceUrl": "https://fz-juelich.de",
+      "iconType": "sdf",
+      "shapeId": 5,
+      "capabilities": ["exchange-token"],
+      "preferredNeighbors": ["geant", "cnrs"],
+      "exclusive": false
+    },
+    {
+      "id": "cnrs",
+      "org": "CNRS",
+      "software": "OpenCloud",
+      "fqdn": "cnrs.fr",
+      "instanceUrl": "https://cnrs.fr",
+      "iconType": "sdf",
+      "shapeId": 1,
+      "capabilities": ["invites", "notifications"],
+      "preferredNeighbors": ["fzj", "stfc"],
+      "exclusive": false
+    },
+    {
+      "id": "stfc",
+      "org": "STFC",
+      "software": "Nextcloud",
+      "fqdn": "stfc.ac.uk",
+      "instanceUrl": "https://stfc.ac.uk",
+      "iconType": "sdf",
+      "shapeId": 2,
+      "capabilities": ["http-sig"],
+      "preferredNeighbors": ["cesnet", "cnrs"],
+      "exclusive": false
+    },
+    {
+      "id": "csic",
+      "org": "CSIC",
+      "software": "ownCloud",
+      "fqdn": "csic.es",
+      "instanceUrl": "https://csic.es",
+      "iconType": "sdf",
+      "shapeId": 3,
+      "capabilities": ["webdav-uri"],
+      "preferredNeighbors": ["garr"],
+      "exclusive": false
+    },
+    {
+      "id": "geant",
+      "org": "GÉANT",
+      "software": "ScienceMesh",
+      "fqdn": "sciencemesh.io",
+      "instanceUrl": "https://sciencemesh.io",
+      "iconType": "sdf",
+      "shapeId": 4,
+      "capabilities": ["exchange-token", "notifications", "invites"],
+      "preferredNeighbors": ["cern", "sunet", "fzj", "cesnet", "surf"],
+      "exclusive": false
+    }
+  ]
+}
