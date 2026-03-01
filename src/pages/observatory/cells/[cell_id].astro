@@ -1,0 +1,48 @@
+---
+import fs from "node:fs/promises";
+import path from "node:path";
+
+import InnerLayout from "../../../layouts/InnerLayout.astro";
+import ObservatoryShell from "../../../components/observatory/ObservatoryShell.tsx";
+
+export async function getStaticPaths() {
+  const rulesPath = path.join(process.cwd(), "public", "matrix-rules.v1.json");
+  try {
+    const raw = await fs.readFile(rulesPath, "utf-8");
+    const rules = JSON.parse(raw);
+    const scenarios = Array.isArray(rules?.scenarios) ? rules.scenarios : [];
+    const cellIds = [...new Set(scenarios.map((s) => s?.cell_id).filter(Boolean))];
+    return cellIds.map((cell_id) => ({ params: { cell_id } }));
+  } catch {
+    return [];
+  }
+}
+
+const { cell_id } = Astro.params;
+---
+
+<InnerLayout
+  title={`Cell ${cell_id} - Compatibility Observatory`}
+  description="OCM STA compatibility observatory cell view."
+>
+  <main class="space-y-6">
+    <header class="space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-xl font-semibold text-white md:text-2xl">
+          Compatibility Observatory
+        </h1>
+        <a
+          class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
+          href={`${import.meta.env.BASE_URL}observatory/`}
+        >
+          Back to matrix
+        </a>
+      </div>
+      <p class="text-sm text-gray-300">
+        Cell deep link. Overlay opens on load.
+      </p>
+    </header>
+
+    <ObservatoryShell client:load initialCellId={cell_id} />
+  </main>
+</InnerLayout>

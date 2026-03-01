@@ -1,0 +1,22 @@
+---
+import InnerLayout from '../../layouts/InnerLayout.astro';
+import ObservatoryShell from '../../components/observatory/ObservatoryShell.tsx';
+---
+
+<InnerLayout
+  title="Compatibility Observatory"
+  description="OCM STA compatibility observatory."
+>
+  <main class="space-y-6">
+    <header class="space-y-2">
+      <h1 class="text-2xl font-semibold text-white md:text-3xl">
+        Compatibility Observatory
+      </h1>
+      <p class="text-sm text-gray-300">
+        Latest run only. Click a cell for evidence.
+      </p>
+    </header>
+
+    <ObservatoryShell client:load />
+  </main>
+</InnerLayout>
