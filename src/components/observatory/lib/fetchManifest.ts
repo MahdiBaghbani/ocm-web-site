@@ -1,3 +1,16 @@
+export class HttpError extends Error {
+  readonly status: number;
+  readonly statusText: string;
+  readonly url: string;
+  constructor(status: number, statusText: string, url: string) {
+    super(`fetch failed: ${status} ${statusText}`);
+    this.name = "HttpError";
+    this.status = status;
+    this.statusText = statusText;
+    this.url = url;
+  }
+}
+
 export function isAbortError(err: unknown): boolean {
   return Boolean(
     err &&
@@ -14,7 +27,7 @@ export function getBaseUrl(): string {
 
 export async function fetchJson<T = unknown>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { cache: "no-store", signal });
-  if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new HttpError(res.status, res.statusText, url);
   return res.json() as Promise<T>;
 }
 
@@ -29,7 +42,7 @@ export async function fetchTruncatedText(
   signal?: AbortSignal,
 ): Promise<TruncatedText> {
   const res = await fetch(url, { cache: "no-store", signal });
-  if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new HttpError(res.status, res.statusText, url);
 
   if (!res.body) {
     const text = await res.text();

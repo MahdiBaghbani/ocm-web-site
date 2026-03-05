@@ -92,3 +92,30 @@ export function setTabInUrl(value: EvidenceTab | null): void {
   const clean = next.replace(/\?$/, "");
   window.history.replaceState({}, "", clean);
 }
+
+export type MitmSubTab = "traffic" | "files";
+const VALID_MITM_SUBTABS: readonly MitmSubTab[] = ["traffic", "files"];
+
+export function parseMitmFromUrl(url: string | URL): MitmSubTab | null {
+  if (typeof window === "undefined") return null;
+  const u =
+    typeof url === "string" ? new URL(url, window.location.origin) : url;
+  const param = u.searchParams.get("mitm");
+  if (!param) return null;
+  return (VALID_MITM_SUBTABS as string[]).includes(param)
+    ? (param as MitmSubTab)
+    : null;
+}
+
+export function setMitmInUrl(value: MitmSubTab | null): void {
+  if (typeof window === "undefined") return;
+  const u = new URL(window.location.href);
+  if (value === null) {
+    u.searchParams.delete("mitm");
+  } else {
+    u.searchParams.set("mitm", value);
+  }
+  const next = `${u.pathname}?${u.searchParams.toString()}${u.hash}`;
+  const clean = next.replace(/\?$/, "");
+  window.history.replaceState({}, "", clean);
+}
