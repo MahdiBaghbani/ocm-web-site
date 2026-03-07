@@ -1,8 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { fetchJson } from "../../lib/fetchManifest";
+import React, { useMemo } from "react";
 import { groupEvidence, getImageRenderModel } from "../../lib/evidenceModel";
 import type {
-  ImagesManifest,
   SuiteManifest,
   CellStatus,
 } from "../../lib/contracts";
@@ -89,129 +87,9 @@ export default function OverviewTab({
     });
   }, [mf, effectiveCellId, runId]);
 
-  // Lazy fetch of meta/images.v1.json for the current run.
-  const [imagesData, setImagesData] = useState<ImagesManifest | null>(null);
-  const [imagesFetchDone, setImagesFetchDone] = useState(false);
-
-  useEffect(() => {
-    setImagesData(null);
-    setImagesFetchDone(false);
-    if (!artifactBase) {
-      setImagesFetchDone(true);
-      return;
-    }
-    let alive = true;
-    fetchJson<ImagesManifest>(`${artifactBase}meta/images.v1.json`)
-      .then((data) => {
-        if (alive) {
-          setImagesData(data);
-          setImagesFetchDone(true);
-        }
-      })
-      .catch(() => {
-        if (alive) setImagesFetchDone(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [artifactBase]);
-
   const verdictUi = activeResult?.status
     ? statusToUi(activeResult.status)
     : null;
-
-  function renderImages() {
-    if (imagesData?.services?.length) {
-      // Group services by role for clarity.
-      const services = imagesData.services;
-      const byRole: Map<string, (typeof services)[number][]> = new Map();
-      for (const svc of services) {
-        const bucket = byRole.get(svc.role);
-        if (bucket) {
-          bucket.push(svc);
-        } else {
-          byRole.set(svc.role, [svc]);
-        }
-      }
-      return (
-        <div className="space-y-4">
-          {[...byRole.entries()].map(([role, svcs]) => (
-            <div key={role}>
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                {role}
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {svcs.map((svc) => {
-                  const shortDigest = svc.digest
-                    ? svc.digest.slice(0, 19)
-                    : null;
-                  return (
-                    <div key={svc.service} className="space-y-0.5">
-                      <div className="text-xs font-medium text-zinc-300">
-                        {svc.service}
-                      </div>
-                      <div className="font-mono text-xs text-zinc-100">
-                        {svc.tag}
-                      </div>
-                      {shortDigest ? (
-                        <div className="font-mono text-[11px] text-zinc-500">
-                          digest: {shortDigest}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    // Still loading.
-    if (!imagesFetchDone) {
-      return (
-        <div className="text-xs text-zinc-500">Loading image metadata...</div>
-      );
-    }
-
-    // Fallback: suite-manifest run.images.
-    if (!run?.images || !Object.keys(run.images).length) {
-      return (
-        <div className="text-sm text-zinc-400">No image metadata available.</div>
-      );
-    }
-    return (
-      <div className="grid gap-3 md:grid-cols-2">
-        {Object.entries(run.images).map(([k, v]) => {
-          const prov = run.images_provenance?.[k] ?? null;
-          const id = prov?.local_image_id ?? "";
-          const shortId = id.startsWith("sha256:")
-            ? id.slice(0, 19)
-            : id.slice(0, 12);
-          const digests = Array.isArray(prov?.repo_digests)
-            ? prov.repo_digests
-            : [];
-          return (
-            <div key={k} className="space-y-0.5">
-              <div className="text-xs text-zinc-400">{k}</div>
-              <div className="font-mono text-xs text-zinc-100">{String(v)}</div>
-              {shortId ? (
-                <div className="font-mono text-[11px] text-zinc-400">
-                  id: {shortId}
-                </div>
-              ) : null}
-              {digests.length ? (
-                <div className="font-mono text-[11px] text-zinc-500">
-                  digest: {String(digests[0])}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
 
   // No-run state: show browser picker (if applicable) and a friendly card.
   if (!runId) {
@@ -310,42 +188,6 @@ export default function OverviewTab({
         <h3 className="text-sm font-semibold text-zinc-50">Video</h3>
         <VideoPlayer artifactBase={artifactBase} videoItem={videos[0] ?? null} poster={posterFromFirstScreenshot} />
       </section>
-
-      {/* Images */}
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-50">Images</h3>
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
-          {renderImages()}
-          {run.stack_def_sha256 ? (
-            <div className="mt-4 border-t border-zinc-800 pt-3">
-              <div className="text-xs text-zinc-400">stack_def_sha256</div>
-              <div className="mt-1 font-mono text-[11px] text-zinc-200">
-                {run.stack_def_sha256}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      {/* Action links */}
-      <div className="flex flex-wrap gap-2">
-        <a
-          className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
-          href={`${baseUrl}observatory/runs/${encodeURIComponent(runId)}/`}
-        >
-          Open as page
-        </a>
-        {artifactBase ? (
-          <a
-            className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
-            href={artifactBase}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Raw artifacts
-          </a>
-        ) : null}
-      </div>
     </div>
   );
 }
