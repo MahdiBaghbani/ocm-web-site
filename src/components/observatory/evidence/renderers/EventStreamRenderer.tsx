@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import type { EvidenceItem } from "../../lib/contracts";
+import TextViewerCore from "./TextViewerCore";
 
 interface EventStreamRendererProps {
   item: EvidenceItem;
@@ -117,9 +118,11 @@ function TrafficRow({ rec, rowIdx }: { rec: TrafficRecord; rowIdx: number }) {
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                 Request
               </div>
-              <pre className="overflow-auto whitespace-pre-wrap break-words rounded border border-zinc-800 bg-zinc-950 p-2 font-mono text-xs text-zinc-300">
-                {JSON.stringify(req, null, 2)}
-              </pre>
+              <TextViewerCore
+                content={JSON.stringify(req, null, 2)}
+                language="json"
+                className="rounded border border-zinc-800"
+              />
             </div>
           ) : null}
           {resp ? (
@@ -127,9 +130,11 @@ function TrafficRow({ rec, rowIdx }: { rec: TrafficRecord; rowIdx: number }) {
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                 Response
               </div>
-              <pre className="overflow-auto whitespace-pre-wrap break-words rounded border border-zinc-800 bg-zinc-950 p-2 font-mono text-xs text-zinc-300">
-                {JSON.stringify(resp, null, 2)}
-              </pre>
+              <TextViewerCore
+                content={JSON.stringify(resp, null, 2)}
+                language="json"
+                className="rounded border border-zinc-800"
+              />
             </div>
           ) : null}
         </div>

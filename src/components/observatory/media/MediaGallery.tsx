@@ -239,18 +239,20 @@ export default function MediaGallery(props: MediaGalleryProps) {
           >
             full
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setZoom(1);
-              onClose?.();
-            }}
-            className="ml-auto rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
-            title="Close"
-            aria-label="Close"
-          >
-            x
-          </button>
+          {onClose ? (
+            <button
+              type="button"
+              onClick={() => {
+                setZoom(1);
+                onClose();
+              }}
+              className="ml-auto rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
+              title="Close"
+              aria-label="Close"
+            >
+              x
+            </button>
+          ) : null}
         </div>
 
         {/* Main image */}
@@ -304,6 +306,28 @@ export default function MediaGallery(props: MediaGalleryProps) {
               )
             ) : null}
           </div>
+          {items.length > 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={prev}
+                title="Previous"
+                aria-label="Previous screenshot"
+                className="absolute left-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-black/50 text-lg text-zinc-100 backdrop-blur-sm transition-colors hover:bg-black/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                &lsaquo;
+              </button>
+              <button
+                type="button"
+                onClick={next}
+                title="Next"
+                aria-label="Next screenshot"
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-black/50 text-lg text-zinc-100 backdrop-blur-sm transition-colors hover:bg-black/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                &rsaquo;
+              </button>
+            </>
+          ) : null}
         </div>
 
         {/* Caption and position */}
