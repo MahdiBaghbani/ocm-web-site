@@ -4,6 +4,7 @@ import {
   compareAxisSenderKey,
   compareAxisReceiverKey,
 } from "../lib/versionSorting";
+import { titleCasePlatform } from "../lib/nicify";
 import { MatrixCell } from "./MatrixCell";
 
 export interface MatrixGridProps {
@@ -183,7 +184,7 @@ export function MatrixGrid({
                   "whitespace-nowrap px-2 py-1.5 text-center",
                 ].join(" ")}
               >
-                {platform || "—"}
+                {platform ? titleCasePlatform(platform) : "—"}
               </th>
             ))}
           </tr>
@@ -255,7 +256,7 @@ export function MatrixGrid({
                     ].join(" ")}
                     style={axisColStyle}
                   >
-                    {platform || "—"}
+                    {platform ? titleCasePlatform(platform) : "—"}
                   </th>
                 ) : null}
 
@@ -267,7 +268,7 @@ export function MatrixGrid({
                     "bg-zinc-900/80",
                     "border-r border-b",
                     borderEdge,
-                    "whitespace-nowrap px-2 py-1 text-left font-mono text-[11px] font-semibold text-zinc-300",
+                    "whitespace-nowrap px-2 py-1 text-center align-middle font-mono text-[11px] font-semibold text-zinc-300",
                   ].join(" ")}
                 >
                   {version || "—"}

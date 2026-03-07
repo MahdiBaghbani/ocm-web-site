@@ -2,9 +2,9 @@ import type { FlowMetadata } from "./contracts";
 
 const PLATFORM_MAP: Record<string, string> = {
   nextcloud: "Nextcloud",
-  ocis: "ocIS",
+  ocis: "oCIS",
   opencloud: "OpenCloud",
-  "ocm-go": "ocm-go",
+  ocmgo: "OCM-Go",
   seafile: "Seafile",
 };
 
@@ -13,7 +13,7 @@ const PLATFORM_MAP: Record<string, string> = {
  * Uses a hard-coded brand map first; falls back to capitalizing the first letter.
  *
  * @example titleCasePlatform("nextcloud") // => "Nextcloud"
- * @example titleCasePlatform("ocis")      // => "ocIS"
+ * @example titleCasePlatform("ocis")      // => "oCIS"
  */
 export function titleCasePlatform(name: string): string {
   if (Object.prototype.hasOwnProperty.call(PLATFORM_MAP, name)) {
@@ -60,7 +60,7 @@ export function nicifyCellId(cellId: string, flows: FlowMetadata[]): string {
     }
 
     // Split a "platform-version" pair string on the LAST hyphen so that
-    // platform names containing hyphens (e.g. "ocm-go") are preserved.
+    // platform names containing hyphens (e.g. a hypothetical "foo-bar") are preserved.
     function splitPair(pair: string): [string, string] {
       const lastDash = pair.lastIndexOf("-");
       if (lastDash === -1) return [pair, ""];
