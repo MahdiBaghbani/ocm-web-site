@@ -8,15 +8,20 @@ interface OverlayFrameProps {
 
 export function OverlayFrame({ title, onClose, children }: OverlayFrameProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         className="absolute inset-0 bg-black/60"
         aria-label="Close overlay"
         onClick={onClose}
       />
-      <div className="relative h-full w-full max-w-3xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-zinc-50">{title}</h2>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl"
+      >
+        {/* Fixed header chrome */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 px-6 py-4">
+          <h2 className="truncate text-lg font-semibold text-zinc-50">{title}</h2>
           <button
             className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
             onClick={onClose}
@@ -24,7 +29,9 @@ export function OverlayFrame({ title, onClose, children }: OverlayFrameProps) {
             Close
           </button>
         </div>
-        <div className="mt-6">{children}</div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );

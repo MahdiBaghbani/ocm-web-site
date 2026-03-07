@@ -308,6 +308,7 @@ export default function ObservatoryShell({
           runId={overlay.runId}
           mf={mf}
           baseUrl={baseUrl}
+          flows={rules?.flows ?? []}
           onClose={closeOverlay}
           onSelectRun={handleSelectRun}
         />

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { EvidenceItem, EvidenceManifest, EvidenceTab, SuiteManifest } from "../lib/contracts";
-import { fetchJson, isAbortError } from "../lib/fetchManifest";
+import type { EvidenceItem, EvidenceManifest, EvidenceTab, FlowMetadata, SuiteManifest } from "../lib/contracts";
+import { fetchJson, HttpError, isAbortError } from "../lib/fetchManifest";
+import { nicifyCellId } from "../lib/nicify";
 import { parseTabFromUrl, setTabInUrl } from "../lib/urlState";
 import { OverlayFrame } from "./OverlayFrame";
 import OverviewTab from "./tabs/OverviewTab";
@@ -15,6 +16,7 @@ interface RunModalProps {
   runId: string;
   mf: SuiteManifest | null;
   baseUrl: string;
+  flows: FlowMetadata[];
   onClose: () => void;
   onSelectRun: (runId: string) => void;
 }
@@ -23,6 +25,13 @@ export interface EvidenceTabProps {
   evidenceItems: EvidenceItem[];
   artifactBase: string;
 }
+
+type EvidenceState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; manifest: EvidenceManifest }
+  | { status: "missing" }
+  | { status: "error"; message: string };
 
 const TAB_ORDER: readonly EvidenceTab[] = [
   "overview",
@@ -42,11 +51,36 @@ const TAB_LABELS: Record<EvidenceTab, string> = {
   stack: "Stack",
 };
 
+function EvidenceLoadingCard() {
+  return (
+    <div className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 p-10 text-sm text-zinc-400">
+      Loading evidence...
+    </div>
+  );
+}
+
+function EvidenceMissingCard() {
+  return (
+    <div className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 p-10 text-sm text-zinc-400">
+      No evidence manifest for this run.
+    </div>
+  );
+}
+
+function EvidenceErrorCard({ message }: { message: string }) {
+  return (
+    <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-400">
+      Failed to load evidence: {message}
+    </div>
+  );
+}
+
 export function RunModal({
   cellId,
   runId,
   mf,
   baseUrl,
+  flows,
   onClose,
   onSelectRun,
 }: RunModalProps) {
@@ -55,7 +89,7 @@ export function RunModal({
     return parseTabFromUrl(window.location.href) ?? "overview";
   });
 
-  const [evidenceManifest, setEvidenceManifest] = useState<EvidenceManifest | null>(null);
+  const [evidenceState, setEvidenceState] = useState<EvidenceState>({ status: "idle" });
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -85,26 +119,32 @@ export function RunModal({
 
   // Fetch evidence manifest when artifactBase changes.
   useEffect(() => {
-    setEvidenceManifest(null);
-    if (!artifactBase) return;
-
+    if (!artifactBase) {
+      setEvidenceState({ status: "idle" });
+      return;
+    }
+    setEvidenceState({ status: "loading" });
     const controller = new AbortController();
-    fetchJson<EvidenceManifest>(`${artifactBase}meta/evidence.v1.json`, controller.signal)
-      .then((data) => {
-        setEvidenceManifest(data);
-      })
+    fetchJson<EvidenceManifest>(
+      `${artifactBase}meta/evidence.v1.json`,
+      controller.signal,
+    )
+      .then((manifest) => setEvidenceState({ status: "ready", manifest }))
       .catch((err: unknown) => {
         if (isAbortError(err)) return;
-        setEvidenceManifest(null);
+        if (err instanceof HttpError && err.status === 404) {
+          setEvidenceState({ status: "missing" });
+          return;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        setEvidenceState({ status: "error", message });
       });
-    return () => {
-      controller.abort();
-    };
+    return () => controller.abort();
   }, [artifactBase]);
 
   const evidenceItems = useMemo<EvidenceItem[]>(
-    () => evidenceManifest?.items ?? [],
-    [evidenceManifest],
+    () => (evidenceState.status === "ready" ? evidenceState.manifest.items : []),
+    [evidenceState],
   );
 
   function selectTab(tab: EvidenceTab) {
@@ -136,7 +176,21 @@ export function RunModal({
 
   const sharedProps: EvidenceTabProps = { evidenceItems, artifactBase };
 
-  const title = `Run: ${runId}`;
+  const title = nicifyCellId(effectiveCellId, flows);
+
+  function renderEvidenceTab(makeTab: () => React.ReactNode): React.ReactNode {
+    switch (evidenceState.status) {
+      case "idle":
+      case "loading":
+        return <EvidenceLoadingCard />;
+      case "missing":
+        return <EvidenceMissingCard />;
+      case "error":
+        return <EvidenceErrorCard message={evidenceState.message} />;
+      case "ready":
+        return makeTab();
+    }
+  }
 
   function renderBody() {
     switch (activeTab) {
@@ -153,13 +207,13 @@ export function RunModal({
       case "screenshots":
         return <ScreenshotsTab runId={runId} mf={mf} artifactBase={artifactBase} />;
       case "mitm":
-        return <MitmTab {...sharedProps} />;
+        return renderEvidenceTab(() => <MitmTab {...sharedProps} />);
       case "logs":
-        return <LogsTab {...sharedProps} />;
+        return renderEvidenceTab(() => <LogsTab {...sharedProps} />);
       case "meta":
-        return <MetaTab {...sharedProps} />;
+        return renderEvidenceTab(() => <MetaTab {...sharedProps} />);
       case "stack":
-        return <StackTab {...sharedProps} />;
+        return renderEvidenceTab(() => <StackTab {...sharedProps} />);
     }
   }
 
