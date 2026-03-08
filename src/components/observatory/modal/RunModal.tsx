@@ -88,6 +88,9 @@ export function RunModal({
     if (typeof window === "undefined") return "overview";
     return parseTabFromUrl(window.location.href) ?? "overview";
   });
+  const [everMounted, setEverMounted] = useState<Set<EvidenceTab>>(
+    () => new Set([activeTab]),
+  );
 
   const [evidenceState, setEvidenceState] = useState<EvidenceState>({ status: "idle" });
 
@@ -96,9 +99,19 @@ export function RunModal({
   // When runId changes, stay on the URL-selected tab if present, else Overview.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const fromUrl = parseTabFromUrl(window.location.href);
-    setActiveTab(fromUrl ?? "overview");
+    const fromUrl = parseTabFromUrl(window.location.href) ?? "overview";
+    setActiveTab(fromUrl);
+    setEverMounted(new Set([fromUrl]));
   }, [runId]);
+
+  useEffect(() => {
+    setEverMounted((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
 
   // Derive effective cell and run from manifest.
   const effectiveCellId =
@@ -192,29 +205,20 @@ export function RunModal({
     }
   }
 
-  function renderBody() {
-    switch (activeTab) {
-      case "overview":
-        return (
-          <OverviewTab
-            cellId={effectiveCellId}
-            runId={runId}
-            mf={mf}
-            baseUrl={baseUrl}
-            onSelectRun={onSelectRun}
-          />
-        );
-      case "screenshots":
-        return <ScreenshotsTab runId={runId} mf={mf} artifactBase={artifactBase} />;
-      case "mitm":
-        return renderEvidenceTab(() => <MitmTab {...sharedProps} />);
-      case "logs":
-        return renderEvidenceTab(() => <LogsTab {...sharedProps} />);
-      case "meta":
-        return renderEvidenceTab(() => <MetaTab {...sharedProps} />);
-      case "stack":
-        return renderEvidenceTab(() => <StackTab {...sharedProps} />);
-    }
+  function renderTabPanel(tab: EvidenceTab, content: React.ReactNode): React.ReactNode {
+    const isActive = tab === activeTab;
+    return (
+      <div
+        key={tab}
+        role="tabpanel"
+        id={`runmodal-panel-${tab}`}
+        aria-labelledby={`runmodal-tab-${tab}`}
+        hidden={!isActive}
+        className={isActive ? "h-full overflow-y-auto" : "hidden"}
+      >
+        {content}
+      </div>
+    );
   }
 
   return (
@@ -252,14 +256,44 @@ export function RunModal({
           })}
         </div>
 
-        {/* Active tab body */}
-        <div
-          role="tabpanel"
-          id={`runmodal-panel-${activeTab}`}
-          aria-labelledby={`runmodal-tab-${activeTab}`}
-          className="flex-1 min-h-0 overflow-y-auto"
-        >
-          {renderBody()}
+        {/* Tab bodies: lazy-mounted on first visit, kept alive thereafter via `hidden` toggling. */}
+        <div className="flex-1 min-h-0 relative">
+          {everMounted.has("overview") &&
+            renderTabPanel(
+              "overview",
+              <OverviewTab
+                cellId={effectiveCellId}
+                runId={runId}
+                mf={mf}
+                baseUrl={baseUrl}
+                onSelectRun={onSelectRun}
+              />,
+            )}
+          {everMounted.has("screenshots") &&
+            renderTabPanel(
+              "screenshots",
+              <ScreenshotsTab runId={runId} mf={mf} artifactBase={artifactBase} />,
+            )}
+          {everMounted.has("mitm") &&
+            renderTabPanel(
+              "mitm",
+              renderEvidenceTab(() => <MitmTab {...sharedProps} />),
+            )}
+          {everMounted.has("logs") &&
+            renderTabPanel(
+              "logs",
+              renderEvidenceTab(() => <LogsTab {...sharedProps} />),
+            )}
+          {everMounted.has("meta") &&
+            renderTabPanel(
+              "meta",
+              renderEvidenceTab(() => <MetaTab {...sharedProps} />),
+            )}
+          {everMounted.has("stack") &&
+            renderTabPanel(
+              "stack",
+              renderEvidenceTab(() => <StackTab {...sharedProps} />),
+            )}
         </div>
       </div>
     </OverlayFrame>

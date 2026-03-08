@@ -117,18 +117,22 @@ export function MatrixGrid({
   // Col 2 (platform):   left-[24px], width 1.5rem = 24px
   // Col 3 (version):    left-[48px]
 
-  // Shared inline style for the 24px vertical-text columns.
+  // Shared inline style for the rotated-text axis columns. Widths are owned by <colgroup> above.
   const axisColStyle: React.CSSProperties = {
     writingMode: "vertical-rl",
     transform: "rotate(180deg)",
-    width: "1.5rem",
-    minWidth: "1.5rem",
-    maxWidth: "1.5rem",
   };
 
   return (
     <div className="overflow-auto rounded-2xl border border-zinc-800 bg-zinc-900/20">
-      <table className="w-full table-auto border-collapse text-sm">
+      <table className="w-full table-fixed border-collapse text-sm">
+        {/* Strict column widths: axis cols fixed; body cols share remainder equally. */}
+        <colgroup>
+          <col style={{ width: "1.5rem" }} />
+          <col style={{ width: "1.5rem" }} />
+          <col style={{ width: "3rem" }} />
+          {senders.map((s) => <col key={s} />)}
+        </colgroup>
         <thead>
           {/*
             3-row sender header.
