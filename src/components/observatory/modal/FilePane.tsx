@@ -60,11 +60,8 @@ export default function FilePane({
     }
   }
 
-  // Chrome estimate: OverlayFrame p-6 (24px) + title row (~40px) + mt-6 (24px)
-  // + RunModal tab bar (~40px) + space-y-5 gap (20px) = ~148px; using 8rem
-  // (128px) as a conservative static value so content area has breathing room.
   return (
-    <div className="grid grid-cols-[18rem_1fr] h-[calc(90vh-8rem)] gap-0">
+    <div className="grid grid-cols-[18rem_1fr] h-full min-h-0 gap-0">
       {/* Selector pane - scrolls independently */}
       <div
         ref={selectorRef}

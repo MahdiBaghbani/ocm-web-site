@@ -219,11 +219,11 @@ export function RunModal({
 
   return (
     <OverlayFrame title={title} onClose={onClose}>
-      <div className="space-y-5">
+      <div className="flex h-full flex-col gap-5">
         {/* Tab bar */}
         <div
           role="tablist"
-          className="flex flex-wrap gap-1 border-b border-zinc-800 pb-1"
+          className="flex shrink-0 flex-wrap gap-1 border-b border-zinc-800 pb-1"
           onKeyDown={handleKeyDown}
         >
           {TAB_ORDER.map((tab, idx) => {
@@ -257,6 +257,7 @@ export function RunModal({
           role="tabpanel"
           id={`runmodal-panel-${activeTab}`}
           aria-labelledby={`runmodal-tab-${activeTab}`}
+          className="flex-1 min-h-0 overflow-y-auto"
         >
           {renderBody()}
         </div>

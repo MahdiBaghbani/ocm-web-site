@@ -17,7 +17,7 @@ export function OverlayFrame({ title, onClose, children }: OverlayFrameProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl"
+        className="relative flex h-[96vh] w-[96vw] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl"
       >
         {/* Fixed header chrome */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 px-6 py-4">
@@ -31,7 +31,7 @@ export function OverlayFrame({ title, onClose, children }: OverlayFrameProps) {
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className="flex-1 min-h-0 overflow-hidden px-6 py-5">{children}</div>
       </div>
     </div>
   );
