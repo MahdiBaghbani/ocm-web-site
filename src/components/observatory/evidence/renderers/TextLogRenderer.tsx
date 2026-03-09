@@ -1,6 +1,6 @@
 import React from "react";
 import type { EvidenceItem } from "../../lib/contracts";
-import TextViewerCore from "./TextViewerCore";
+import TextViewerCore, { type TextViewerCoreProps } from "./TextViewerCore";
 
 interface TextLogRendererProps {
   item: EvidenceItem;
@@ -11,16 +11,22 @@ interface TextLogRendererProps {
   downloadUrl?: string;
 }
 
-export default function TextLogRenderer({ item, text, truncated }: TextLogRendererProps) {
-  const showTruncated = truncated || item.truncated === true;
+function mapLanguage(hint: string | undefined): TextViewerCoreProps["language"] {
+  switch (hint) {
+    case "yaml": return "yaml";
+    case "env":  return "env";
+    case "tsv":  return "plain";
+    default:     return "log";
+  }
+}
 
+export default function TextLogRenderer({ item, text, truncated }: TextLogRendererProps) {
   return (
     <TextViewerCore
       key={item.path}
       content={text}
-      language="log"
-      followTail={false}
-      truncated={showTruncated}
+      language={mapLanguage(item.language)}
+      truncated={truncated || item.truncated === true}
       truncationNote="File truncated - showing first portion only."
     />
   );

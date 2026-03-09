@@ -4,7 +4,6 @@ import { parseAnsi, stripAnsi } from "./ansi";
 export interface TextViewerCoreProps {
   content: string;
   language: "json" | "yaml" | "env" | "log" | "plain";
-  followTail?: boolean;
   truncated?: boolean;
   truncationNote?: string;
   className?: string;
@@ -47,10 +46,72 @@ function colorizeJson(line: string): React.ReactNode {
   return <>{out}</>;
 }
 
+// YAML: keys (key:), block list dashes, anchors/aliases, comments, strings, numbers/bools/null.
+const YAML_RE =
+  /(^\s*-\s)|(^\s*[A-Za-z_][\w\-.]*\s*:)|(\s#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b(?:true|false|null|~)\b)|(-?\d+(?:\.\d+)?)/gm;
+
+function colorizeYaml(line: string): React.ReactNode {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  YAML_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = YAML_RE.exec(line)) !== null) {
+    if (m.index > last) out.push(line.slice(last, m.index));
+    const cls =
+      m[1] !== undefined
+        ? "text-zinc-500"        // list dash
+        : m[2] !== undefined
+          ? "text-sky-300"       // key:
+          : m[3] !== undefined
+            ? "text-zinc-500"    // comment
+            : m[4] !== undefined
+              ? "text-emerald-300" // string
+              : m[5] !== undefined
+                ? "text-fuchsia-300" // bool/null
+                : "text-amber-300";  // number
+    out.push(<span key={m.index} className={cls}>{m[0]}</span>);
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) out.push(line.slice(last));
+  return <>{out}</>;
+}
+
+// .env: KEY=value, comments, quoted values.
+const ENV_RE =
+  /(^\s*#.*$)|(^\s*[A-Za-z_][\w]*)(=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s#]*)?/gm;
+
+function colorizeEnv(line: string): React.ReactNode {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  ENV_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = ENV_RE.exec(line)) !== null) {
+    if (m.index > last) out.push(line.slice(last, m.index));
+    if (m[1] !== undefined) {
+      // comment
+      out.push(<span key={m.index} className="text-zinc-500">{m[0]}</span>);
+    } else {
+      // key=value
+      if (m[2]) out.push(<span key={`${m.index}-k`} className="text-sky-300">{m[2]}</span>);
+      if (m[3]) out.push(<span key={`${m.index}-eq`} className="text-zinc-500">{m[3]}</span>);
+      if (m[4]) {
+        const isQuoted = m[4].startsWith('"') || m[4].startsWith("'");
+        out.push(
+          <span key={`${m.index}-v`} className={isQuoted ? "text-emerald-300" : "text-amber-300"}>
+            {m[4]}
+          </span>,
+        );
+      }
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) out.push(line.slice(last));
+  return <>{out}</>;
+}
+
 export default function TextViewerCore({
   content,
   language,
-  followTail = false,
   truncated,
   truncationNote,
   className,
@@ -58,10 +119,8 @@ export default function TextViewerCore({
   const [search, setSearch] = useState("");
   const [matchIdx, setMatchIdx] = useState(0);
   const [wrap, setWrap] = useState(true);
-  const [follow, setFollow] = useState(followTail);
   const [ansiOn, setAnsiOn] = useState(true);
 
-  const bodyRef = useRef<HTMLDivElement>(null);
   const matchRefs = useRef<(HTMLElement | null)[]>([]);
 
   const displayText = useMemo(
@@ -99,13 +158,6 @@ export default function TextViewerCore({
     matchRefs.current[matchIdx]?.scrollIntoView({ block: "nearest" });
   }, [matchIdx]);
 
-  // Scroll to bottom when follow-tail is enabled and content grows.
-  useEffect(() => {
-    if (follow && bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
-  }, [follow, content.length]);
-
   const matchesByLine = useMemo(() => {
     const map = new Map<number, LineMatch[]>();
     for (const lm of lineMatches) {
@@ -133,18 +185,22 @@ export default function TextViewerCore({
     URL.revokeObjectURL(url);
   }
 
+  function colorize(seg: string): React.ReactNode {
+    if (language === "log" && ansiOn) return parseAnsi(seg);
+    if (language === "json") return colorizeJson(seg);
+    if (language === "yaml") return colorizeYaml(seg);
+    if (language === "env") return colorizeEnv(seg);
+    return seg;
+  }
+
   function applyLang(seg: string, key: string | number): React.ReactNode {
-    if (language === "log" && ansiOn) return <span key={key}>{parseAnsi(seg)}</span>;
-    if (language === "json") return <span key={key}>{colorizeJson(seg)}</span>;
-    return <span key={key}>{seg}</span>;
+    return <span key={key}>{colorize(seg)}</span>;
   }
 
   function renderLine(line: string, lineIdx: number): React.ReactNode {
     const matches = matchesByLine.get(lineIdx);
     if (!matches?.length) {
-      if (language === "log" && ansiOn) return parseAnsi(line);
-      if (language === "json") return colorizeJson(line);
-      return line;
+      return colorize(line);
     }
     const parts: React.ReactNode[] = [];
     let pos = 0;
@@ -192,10 +248,7 @@ export default function TextViewerCore({
         )}
         <label className={ckLabel}><input type="checkbox" checked={wrap} onChange={(e) => setWrap(e.target.checked)} className="accent-sky-500" />Wrap</label>
         {language === "log" && (
-          <>
-            <label className={ckLabel}><input type="checkbox" checked={ansiOn} onChange={(e) => setAnsiOn(e.target.checked)} className="accent-sky-500" />ANSI</label>
-            <label className={ckLabel}><input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-sky-500" />Follow</label>
-          </>
+          <label className={ckLabel}><input type="checkbox" checked={ansiOn} onChange={(e) => setAnsiOn(e.target.checked)} className="accent-sky-500" />ANSI</label>
         )}
         <button type="button" className={btnCls} onClick={() => void copyContent()}>Copy</button>
         <button type="button" className={btnCls} onClick={handleDownload}>Download</button>
@@ -207,7 +260,7 @@ export default function TextViewerCore({
         </div>
       )}
 
-      <div ref={bodyRef} className="max-h-[60vh] overflow-auto rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <div className="max-h-[60vh] overflow-auto rounded-xl border border-zinc-800 bg-zinc-900/30">
         <div className={["font-mono text-xs", wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre"].join(" ")}>
           {lines.map((line, idx) => (
             <div key={idx} className="flex hover:bg-zinc-800/20">
