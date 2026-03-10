@@ -33,6 +33,10 @@ export function setOverlayInUrl(overlay: OverlayState): void {
   if (overlay.kind === "run") {
     if (overlay.cellId) u.searchParams.set("cell", overlay.cellId);
     if (overlay.runId) u.searchParams.set("run", overlay.runId);
+  } else {
+    // Overlay closed: scrub modal-internal params so they cannot leak into the next open.
+    u.searchParams.delete("tab");
+    u.searchParams.delete("mitm");
   }
 
   const next = `${u.pathname}?${u.searchParams.toString()}${u.hash}`;
