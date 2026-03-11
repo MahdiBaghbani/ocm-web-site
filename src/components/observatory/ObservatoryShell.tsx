@@ -294,6 +294,7 @@ export default function ObservatoryShell({
                   getCellStatus={getCellStatus}
                   onOpenCell={openCell}
                   getCellDimmed={getCellDimmed}
+                  flowId={flowId}
                 />
                 <NotInScopeNote flowId={flowId} notInScope={notInScope} />
               </FlowAccordionSection>

@@ -37,6 +37,7 @@ export function setOverlayInUrl(overlay: OverlayState): void {
     // Overlay closed: scrub modal-internal params so they cannot leak into the next open.
     u.searchParams.delete("tab");
     u.searchParams.delete("mitm");
+    u.searchParams.delete("stack");
   }
 
   const next = `${u.pathname}?${u.searchParams.toString()}${u.hash}`;
@@ -118,6 +119,33 @@ export function setMitmInUrl(value: MitmSubTab | null): void {
     u.searchParams.delete("mitm");
   } else {
     u.searchParams.set("mitm", value);
+  }
+  const next = `${u.pathname}?${u.searchParams.toString()}${u.hash}`;
+  const clean = next.replace(/\?$/, "");
+  window.history.replaceState({}, "", clean);
+}
+
+export type StackSubTab = "summary" | "files";
+const VALID_STACK_SUBTABS: readonly StackSubTab[] = ["summary", "files"];
+
+export function parseStackFromUrl(url: string | URL): StackSubTab | null {
+  if (typeof window === "undefined") return null;
+  const u =
+    typeof url === "string" ? new URL(url, window.location.origin) : url;
+  const param = u.searchParams.get("stack");
+  if (!param) return null;
+  return (VALID_STACK_SUBTABS as string[]).includes(param)
+    ? (param as StackSubTab)
+    : null;
+}
+
+export function setStackInUrl(value: StackSubTab | null): void {
+  if (typeof window === "undefined") return;
+  const u = new URL(window.location.href);
+  if (value === null) {
+    u.searchParams.delete("stack");
+  } else {
+    u.searchParams.set("stack", value);
   }
   const next = `${u.pathname}?${u.searchParams.toString()}${u.hash}`;
   const clean = next.replace(/\?$/, "");

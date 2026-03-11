@@ -6,12 +6,14 @@ import {
 } from "../lib/versionSorting";
 import { titleCasePlatform } from "../lib/nicify";
 import { MatrixCell } from "./MatrixCell";
+import { FlowGlyph } from "./FlowGlyph";
 
 export interface MatrixGridProps {
   cells: MatrixRuleScenario[];
   getCellStatus: (cellId: string) => CellStatus;
   onOpenCell: (cellId: string) => void;
   getCellDimmed: (cellId: string) => boolean;
+  flowId?: string;
 }
 
 interface PlatformGroup {
@@ -54,6 +56,7 @@ export function MatrixGrid({
   getCellStatus,
   onOpenCell,
   getCellDimmed,
+  flowId,
 }: MatrixGridProps): React.ReactElement {
   // Senders = column axis (top); receivers = row axis (left).
   const senders = useMemo(() => {
@@ -151,11 +154,16 @@ export function MatrixGrid({
               colSpan={3}
               className={[
                 "sticky top-0 left-0 z-20",
-                "bg-zinc-950",
-                "border-b border-r",
-                borderEdge,
+                "bg-zinc-900",
+                "border-b-2 border-r-2 border-zinc-700",
               ].join(" ")}
-            />
+            >
+              {flowId ? (
+                <div className="flex h-full w-full items-center justify-center text-zinc-600">
+                  <FlowGlyph flowId={flowId} />
+                </div>
+              ) : null}
+            </th>
 
             {/* "Sender" superlabel — spans every sender version column. */}
             {/* top-0: this is row 1, height ~28px (py-1.5 + text-[11px]) */}
