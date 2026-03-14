@@ -1,3 +1,11 @@
+/**
+ * Text/code viewer with toolbar (search, wrap, ANSI toggle, copy, download).
+ *
+ * Invariant: exactly one chip per file viewer. By default, TextViewerCore
+ * renders its own bordered surface around the line list. Pass `noChip` when
+ * the caller (e.g. ViewerFrame, expanded-row panels) already provides one.
+ * Never nest a default-chip TextViewerCore inside another bordered container.
+ */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parseAnsi, stripAnsi } from "./ansi";
 
@@ -7,6 +15,12 @@ export interface TextViewerCoreProps {
   truncated?: boolean;
   truncationNote?: string;
   className?: string;
+  noInnerScroll?: boolean;
+  fillParent?: boolean;
+  /** When true, omits the inner bordered chip around the line list. Caller must provide a bordered container. */
+  noChip?: boolean;
+  /** File name used for the Blob download. Defaults to "content.txt". */
+  downloadName?: string;
 }
 
 interface LineMatch {
@@ -115,11 +129,16 @@ export default function TextViewerCore({
   truncated,
   truncationNote,
   className,
+  noInnerScroll,
+  fillParent,
+  noChip,
+  downloadName,
 }: TextViewerCoreProps) {
   const [search, setSearch] = useState("");
   const [matchIdx, setMatchIdx] = useState(0);
   const [wrap, setWrap] = useState(true);
   const [ansiOn, setAnsiOn] = useState(true);
+  const [copiedAt, setCopiedAt] = useState<number | null>(null);
 
   const matchRefs = useRef<(HTMLElement | null)[]>([]);
 
@@ -158,6 +177,12 @@ export default function TextViewerCore({
     matchRefs.current[matchIdx]?.scrollIntoView({ block: "nearest" });
   }, [matchIdx]);
 
+  useEffect(() => {
+    if (copiedAt === null) return;
+    const t = setTimeout(() => setCopiedAt(null), 2000);
+    return () => clearTimeout(t);
+  }, [copiedAt]);
+
   const matchesByLine = useMemo(() => {
     const map = new Map<number, LineMatch[]>();
     for (const lm of lineMatches) {
@@ -169,18 +194,23 @@ export default function TextViewerCore({
   }, [lineMatches]);
 
   const copyContent = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-    } catch {
-      // ignore clipboard errors
-    }
+    await navigator.clipboard.writeText(content);
   }, [content]);
+
+  async function handleCopy() {
+    try {
+      await copyContent();
+      setCopiedAt(Date.now());
+    } catch {
+      // copy failed; do not flash success
+    }
+  }
 
   function handleDownload() {
     const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = "content.txt";
+    a.download = downloadName ?? "content.txt";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -229,7 +259,14 @@ export default function TextViewerCore({
   const ckLabel = "flex cursor-pointer items-center gap-1 text-xs text-zinc-400";
 
   return (
-    <div className={["flex flex-col gap-2", className].filter(Boolean).join(" ")}>
+    <div
+      className={[
+        fillParent ? "flex h-full flex-col gap-2" : "flex flex-col gap-2",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <input
@@ -250,8 +287,17 @@ export default function TextViewerCore({
         {language === "log" && (
           <label className={ckLabel}><input type="checkbox" checked={ansiOn} onChange={(e) => setAnsiOn(e.target.checked)} className="accent-sky-500" />ANSI</label>
         )}
-        <button type="button" className={btnCls} onClick={() => void copyContent()}>Copy</button>
         <button type="button" className={btnCls} onClick={handleDownload}>Download</button>
+        <button type="button" className={btnCls} onClick={() => void handleCopy()}>Copy</button>
+        <span
+          aria-live="polite"
+          className={[
+            "text-xs font-medium text-emerald-400 transition-opacity",
+            copiedAt !== null ? "opacity-100" : "opacity-0",
+          ].join(" ")}
+        >
+          Copied!
+        </span>
       </div>
 
       {truncated && (
@@ -260,7 +306,18 @@ export default function TextViewerCore({
         </div>
       )}
 
-      <div className="max-h-[60vh] overflow-auto rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <div
+        className={[
+          noChip ? "" : "rounded-xl border border-zinc-800 bg-zinc-900/30",
+          fillParent
+            ? "flex-1 min-h-0 overflow-auto"
+            : noInnerScroll
+              ? ""
+              : "max-h-[60vh] overflow-auto",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <div className={["font-mono text-xs", wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre"].join(" ")}>
           {lines.map((line, idx) => (
             <div key={idx} className="flex hover:bg-zinc-800/20">

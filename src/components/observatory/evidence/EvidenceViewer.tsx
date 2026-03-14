@@ -9,9 +9,16 @@ import StubRenderer from "./renderers/StubRenderer";
 
 const CAP_BYTES = 4 * 1024 * 1024;
 
+function basename(path: string): string {
+  const idx = path.lastIndexOf("/");
+  return idx >= 0 ? path.substring(idx + 1) : path;
+}
+
 interface EvidenceViewerProps {
   item: EvidenceItem;
   artifactBase: string;
+  cellPair?: readonly [string, string];
+  fillParent?: boolean;
 }
 
 type FetchState =
@@ -29,9 +36,23 @@ function needsFetch(envelope: EvidenceItem["envelope"]): boolean {
   );
 }
 
+/**
+ * Envelope dispatch for evidence files.
+ *
+ * Renderer contract:
+ * - Each renderer MUST accept and honor `fillParent` so it can fill the
+ *   FilePane content area.
+ * - Renderers MUST NOT add nested file-viewer chrome around TextViewerCore
+ *   (would produce double-chip/N-toolbar regressions). Use ViewerFrame or
+ *   pass `noChip` to inner TextViewerCores.
+ * - `downloadName` should be derived from item.path basename here and
+ *   threaded through so downloaded files preserve their real names.
+ */
 export default function EvidenceViewer({
   item,
   artifactBase,
+  cellPair,
+  fillParent,
 }: EvidenceViewerProps) {
   const [fetchState, setFetchState] = useState<FetchState>({ status: "idle" });
   const reqIdRef = useRef(0);
@@ -69,6 +90,14 @@ export default function EvidenceViewer({
     };
   }, [item.path, artifactBase, shouldFetch]);
 
+  const placeholderWrapper = fillParent
+    ? "flex h-full items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 p-8 text-sm text-zinc-400"
+    : "flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 p-8 text-sm text-zinc-400";
+
+  const errorWrapper = fillParent
+    ? "flex h-full items-start justify-center rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-400"
+    : "rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-400";
+
   if (!shouldFetch) {
     // stub.v1 needs no fetch
     switch (item.envelope) {
@@ -77,7 +106,7 @@ export default function EvidenceViewer({
       default: {
         const _never: never = item.envelope;
         return (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4 text-sm text-zinc-400">
+          <div className={placeholderWrapper}>
             Unknown envelope: {String(_never)}
           </div>
         );
@@ -87,7 +116,7 @@ export default function EvidenceViewer({
 
   if (fetchState.status === "idle" || fetchState.status === "loading") {
     return (
-      <div className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 p-8 text-sm text-zinc-400">
+      <div className={placeholderWrapper}>
         Loading...
       </div>
     );
@@ -95,15 +124,16 @@ export default function EvidenceViewer({
 
   if (fetchState.status === "error") {
     return (
-      <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-400">
+      <div className={errorWrapper}>
         Failed to load: {fetchState.message}
       </div>
     );
   }
 
   const { text, truncated } = fetchState;
-  const downloadUrl = `${artifactBase}${item.path}`;
   const combinedTruncated = truncated || item.truncated === true;
+  const downloadName =
+    basename(item.path) || item.logical_name || "content.txt";
 
   switch (item.envelope) {
     case "text-log.v1":
@@ -112,21 +142,30 @@ export default function EvidenceViewer({
           item={item}
           text={text}
           truncated={combinedTruncated}
-          downloadUrl={downloadUrl}
+          downloadName={downloadName}
+          fillParent={fillParent}
         />
       );
     case "jsonl.v1":
-      return <JsonlRenderer item={item} text={text} />;
+      return <JsonlRenderer item={item} text={text} fillParent={fillParent} downloadName={downloadName} />;
     case "event-stream.v1":
-      return <EventStreamRenderer item={item} text={text} />;
+      return (
+        <EventStreamRenderer
+          item={item}
+          text={text}
+          cellPair={cellPair}
+          fillParent={fillParent}
+          downloadName={downloadName}
+        />
+      );
     case "markdown.v1":
-      return <MarkdownRenderer item={item} text={text} />;
+      return <MarkdownRenderer item={item} text={text} fillParent={fillParent} downloadName={downloadName} />;
     case "stub.v1":
       return <StubRenderer item={item} />;
     default: {
       const _never: never = item.envelope;
       return (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4 text-sm text-zinc-400">
+        <div className={placeholderWrapper}>
           Unknown envelope: {String(_never)}
         </div>
       );

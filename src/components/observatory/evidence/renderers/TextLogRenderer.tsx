@@ -6,9 +6,8 @@ interface TextLogRendererProps {
   item: EvidenceItem;
   text: string;
   truncated: boolean;
-  // downloadUrl kept for EvidenceViewer backward compatibility; download is
-  // now handled internally by TextViewerCore via Blob.
-  downloadUrl?: string;
+  downloadName?: string;
+  fillParent?: boolean;
 }
 
 function mapLanguage(hint: string | undefined): TextViewerCoreProps["language"] {
@@ -20,7 +19,7 @@ function mapLanguage(hint: string | undefined): TextViewerCoreProps["language"] 
   }
 }
 
-export default function TextLogRenderer({ item, text, truncated }: TextLogRendererProps) {
+export default function TextLogRenderer({ item, text, truncated, downloadName, fillParent }: TextLogRendererProps) {
   return (
     <TextViewerCore
       key={item.path}
@@ -28,6 +27,8 @@ export default function TextLogRenderer({ item, text, truncated }: TextLogRender
       language={mapLanguage(item.language)}
       truncated={truncated || item.truncated === true}
       truncationNote="File truncated - showing first portion only."
+      downloadName={downloadName}
+      fillParent={fillParent}
     />
   );
 }
