@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { ImagesManifest, ImageServiceEntry } from "../lib/contracts";
 import { fetchJson, isAbortError } from "../lib/fetchManifest";
+import SummaryCard from "../ui/SummaryCard";
 
 interface ImagesUsedPanelProps {
   artifactBase: string;
@@ -68,49 +69,50 @@ export default function ImagesUsedPanel({ artifactBase }: ImagesUsedPanelProps) 
 
   if (state.status === "unavailable") {
     return (
-      <div className="border border-zinc-800 bg-zinc-900/30 rounded-xl p-4 text-sm text-zinc-400">
-        Image manifest not available for this run.
-      </div>
+      <SummaryCard title="Images used" className="h-full">
+        <span className="text-sm text-zinc-400">Image manifest not available for this run.</span>
+      </SummaryCard>
+    );
+  }
+
+  if (state.status === "loading") {
+    return (
+      <SummaryCard title="Images used" className="h-full">
+        <span className="text-sm text-zinc-400">Loading image manifest...</span>
+      </SummaryCard>
     );
   }
 
   return (
-    <div className="border border-zinc-800 bg-zinc-900/30 rounded-xl p-4 my-3">
-      <div className="text-sm font-semibold text-zinc-100 mb-2">Images used</div>
-      {state.status === "loading" ? (
-        <div className="text-zinc-400 text-sm">Loading image manifest...</div>
-      ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-zinc-800">
-                  <th className="py-1.5 pr-3 text-left font-semibold text-zinc-500">service</th>
-                  <th className="py-1.5 pr-3 text-left font-semibold text-zinc-500">role</th>
-                  <th className="py-1.5 pr-3 text-left font-semibold text-zinc-500">tag</th>
-                  <th className="py-1.5 text-left font-semibold text-zinc-500">id / digest</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.data.services.map((svc) => (
-                  <tr key={svc.service} className="border-b border-zinc-800/50">
-                    <td className="py-1.5 pr-3 font-mono text-zinc-200">{svc.service}</td>
-                    <td className="py-1.5 pr-3 text-zinc-300">{svc.role}</td>
-                    <td className="py-1.5 pr-3 font-mono text-zinc-200">{svc.tag}</td>
-                    <td className="py-1.5">{renderIdCell(svc)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p
-            id="images-used-local-built-footnote"
-            className="text-xs text-zinc-500 mt-2"
-          >
-            [*] = locally built (no published digest)
-          </p>
-        </>
-      )}
-    </div>
+    <SummaryCard title="Images used" className="h-full" bodyClassName="overflow-y-auto">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="border-b border-zinc-800">
+              <th className="py-1.5 pr-3 text-left font-semibold text-zinc-500">service</th>
+              <th className="py-1.5 pr-3 text-left font-semibold text-zinc-500">role</th>
+              <th className="py-1.5 pr-3 text-left font-semibold text-zinc-500">tag</th>
+              <th className="py-1.5 text-left font-semibold text-zinc-500">id / digest</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.data.services.map((svc) => (
+              <tr key={svc.service} className="border-b border-zinc-800/50">
+                <td className="py-1.5 pr-3 font-mono text-zinc-200">{svc.service}</td>
+                <td className="py-1.5 pr-3 text-zinc-300">{svc.role}</td>
+                <td className="py-1.5 pr-3 font-mono text-zinc-200">{svc.tag}</td>
+                <td className="py-1.5">{renderIdCell(svc)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p
+        id="images-used-local-built-footnote"
+        className="text-xs text-zinc-500 mt-2"
+      >
+        [*] = locally built (no published digest)
+      </p>
+    </SummaryCard>
   );
 }
