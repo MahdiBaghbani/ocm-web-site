@@ -1,3 +1,11 @@
+/**
+ * File-pane: a sidebar of selectable files + a content area where the
+ * caller-provided renderViewer renders the active file.
+ *
+ * Contract: callers must always render `<EvidenceViewer ... fillParent />`
+ * inside renderViewer. FilePane provides h-full + min-h-0 and the chip
+ * comes from the renderer (single-chip invariant).
+ */
 import React, { useRef } from "react";
 import type { EvidenceItem } from "../lib/contracts";
 
@@ -5,8 +13,12 @@ interface FilePaneProps {
   items: EvidenceItem[];
   selectedPath: string;
   onSelect: (path: string) => void;
+  /**
+   * Render the currently selected item. Callers should always pass
+   * fillParent to EvidenceViewer (FilePane provides the h-full container;
+   * the single-chip invariant requires the renderer to fill it).
+   */
   renderViewer: (item: EvidenceItem) => React.ReactNode;
-  toolbar?: React.ReactNode;
   emptyLabel?: string;
 }
 
@@ -19,33 +31,19 @@ export default function FilePane({
   selectedPath,
   onSelect,
   renderViewer,
-  toolbar,
   emptyLabel = "No files.",
 }: FilePaneProps) {
   const selectorRef = useRef<HTMLDivElement>(null);
 
   if (items.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 p-10">
+      <div className="flex h-full items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/30 p-10">
         <span className="text-sm text-zinc-400">{emptyLabel}</span>
       </div>
     );
   }
 
   const selectedItem = items.find((i) => i.path === selectedPath) ?? items[0];
-
-  if (items.length === 1) {
-    return (
-      <div className="space-y-3">
-        {toolbar ? (
-          <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950 pb-2">
-            {toolbar}
-          </div>
-        ) : null}
-        {renderViewer(selectedItem)}
-      </div>
-    );
-  }
 
   function handleSelectorKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     const idx = items.findIndex((i) => i.path === selectedItem.path);
@@ -61,11 +59,11 @@ export default function FilePane({
   }
 
   return (
-    <div className="grid grid-cols-[18rem_1fr] h-full min-h-0 gap-0">
-      {/* Selector pane - scrolls independently */}
+    <div className="grid h-full min-h-0 grid-cols-[18rem_1fr] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/20">
+      {/* Sidebar - independent vertical scroll. */}
       <div
         ref={selectorRef}
-        className="min-h-0 overflow-y-auto space-y-1 border-r border-zinc-800 bg-zinc-900/20 p-2"
+        className="min-h-0 space-y-1 overflow-y-auto border-r border-zinc-800 bg-zinc-900/50 p-2"
         onKeyDown={handleSelectorKeyDown}
         aria-label="Evidence files"
         tabIndex={0}
@@ -103,13 +101,8 @@ export default function FilePane({
         })}
       </div>
 
-      {/* Viewer pane - scrolls independently */}
-      <div className="min-h-0 overflow-y-auto p-3">
-        {toolbar ? (
-          <div className="sticky top-0 z-10 mb-2 border-b border-zinc-800 bg-zinc-950 pb-2">
-            {toolbar}
-          </div>
-        ) : null}
+      {/* Content side - hands height to fillParent renderer. */}
+      <div className="flex min-h-0 min-w-0 flex-col p-3">
         {renderViewer(selectedItem)}
       </div>
     </div>

@@ -2,16 +2,21 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { EvidenceItem } from "../../lib/contracts";
 import FilePane from "../FilePane";
 import EvidenceViewer from "../../evidence/EvidenceViewer";
-import type { EvidenceTabProps } from "../RunModal";
+import type { EvidenceTabProps } from "../types";
 import { parseMitmFromUrl, setMitmInUrl } from "../../lib/urlState";
 import type { MitmSubTab } from "../../lib/urlState";
 
 const SUBTAB_ORDER: readonly MitmSubTab[] = ["traffic", "files"];
 
+interface MitmTabProps extends EvidenceTabProps {
+  cellPair?: readonly [string, string];
+}
+
 export default function MitmTab({
   evidenceItems,
   artifactBase,
-}: EvidenceTabProps) {
+  cellPair,
+}: MitmTabProps) {
   const items = useMemo(
     () => evidenceItems.filter((i): i is EvidenceItem => i.tab === "mitm"),
     [evidenceItems],
@@ -81,10 +86,10 @@ export default function MitmTab({
   const pillDisabled = `${pillBase} text-zinc-600 cursor-not-allowed`;
 
   return (
-    <div>
+    <div className="flex h-full flex-col gap-3">
       <div
         role="tablist"
-        className="inline-flex gap-1 rounded-lg bg-zinc-900/40 p-1"
+        className="inline-flex shrink-0 gap-1 rounded-lg bg-zinc-900/40 p-1"
         onKeyDown={handleKeyDown}
       >
         <button
@@ -133,13 +138,20 @@ export default function MitmTab({
         role="tabpanel"
         id={`mitm-subtab-panel-${mitmSubTab}`}
         aria-labelledby={`mitm-subtab-${mitmSubTab}`}
-        className="mt-3"
+        className="flex-1 min-h-0"
       >
         {mitmSubTab === "traffic" ? (
           traffic ? (
-            <EvidenceViewer item={traffic} artifactBase={artifactBase} />
+            <div className="h-full">
+              <EvidenceViewer
+                item={traffic}
+                artifactBase={artifactBase}
+                cellPair={cellPair}
+                fillParent
+              />
+            </div>
           ) : (
-            <div className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 p-10">
+            <div className="flex h-full items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/30 p-10">
               <span className="text-sm text-zinc-400">
                 No traffic captured for this run.
               </span>
@@ -151,12 +163,17 @@ export default function MitmTab({
             selectedPath={selectedPath}
             onSelect={setSelectedPath}
             renderViewer={(item) => (
-              <EvidenceViewer item={item} artifactBase={artifactBase} />
+              <EvidenceViewer
+                item={item}
+                artifactBase={artifactBase}
+                cellPair={cellPair}
+                fillParent
+              />
             )}
             emptyLabel="No additional MITM files."
           />
         ) : (
-          <div className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/30 p-10">
+          <div className="flex h-full items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/30 p-10">
             <span className="text-sm text-zinc-400">
               No additional MITM files.
             </span>

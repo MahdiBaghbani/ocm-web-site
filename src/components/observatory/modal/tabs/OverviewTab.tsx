@@ -10,6 +10,7 @@ import {
   type BrowserPickerItem,
 } from "../../filters/BrowserPickerRow";
 import { VideoPlayer } from "../VideoPlayer";
+import SummaryCard from "../../ui/SummaryCard";
 
 interface OverviewTabProps {
   cellId: string;
@@ -102,9 +103,7 @@ export default function OverviewTab({
             onSelect={(item) => { if (item.runId) onSelectRun(item.runId); }}
           />
         ) : null}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-6 text-sm text-zinc-300">
-          No run yet for this cell.
-        </div>
+        <SummaryCard padding="lg"><span className="text-sm text-zinc-300">No run yet for this cell.</span></SummaryCard>
       </div>
     );
   }
@@ -112,81 +111,87 @@ export default function OverviewTab({
   // Run ID present but not found in manifest.
   if (!run) {
     return (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4 text-sm text-zinc-300">
-        Run {runId} not found in suite-manifest.v1.json.
-      </div>
+      <SummaryCard><span className="text-sm text-zinc-300">Run {runId} not found in suite-manifest.v1.json.</span></SummaryCard>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <BrowserPickerRow
-        items={browserItems}
-        activeCellId={effectiveCellId}
-        onSelect={(item) => { if (item.runId) onSelectRun(item.runId); }}
-      />
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+      <div className="shrink-0">
+        <BrowserPickerRow
+          items={browserItems}
+          activeCellId={effectiveCellId}
+          onSelect={(item) => { if (item.runId) onSelectRun(item.runId); }}
+        />
+      </div>
 
       {/* Run identity panel */}
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
-          <div>
-            <div className="text-xs text-zinc-400">run id</div>
-            <div className="mt-0.5 break-all font-mono text-xs text-zinc-100">
-              {runId}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-zinc-400">cell</div>
-            <div className="mt-0.5 font-mono text-xs text-zinc-100">
-              {run.cell_id || effectiveCellId}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-zinc-400">lifecycle</div>
-            <div className="mt-0.5 font-mono text-xs text-zinc-200">
-              {run.lifecycle_status}
-            </div>
-          </div>
-          {verdictUi ? (
+      <section className="grid shrink-0 gap-4 md:grid-cols-2">
+        <SummaryCard title="Run identity" className="min-w-0">
+          <div className="space-y-3">
             <div>
-              <div className="text-xs text-zinc-400">verdict</div>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${verdictUi.dot}`}
-                />
-                <span className={`text-xs font-medium ${verdictUi.text}`}>
-                  {activeResult?.status}
-                </span>
+              <div className="text-xs text-zinc-400">run id</div>
+              <div className="mt-0.5 break-all font-mono text-xs text-zinc-100">
+                {runId}
               </div>
             </div>
-          ) : null}
-        </div>
-        <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
-          <div>
-            <div className="text-xs text-zinc-400">started</div>
-            <div className="mt-0.5 font-mono text-xs text-zinc-100">
-              {run.started_at}
+            <div>
+              <div className="text-xs text-zinc-400">cell</div>
+              <div className="mt-0.5 break-all font-mono text-xs text-zinc-100">
+                {run.cell_id || effectiveCellId}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-zinc-400">lifecycle</div>
+              <div className="mt-0.5 break-all font-mono text-xs text-zinc-200">
+                {run.lifecycle_status}
+              </div>
+            </div>
+            {verdictUi ? (
+              <div>
+                <div className="text-xs text-zinc-400">verdict</div>
+                <div className="mt-1 flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${verdictUi.dot}`}
+                  />
+                  <span className={`text-xs font-medium ${verdictUi.text}`}>
+                    {activeResult?.status}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </SummaryCard>
+        <SummaryCard title="Timing" className="min-w-0">
+          <div className="space-y-3">
+            <div>
+              <div className="text-xs text-zinc-400">started</div>
+              <div className="mt-0.5 break-all font-mono text-xs text-zinc-100">
+                {run.started_at}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-zinc-400">finished</div>
+              <div className="mt-0.5 break-all font-mono text-xs text-zinc-100">
+                {run.finished_at}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-zinc-400">attempt</div>
+              <div className="mt-0.5 break-all font-mono text-xs text-zinc-100">
+                {run.attempt_number}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-xs text-zinc-400">finished</div>
-            <div className="mt-0.5 font-mono text-xs text-zinc-100">
-              {run.finished_at}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-zinc-400">attempt</div>
-            <div className="mt-0.5 font-mono text-xs text-zinc-100">
-              {run.attempt_number}
-            </div>
-          </div>
-        </div>
+        </SummaryCard>
       </section>
 
       {/* Video */}
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-50">Video</h3>
-        <VideoPlayer artifactBase={artifactBase} videoItem={videos[0] ?? null} poster={posterFromFirstScreenshot} />
+      <section className="flex flex-1 min-h-0 flex-col gap-2">
+        <h3 className="shrink-0 text-sm font-semibold text-zinc-50">Video</h3>
+        <div className="min-h-0 flex-1">
+          <VideoPlayer artifactBase={artifactBase} videoItem={videos[0] ?? null} poster={posterFromFirstScreenshot} />
+        </div>
       </section>
     </div>
   );

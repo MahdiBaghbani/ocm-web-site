@@ -10,6 +10,8 @@ import MitmTab from "./tabs/MitmTab";
 import LogsTab from "./tabs/LogsTab";
 import MetaTab from "./tabs/MetaTab";
 import StackTab from "./tabs/StackTab";
+import type { EvidenceTabProps } from "./types";
+export type { EvidenceTabProps } from "./types";
 
 interface RunModalProps {
   cellId: string;
@@ -19,11 +21,6 @@ interface RunModalProps {
   flows: FlowMetadata[];
   onClose: () => void;
   onSelectRun: (runId: string) => void;
-}
-
-export interface EvidenceTabProps {
-  evidenceItems: EvidenceItem[];
-  artifactBase: string;
 }
 
 type EvidenceState =
@@ -130,6 +127,13 @@ export function RunModal({
     return `${baseUrl}artifacts/${flowId}/${pair}/${execId}/`;
   }, [baseUrl, effectiveCell, run]);
 
+  const cellPair = useMemo<readonly [string, string] | undefined>(() => {
+    const sp = effectiveCell?.sender_platform;
+    const rp = effectiveCell?.receiver_platform;
+    if (!sp || !rp) return undefined;
+    return [sp, rp] as const;
+  }, [effectiveCell]);
+
   // Fetch evidence manifest when artifactBase changes.
   useEffect(() => {
     if (!artifactBase) {
@@ -214,7 +218,7 @@ export function RunModal({
         id={`runmodal-panel-${tab}`}
         aria-labelledby={`runmodal-tab-${tab}`}
         hidden={!isActive}
-        className={isActive ? "h-full overflow-y-auto" : "hidden"}
+        className={isActive ? "h-full min-h-0" : "hidden"}
       >
         {content}
       </div>
@@ -277,7 +281,9 @@ export function RunModal({
           {everMounted.has("mitm") &&
             renderTabPanel(
               "mitm",
-              renderEvidenceTab(() => <MitmTab {...sharedProps} />),
+              renderEvidenceTab(() => (
+                <MitmTab {...sharedProps} cellPair={cellPair} />
+              )),
             )}
           {everMounted.has("logs") &&
             renderTabPanel(

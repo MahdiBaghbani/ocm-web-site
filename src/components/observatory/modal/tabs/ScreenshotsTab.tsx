@@ -37,6 +37,8 @@ export default function ScreenshotsTab({ runId, mf, artifactBase }: ScreenshotsT
   }, [runId, mf, artifactBase]);
 
   return (
-    <MediaGallery items={items} emptyLabel="No screenshots for this run." />
+    <div className="h-full overflow-y-auto">
+      <MediaGallery items={items} emptyLabel="No screenshots for this run." />
+    </div>
   );
 }
