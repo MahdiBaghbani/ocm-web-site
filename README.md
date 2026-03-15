@@ -58,7 +58,7 @@ src/components/observatory/
                                 titleCasePlatform
   matrix/
     MatrixCell.tsx            - status dot + glyph + decoration
-    MatrixGrid.tsx            - Excel-style merged sender + receiver headers
+    MatrixGrid.tsx            - Excel-style merged receiver + sender headers
     FlowAccordionSection.tsx  - per-flow accordion with roll-up badges
     NotInScopeNote.tsx        - inline out-of-scope rationale
   filters/
