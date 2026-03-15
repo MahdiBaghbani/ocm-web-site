@@ -1,7 +1,7 @@
 import React from "react";
 import type { ComposeManifest } from "../../lib/contracts";
 import SummaryCard from "../../ui/SummaryCard";
-import CopyChip from "./CopyChip";
+import FieldRow from "./FieldRow";
 
 interface IdentityCardProps {
   manifest: ComposeManifest;
@@ -19,12 +19,12 @@ export default function IdentityCard({ manifest }: IdentityCardProps) {
       className="h-full"
     >
       <div className="space-y-2">
-        <CopyChip
+        <FieldRow
           label="stack_id"
           fullValue={manifest.stack_id}
           displayValue={manifest.stack_id}
         />
-        <CopyChip
+        <FieldRow
           label="base"
           fullValue={manifest.base}
           displayValue={manifest.base}
