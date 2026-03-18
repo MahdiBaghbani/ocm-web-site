@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 
 interface OverlayFrameProps {
   title: string;
@@ -7,6 +7,14 @@ interface OverlayFrameProps {
 }
 
 export function OverlayFrame({ title, onClose, children }: OverlayFrameProps) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button

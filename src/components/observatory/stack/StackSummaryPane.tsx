@@ -46,43 +46,41 @@ export default function StackSummaryPane({ artifactBase }: StackSummaryPaneProps
   }, [artifactBase]);
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="grid gap-4 md:grid-cols-2 md:auto-rows-fr">
-        {composeState.status === "loading" ? (
-          <>
-            <SummaryCard title="Identity" className="h-full">
-              <span className="text-sm text-zinc-400">Loading compose manifest...</span>
-            </SummaryCard>
-            <SummaryCard title="Integrity" className="h-full">
-              <span className="text-sm text-zinc-400">Loading compose manifest...</span>
-            </SummaryCard>
-            <SummaryCard title="Applied inputs" className="h-full">
-              <span className="text-sm text-zinc-400">Loading compose manifest...</span>
-            </SummaryCard>
-            <ImagesUsedPanel artifactBase={artifactBase} />
-          </>
-        ) : composeState.status === "unavailable" ? (
-          <>
-            <SummaryCard title="Identity" className="h-full">
-              <span className="text-sm text-zinc-400">Compose manifest not available for this run.</span>
-            </SummaryCard>
-            <SummaryCard title="Integrity" className="h-full">
-              <span className="text-sm text-zinc-400">Compose manifest not available for this run.</span>
-            </SummaryCard>
-            <SummaryCard title="Applied inputs" className="h-full">
-              <span className="text-sm text-zinc-400">Compose manifest not available for this run.</span>
-            </SummaryCard>
-            <ImagesUsedPanel artifactBase={artifactBase} />
-          </>
-        ) : (
-          <>
-            <IdentityCard manifest={composeState.data} />
-            <IntegrityCard manifest={composeState.data} />
-            <AppliedInputsCard manifest={composeState.data} />
-            <ImagesUsedPanel artifactBase={artifactBase} />
-          </>
-        )}
-      </div>
+    <div className="grid h-full gap-4 md:grid-cols-2 md:auto-rows-fr">
+      {composeState.status === "loading" ? (
+        <>
+          <SummaryCard title="Identity" className="h-full">
+            <span className="text-sm text-zinc-400">Loading compose manifest...</span>
+          </SummaryCard>
+          <SummaryCard title="Integrity" className="h-full">
+            <span className="text-sm text-zinc-400">Loading compose manifest...</span>
+          </SummaryCard>
+          <SummaryCard title="Applied inputs" className="h-full">
+            <span className="text-sm text-zinc-400">Loading compose manifest...</span>
+          </SummaryCard>
+          <ImagesUsedPanel artifactBase={artifactBase} />
+        </>
+      ) : composeState.status === "unavailable" ? (
+        <>
+          <SummaryCard title="Identity" className="h-full">
+            <span className="text-sm text-zinc-400">Compose manifest not available for this run.</span>
+          </SummaryCard>
+          <SummaryCard title="Integrity" className="h-full">
+            <span className="text-sm text-zinc-400">Compose manifest not available for this run.</span>
+          </SummaryCard>
+          <SummaryCard title="Applied inputs" className="h-full">
+            <span className="text-sm text-zinc-400">Compose manifest not available for this run.</span>
+          </SummaryCard>
+          <ImagesUsedPanel artifactBase={artifactBase} />
+        </>
+      ) : (
+        <>
+          <IdentityCard manifest={composeState.data} />
+          <IntegrityCard manifest={composeState.data} />
+          <AppliedInputsCard manifest={composeState.data} />
+          <ImagesUsedPanel artifactBase={artifactBase} />
+        </>
+      )}
     </div>
   );
 }
