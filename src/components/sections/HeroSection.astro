@@ -41,12 +41,15 @@ const features = [
   ></div>
 
   <div class="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center px-6 py-8 pointer-events-none">
-    <div class="text-center mb-6">
-      <h1 class="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight drop-shadow-lg text-white">
+    <div class="mb-10 w-full max-w-3xl text-center">
+      <p class="mb-4 text-xs font-semibold uppercase tracking-[0.35em] text-sky-300/80">
+        Open Protocol For Cloud Federation
+      </p>
+      <h1 class="text-5xl font-semibold tracking-[-0.045em] text-white drop-shadow-[0_8px_28px_rgba(8,15,40,0.45)] md:text-6xl lg:text-7xl">
         Open Cloud Mesh
       </h1>
-      <p class="mt-3 text-lg md:text-xl text-gray-200 max-w-2xl mx-auto drop-shadow-md">
-        A server federation protocol that lets users share files, folders, and other resources across different cloud platforms
+      <p class="mx-auto mt-4 max-w-3xl text-lg leading-8 text-slate-200/92 drop-shadow-[0_6px_20px_rgba(8,15,40,0.4)] md:text-xl">
+        Federated resource sharing across independent clouds.
       </p>
     </div>
 
@@ -56,17 +59,17 @@ const features = [
           href={feature.href}
           target={feature.href.startsWith('http') ? '_blank' : undefined}
           rel={feature.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-          class="group flex flex-col items-center text-center bg-gray-900/80 border border-gray-800 rounded-xl p-5 hover:border-blue-500/50 hover:-translate-y-1 transition-all duration-200 pointer-events-auto"
+          class="group flex flex-col items-center text-center bg-[rgba(190,215,235,0.14)] border border-white/15 rounded-xl p-5 hover:border-white/30 hover:-translate-y-1 transition-all duration-200 pointer-events-auto"
         >
-          <div class="w-16 h-16 flex items-center justify-center mb-3">
+          <div class="w-16 h-16 flex items-center justify-center mb-3 rounded-lg bg-[rgba(140,190,225,0.36)] border border-white/20 p-2">
             <img
               src={feature.logo}
               alt={feature.title}
-              class={`w-full h-full object-contain opacity-90 group-hover:opacity-100 transition-opacity ${feature.title === 'Matrix Chat' ? 'filter brightness-0 invert' : ''}`}
+              class={`w-full h-full object-contain opacity-95 group-hover:opacity-100 transition-opacity ${feature.title === 'Matrix Chat' ? 'filter brightness-0 invert' : ''}`}
             />
           </div>
           <h3 class="text-white font-semibold text-base mb-1">{feature.title}</h3>
-          <p class="text-gray-500 text-xs leading-relaxed">{feature.description}</p>
+          <p class="text-gray-400 text-xs leading-relaxed">{feature.description}</p>
         </a>
       ))}
     </div>
