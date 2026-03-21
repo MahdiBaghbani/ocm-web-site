@@ -21,7 +21,6 @@ export function FilterBar({
 
   return (
     <div className="sticky top-16 z-30 rounded-2xl border border-zinc-800 bg-gray-950/95 px-5 py-4 backdrop-blur-sm">
-      {/* Legend row */}
       <div className="mb-3 flex flex-wrap gap-2">
         {STATUS_OPTIONS.map((s) => {
           const ui = statusToUi(s);
@@ -37,7 +36,6 @@ export function FilterBar({
         })}
       </div>
 
-      {/* Controls row */}
       <div className="grid gap-2 md:grid-cols-4">
         <label className="space-y-1">
           <div className="text-xs font-semibold text-zinc-400">Browser</div>

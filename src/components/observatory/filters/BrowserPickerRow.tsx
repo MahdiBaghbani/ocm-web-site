@@ -1,4 +1,5 @@
-// Shared multi-browser pill row for run modal overview switching.
+// Pill row for switching between browser variants of the same flow/pair cell.
+// Renders nothing when only one browser variant exists.
 import React from "react";
 import type { CellStatus } from "../lib/contracts";
 import { statusToUi } from "../lib/statusStyles";
