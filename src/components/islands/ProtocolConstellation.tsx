@@ -10,10 +10,6 @@ import {
   resolveTrailPoint,
 } from '../../lib/hero/grid/pathfinding';
 
-// ============================================================
-// Type Definitions
-// ============================================================
-
 interface GridNode {
   i: number;
   j: number;
@@ -90,10 +86,6 @@ interface RejectionRecord {
   timestamp: number;
 }
 
-// ============================================================
-// Constants
-// ============================================================
-
 const CFG = heroConfig.global;
 const GRID_STEP = CFG.gridStepPx;
 const D_MIN = CFG.specialNodeMinDistance;
@@ -158,10 +150,6 @@ const CAPABILITY_COLORS: Record<string, string> = {
   'invites': 'bg-amber-100 text-amber-800',
   'webdav-uri': 'bg-teal-100 text-teal-800',
 };
-
-// ============================================================
-// Shader Source Code
-// ============================================================
 
 const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;
@@ -301,10 +289,6 @@ void main() {
   }
 }
 `;
-
-// ============================================================
-// Utility Functions
-// ============================================================
 
 function expRandom(rate: number): number {
   return -Math.log(1.0 - Math.random()) / rate;
@@ -503,10 +487,6 @@ function rolloverTrail(pulse: PulseStateForRollover): void {
   pulse.trailHeadIdx = 0;
 }
 
-// ============================================================
-// WebGL Helpers
-// ============================================================
-
 function compileShader(
   gl: WebGL2RenderingContext,
   type: number,
@@ -546,10 +526,6 @@ function createProgram(
   }
   return program;
 }
-
-// ============================================================
-// Component
-// ============================================================
 
 interface AnimationState {
   gl: WebGL2RenderingContext | null;
@@ -805,7 +781,6 @@ export default function ProtocolConstellation() {
     state.specialNodeCount = specials.length;
   }, [configs]);
 
-  // ---- WebGL Initialization ----
   const initWebGL = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return false;
@@ -842,7 +817,6 @@ export default function ProtocolConstellation() {
     return true;
   }, []);
 
-  // ---- Federation Cache Helpers ----
   function ensureFederationCache(state: AnimationState) {
     if (!state.cachedMutualEdges) {
       const edges: Array<[number, number]> = [];
@@ -950,7 +924,6 @@ export default function ProtocolConstellation() {
     }
   }
 
-  // ---- Logo Texture Loading ----
   const loadLogoTexture = useCallback(() => {
     const state = stateRef.current;
     const gl = state.gl;
@@ -989,7 +962,6 @@ export default function ProtocolConstellation() {
     img.src = logoUrl;
   }, []);
 
-  // ---- Resize Handler ----
   const resize = useCallback(() => {
     const canvas = canvasRef.current;
     const pulseCanvas = pulseCanvasRef.current;
@@ -1025,7 +997,6 @@ export default function ProtocolConstellation() {
     }
   }, []);
 
-  // ---- Pulse Management ----
   const spawnPulse = useCallback((sourceIdx: number): boolean => {
     const state = stateRef.current;
     if (state.globalActive >= state.maxConcurrent) return false;
@@ -1089,7 +1060,6 @@ export default function ProtocolConstellation() {
 
       setLiveText(`${source.org} (${source.software}) is sending GET /.well-known/ocm to ${target.org} - 403 expected`);
     } else {
-      // Normal protocol pulse
       const step = PROTOCOL_STEPS[0];
       const pulse: PulseState = {
         id: pulseId,
@@ -1159,7 +1129,6 @@ export default function ProtocolConstellation() {
       pulse.trailHeadIdx = (pulse.trailHeadIdx + 1) % TRAIL_MAX_LENGTH;
 
       if (pulse.progress >= 1.0) {
-        // Step complete
         if (pulse.isRejection) {
           const maxSteps = REJECTION_STEPS.length;
           pulse.stepIndex++;
@@ -1184,12 +1153,11 @@ export default function ProtocolConstellation() {
           setLiveText(`${target.org} rejected request from ${source.org}: ${step.label}`);
           return true;
         } else {
-          // Normal protocol: 4 steps (or 3 on mobile)
+          // 4 protocol steps on desktop, 3 on mobile (discovery response skipped).
           const maxSteps = state.isMobile ? 3 : 4;
           pulse.stepIndex++;
 
           if (pulse.stepIndex >= maxSteps) {
-            // Protocol complete
             state.globalActive--;
             state.activeSourceIndices.delete(pulse.fromIdx);
             return false;
@@ -1252,7 +1220,6 @@ export default function ProtocolConstellation() {
     }
   }, [spawnPulse]);
 
-  // ---- Rendering ----
   const renderNodes = useCallback(() => {
     const state = stateRef.current;
     const gl = state.gl;
@@ -1461,7 +1428,6 @@ export default function ProtocolConstellation() {
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.fill();
 
-      // Step badge
       ctx.font = 'bold 11px Inter, system-ui, sans-serif';
       ctx.textAlign = 'center';
       if (pulse.isRejection && pulse.stepIndex >= 1) {
@@ -1545,7 +1511,6 @@ export default function ProtocolConstellation() {
     ctx.restore();
   }, []);
 
-  // ---- Animation Loop ----
   const animate = useCallback((timestamp: number) => {
     if (!isMountedRef.current) return;
     const state = stateRef.current;
@@ -1659,7 +1624,6 @@ export default function ProtocolConstellation() {
       updateFederationPaths(state);
     }
 
-    // Update pulses
     updatePulses(dt);
     schedulePulses();
 
@@ -1669,7 +1633,6 @@ export default function ProtocolConstellation() {
       setActiveConversations([...state.pulses]);
     }
 
-    // Render
     gl.clear(gl.COLOR_BUFFER_BIT);
     renderNodes();
     renderEdges();
@@ -1678,7 +1641,6 @@ export default function ProtocolConstellation() {
     animFrameRef.current = requestAnimationFrame(animate);
   }, [updatePulses, schedulePulses, renderNodes, renderEdges, renderPulseTrails]);
 
-  // ---- Event Handlers ----
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1688,7 +1650,6 @@ export default function ProtocolConstellation() {
     stateRef.current.mouseX = x;
     stateRef.current.mouseY = y;
 
-    // Check hover on special nodes
     const state = stateRef.current;
     let hovered: SpecialNodeRuntime | null = null;
     for (const special of state.specials) {
@@ -1704,7 +1665,6 @@ export default function ProtocolConstellation() {
     if (hovered) {
       setTooltip({ x: e.clientX + 10, y: e.clientY - 30, text: `${hovered.org} (${hovered.software})` });
     } else {
-      // Check pulse hover
       let pulseHovered = false;
       for (const pulse of state.pulses) {
         const pos = getLivePositionOnPath(state.grid, state.gridCols, pulse.gridPath, Math.min(pulse.progress, 1.0));
@@ -1892,7 +1852,6 @@ export default function ProtocolConstellation() {
     }
   }, []);
 
-  // ---- Effects ----
   useEffect(() => {
     const initialized = initWebGL();
     if (!initialized) return;
@@ -1942,7 +1901,6 @@ export default function ProtocolConstellation() {
     };
   }, [initWebGL, resize, loadLogoTexture]);
 
-  // ---- Render ----
   const state = stateRef.current;
   const selectedNodeIdx = selectedNode ? state.specials.findIndex(s => s.id === selectedNode.id) : -1;
   const talkingTo = selectedNodeIdx >= 0
@@ -1964,7 +1922,6 @@ export default function ProtocolConstellation() {
 
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden">
-      {/* WebGL canvas for nodes */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
@@ -1982,13 +1939,11 @@ export default function ProtocolConstellation() {
         role="img"
       />
 
-      {/* Canvas2D overlay for pulse trails */}
       <canvas
         ref={pulseCanvasRef}
         className="absolute inset-0 w-full h-full pointer-events-none"
       />
 
-      {/* HTML labels for special nodes */}
       {state.specials.map((special, idx) => (
         <div
           ref={el => { labelRefs.current[idx] = el; }}
@@ -2006,7 +1961,6 @@ export default function ProtocolConstellation() {
         </div>
       ))}
 
-      {/* Keyboard focus indicator */}
       {focusIndex >= 0 && focusIndex < state.specials.length && (
         <div
           ref={focusRef}
@@ -2021,7 +1975,6 @@ export default function ProtocolConstellation() {
         />
       )}
 
-      {/* Hover tooltip */}
       {tooltip && (
         <div
           className="fixed pointer-events-none bg-black/80 text-white text-xs px-3 py-2 rounded-lg z-30"
@@ -2031,7 +1984,6 @@ export default function ProtocolConstellation() {
         </div>
       )}
 
-      {/* Detail panel */}
       {selectedNode && (
         <div
           className={`absolute bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl p-5 z-40
@@ -2123,7 +2075,6 @@ export default function ProtocolConstellation() {
         </div>
       )}
 
-      {/* Keyboard navigation buttons */}
       <div className="sr-only" role="list">
         {state.specials.map((special, idx) => (
           <button
@@ -2146,7 +2097,6 @@ export default function ProtocolConstellation() {
         ))}
       </div>
 
-      {/* Accessibility live region */}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {liveText}
       </div>

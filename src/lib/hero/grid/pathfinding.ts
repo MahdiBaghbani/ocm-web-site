@@ -15,7 +15,7 @@ export interface WaypointResult {
 
 /**
  * Maximum reconfiguration attempts per phase in selectWaypointsWithConstraints.
- * Chosen empirically: on a 10×10 grid with k≤5 and dMin≥2, >95% of paths
+ * Chosen empirically: on a 10x10 grid with k<=5 and dMin>=2, >95% of paths
  * succeed within 100 attempts; increasing to 200 yields <0.5% extra wins.
  */
 export const MAX_PATH_ATTEMPTS = 100;
@@ -263,9 +263,9 @@ export function getNeighbors(i: number, j: number, rows: number, cols: number): 
 }
 
 /**
- * Find a mesh path between two grid coordinates using diagonal-first shortest path.
- * This is the same algorithm used for pulse routing, ensuring federation edges
- * follow the grid topology.
+ * Find a mesh path between two grid coordinates using the diagonal-first
+ * greedy strategy (thin wrapper around findPath). Used for static federation
+ * edge routing, not for animated pulse paths which use selectWaypointsWithConstraints.
  */
 export function findMeshPath(
   start: GridCoord,
