@@ -1,6 +1,5 @@
-// ============================================================
-// Shared primitives
-// ============================================================
+// TypeScript mirrors of the generated JSON artifact shapes consumed by the site.
+// Shape changes here must match the ocmts ingest pipeline's output schemas.
 
 /** Display status on a matrix cell or capability entry. */
 export type DisplayStatus =
@@ -45,9 +44,7 @@ export interface ExecutionContext {
   github: Record<string, unknown>;
 }
 
-// ============================================================
-// MatrixRules  (public/matrix-rules.v1.json)
-// ============================================================
+// --- MatrixRules  (public/matrix-rules.v1.json) ---
 
 export interface FlowMetadata {
   flow_id: string;
@@ -89,9 +86,7 @@ export interface MatrixRules {
   scenarios: MatrixRuleScenario[];
 }
 
-// ============================================================
-// ImplementedCells  (public/implemented-cells.v1.json)
-// ============================================================
+// --- ImplementedCells  (public/implemented-cells.v1.json) ---
 
 /** Entry in the `blocked_by[]` list on a cell record. */
 export interface BlockedByEntry {
@@ -149,9 +144,7 @@ export interface ImplementedCells {
   cells: Record<string, ImplementedCell>;
 }
 
-// ============================================================
-// MatrixNotInScope  (public/matrix-not-in-scope.v1.json)
-// ============================================================
+// --- MatrixNotInScope  (public/matrix-not-in-scope.v1.json) ---
 
 export interface NotInScopeEntry {
   platform: string;
@@ -170,9 +163,7 @@ export interface MatrixNotInScope {
   flows: Record<string, NotInScopeEntry[]>;
 }
 
-// ============================================================
-// SuiteManifest  (public/suite-manifest.v1.json)
-// ============================================================
+// --- SuiteManifest  (public/suite-manifest.v1.json) ---
 
 export interface SuiteManifestFlow {
   id: string;
@@ -256,9 +247,7 @@ export interface SuiteManifest {
   indexes: SuiteManifestIndexes;
 }
 
-// ============================================================
-// EvidenceManifest  (meta/evidence.v1.json)
-// ============================================================
+// --- EvidenceManifest  (meta/evidence.v1.json) ---
 
 /** Envelope kind; determines which renderer the EvidenceViewer dispatches to. */
 export type EvidenceEnvelope =
@@ -306,9 +295,7 @@ export interface EvidenceManifest {
   items: EvidenceItem[];
 }
 
-// ============================================================
-// CellResult  (meta/result.v1.json)
-// ============================================================
+// --- CellResult  (meta/result.v1.json) ---
 
 export interface VerdictStage {
   status: ResultStatus;
@@ -352,9 +339,7 @@ export interface CellResult {
   suite_kind: string;
 }
 
-// ============================================================
-// ImagesManifest  (meta/images.v1.json)
-// ============================================================
+// --- ImagesManifest  (meta/images.v1.json) ---
 
 export interface ImageServiceEntry {
   service: string;
@@ -374,9 +359,7 @@ export interface ImagesManifest {
   services: ImageServiceEntry[];
 }
 
-// ============================================================
-// ComposeManifest  (compose/manifest.v1.json)
-// ============================================================
+// --- ComposeManifest  (compose/manifest.v1.json) ---
 
 export interface ComposeManifest {
   schema_version: number;

@@ -2,6 +2,8 @@ import type { CellStatus } from "./contracts";
 
 export type { CellStatus };
 
+// Subset of CellStatus shown in legends and rollup badges.
+// Excludes vendor-unsupported, vendor-out-of-scope, and unknown (display-only states).
 export const STATUS_OPTIONS: readonly CellStatus[] = [
   "passed",
   "failed",

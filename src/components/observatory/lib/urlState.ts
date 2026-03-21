@@ -1,3 +1,6 @@
+// Overlay open/close uses pushState so the browser back button dismisses the modal.
+// Tab, mitm, stack, and expanded mutations use replaceState because they are
+// in-modal chrome changes, not navigation history entries.
 import type { EvidenceTab } from "./contracts";
 
 export interface OverlayClosed {
