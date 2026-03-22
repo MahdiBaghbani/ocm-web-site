@@ -37,16 +37,9 @@ function needsFetch(envelope: EvidenceItem["envelope"]): boolean {
 }
 
 /**
- * Envelope dispatch for evidence files.
- *
- * Renderer contract:
- * - Each renderer MUST accept and honor `fillParent` so it can fill the
- *   FilePane content area.
- * - Renderers MUST NOT add nested file-viewer chrome around TextViewerCore
- *   (would produce double-chip/N-toolbar regressions). Use ViewerFrame or
- *   pass `noChip` to inner TextViewerCores.
- * - `downloadName` should be derived from item.path basename here and
- *   threaded through so downloaded files preserve their real names.
+ * Envelope dispatch for evidence files. Derives downloadName from item.path
+ * and threads it through so downloads use real file names. See ViewerFrame and
+ * TextViewerCore for the single-chip invariant (no nested bordered containers).
  */
 export default function EvidenceViewer({
   item,

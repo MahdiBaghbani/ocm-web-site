@@ -1,11 +1,7 @@
 /**
- * Single shared file-viewer surface.
- *
- * Architectural invariant: exactly one chip per file viewer.
- * Renderers compose via ViewerFrame (default) or via TextViewerCore with
- * `noChip` when they need to provide their own outer container.
- * Never wrap a TextViewerCore that has its default chip enabled in another
- * bordered container - that produces double-chip regressions.
+ * Shared bordered surface for file renderers. Provides a sticky headerSlot
+ * and a scrollable body region. Pass fillParent to fill the parent height.
+ * See TextViewerCore's noChip prop for the single-chip invariant.
  */
 import React from "react";
 

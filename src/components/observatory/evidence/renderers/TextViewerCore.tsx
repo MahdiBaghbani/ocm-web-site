@@ -267,7 +267,6 @@ export default function TextViewerCore({
         .filter(Boolean)
         .join(" ")}
     >
-      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="text"

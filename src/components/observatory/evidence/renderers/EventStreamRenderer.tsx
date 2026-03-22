@@ -12,7 +12,7 @@ interface EventStreamRendererProps {
   downloadName?: string;
 }
 
-// Single source of truth for traffic column widths — shared by header and rows.
+// Single source of truth for traffic column widths - shared by header and rows.
 const TRAFFIC_COLUMNS = {
   sender: "w-40 shrink-0",
   method: "w-16 shrink-0",
@@ -25,6 +25,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// Invalid lines are silently skipped; a single bad line does not abort the render.
 function parseJsonlRecords(text: string): unknown[] {
   return text
     .split("\n")
