@@ -27,7 +27,6 @@ export function OverlayFrame({ title, onClose, children }: OverlayFrameProps) {
         aria-modal="true"
         className="relative flex h-[96vh] w-[96vw] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl"
       >
-        {/* Fixed header chrome */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 px-6 py-4">
           <h2 className="truncate text-lg font-semibold text-zinc-50">{title}</h2>
           <button
@@ -38,7 +37,6 @@ export function OverlayFrame({ title, onClose, children }: OverlayFrameProps) {
           </button>
         </div>
 
-        {/* Scrollable body */}
         <div className="flex-1 min-h-0 overflow-hidden px-6 py-5">{children}</div>
       </div>
     </div>

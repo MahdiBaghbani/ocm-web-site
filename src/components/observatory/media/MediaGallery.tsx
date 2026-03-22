@@ -191,14 +191,12 @@ export default function MediaGallery(props: MediaGalleryProps) {
       ref={wrapperRef}
       className="flex flex-col gap-3 rounded-xl bg-zinc-950 p-3"
     >
-      {/* Focusable wrapper for keyboard handling */}
       <div
         ref={focusRef}
         tabIndex={0}
         onKeyDown={handleKeyDown}
         className="outline-none"
       >
-        {/* Toolbar */}
         <div className="mb-3 flex items-center gap-2">
           <button
             type="button"
@@ -255,7 +253,6 @@ export default function MediaGallery(props: MediaGalleryProps) {
           ) : null}
         </div>
 
-        {/* Main image */}
         <div className="relative flex items-center justify-center overflow-hidden rounded-xl bg-black">
           <div
             style={
@@ -330,7 +327,6 @@ export default function MediaGallery(props: MediaGalleryProps) {
           ) : null}
         </div>
 
-        {/* Caption and position */}
         <div className="mt-2 flex items-center justify-between text-xs text-zinc-400">
           <span className="truncate">{activeItem?.caption ?? ""}</span>
           <span className="ml-2 shrink-0">
@@ -338,7 +334,6 @@ export default function MediaGallery(props: MediaGalleryProps) {
           </span>
         </div>
 
-        {/* Thumbnail strip */}
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {items.map((item, i) => {
             const isActive = i === activeIndex;

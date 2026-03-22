@@ -72,6 +72,8 @@ function EvidenceErrorCard({ message }: { message: string }) {
   );
 }
 
+// Syncs active tab from URL, fetches the evidence manifest from the artifact
+// base URL, and keeps visited tab bodies mounted (lazy-mount, then hidden).
 export function RunModal({
   cellId,
   runId,
@@ -228,7 +230,6 @@ export function RunModal({
   return (
     <OverlayFrame title={title} onClose={onClose}>
       <div className="flex h-full flex-col gap-5">
-        {/* Tab bar */}
         <div
           role="tablist"
           className="flex shrink-0 flex-wrap gap-1 border-b border-zinc-800 pb-1"

@@ -29,6 +29,9 @@ interface ObservatoryShellProps {
   initialRunId?: string;
 }
 
+// Loads observatory JSON artifacts, owns filter and overlay URL state, and
+// renders scenarios grouped by flow. Overlay open/close uses pushState; all
+// other URL mutations (tab, mitm, stack, expanded) use replaceState.
 export default function ObservatoryShell({
   initialCellId = "",
   initialRunId = "",
@@ -180,7 +183,7 @@ export default function ObservatoryShell({
     for (const rows of byFlow.values())
       rows.sort((a, b) => String(a?.cell_id || "").localeCompare(String(b?.cell_id || "")));
 
-    // T18.4: sort by display_order; flows not in metadata fall to the end alphabetically.
+    // Sort by display_order; flows not in metadata fall to the end alphabetically.
     const sorted = [...byFlow.entries()].sort((a, b) => {
       const ma = flowMetaById.get(a[0]);
       const mb = flowMetaById.get(b[0]);
@@ -204,7 +207,7 @@ export default function ObservatoryShell({
           })),
         };
       })
-      // T18.6: skip flows with zero visible cells after all filters.
+      // Skip flows with zero visible cells after all filters.
       .filter(({ cells }) => cells.length > 0);
   }, [scenarios, filters.flow, queryDebounced, mf, matrixByCell, impl, implementedByCell, flowMetaById]);
 

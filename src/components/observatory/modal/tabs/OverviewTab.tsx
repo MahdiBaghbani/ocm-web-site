@@ -125,7 +125,6 @@ export default function OverviewTab({
         />
       </div>
 
-      {/* Run identity panel */}
       <section className="grid shrink-0 gap-4 md:grid-cols-2">
         <SummaryCard title="Run identity" className="min-w-0">
           <div className="space-y-3">
@@ -186,7 +185,6 @@ export default function OverviewTab({
         </SummaryCard>
       </section>
 
-      {/* Video */}
       <section className="flex flex-1 min-h-0 flex-col gap-2">
         <h3 className="shrink-0 text-sm font-semibold text-zinc-50">Video</h3>
         <div className="min-h-0 flex-1">

@@ -130,8 +130,8 @@ export function MatrixGrid({
     transform: "rotate(180deg)",
   };
 
-  // Body cell className (H2: 88px height). Duplicated intentionally so verification
-  // greps can confirm both branches carry the correct height literal.
+  // Both branches use identical body cell classes; the duplication is intentional
+  // so a grep for the height literal finds both.
   const singlePartyBodyCellCls =
     "border-b border-r border-zinc-900/40 px-1 py-1 text-center align-middle min-h-[88px] h-[88px]";
   const twoPartyBodyCellCls =
@@ -188,7 +188,6 @@ export function MatrixGrid({
             version row:    z-[8]
         */}
         <tbody>
-          {/* Row 1: merged corner (rowSpan=4) + "Sender" superlabel. */}
           <tr>
             <th rowSpan={4} colSpan={1} className={cornerClassName}>
               {singlePartyCornerContent}
@@ -198,7 +197,6 @@ export function MatrixGrid({
             </th>
           </tr>
 
-          {/* Row 2: sender platform headers. */}
           <tr>
             {senderGroupsForSingleParty.map(({ platform, versions }) => (
               <th
@@ -217,7 +215,6 @@ export function MatrixGrid({
             ))}
           </tr>
 
-          {/* Row 3: sender version headers. */}
           <tr>
             {senders.map((s) => {
               const [, version] = splitKey(s);
@@ -238,8 +235,8 @@ export function MatrixGrid({
             })}
           </tr>
 
-          {/* Row 4: body cells — one per sender; grid keys end with __ (empty receiver).
-              No leading placeholder <td>: the corner above spans rowSpan=4 into this row. */}
+          {/* Grid keys end with __ (empty receiver); no leading <td> because the corner
+              spans rowSpan=4 into this row (rowSpan does not cross tbody/thead). */}
           <tr className="border-b border-zinc-900/50">
             {senders.map((s) => {
               const cellId = grid.get(`${s}__`) ?? "";
@@ -288,21 +285,16 @@ export function MatrixGrid({
               version rows:    z-[8]
           */}
 
-          {/* Row 1: corner (rowSpan=3, colSpan=3) + "Receiver" superlabel. */}
+          {/* top-0: row 1 height ~28px (py-1.5 + text-[11px]) */}
           <tr>
-            {/* Corner — spans all 3 header rows and all 3 left-axis columns. */}
             <th rowSpan={3} colSpan={3} className={cornerClassName}>
               {cornerContent}
             </th>
-
-            {/* "Receiver" superlabel — spans every receiver version column. */}
-            {/* top-0: this is row 1, height ~28px (py-1.5 + text-[11px]) */}
             <th colSpan={receivers.length} className={superlabelClassName}>
               Receiver
             </th>
           </tr>
 
-          {/* Row 2: receiver platform headers. */}
           {/* top-[28px]: starts after row 1 (~28px tall) */}
           <tr>
             {receiverGroups.map(({ platform, versions }) => (
@@ -322,7 +314,6 @@ export function MatrixGrid({
             ))}
           </tr>
 
-          {/* Row 3: receiver version headers. */}
           {/* top-[56px]: starts after row 1 + row 2 (28 + 28 = 56px) */}
           <tr>
             {receivers.map((r) => {
@@ -357,8 +348,7 @@ export function MatrixGrid({
                     Col 3 version:             z-[8],  left-[88px]
                 */}
 
-                {/* Col 1: "Sender" superlabel, rotated, spans all body rows. */}
-                {/* left-0: first col, width 1.5rem = 24px */}
+                {/* left-0: col 1, width 2.5rem = 40px */}
                 {isFirstOfAll ? (
                   <th
                     rowSpan={senderRows.length}
@@ -376,7 +366,6 @@ export function MatrixGrid({
                   </th>
                 ) : null}
 
-                {/* Col 2: sender platform, rotated, spans its version group. */}
                 {/* left-[40px]: starts after col 1 (2.5rem = 40px) */}
                 {isFirstInGroup ? (
                   <th
@@ -394,7 +383,6 @@ export function MatrixGrid({
                   </th>
                 ) : null}
 
-                {/* Col 3: sender version, horizontal text. */}
                 {/* left-[88px]: starts after col 1 + col 2 (40 + 48 = 88px) */}
                 <th
                   className={[
@@ -408,7 +396,6 @@ export function MatrixGrid({
                   {version || "—"}
                 </th>
 
-                {/* Body cells: one <td> per receiver. */}
                 {receivers.map((r) => {
                   const cellId = grid.get(`${senderKey}__${r}`) ?? "";
                   const status = cellId ? getCellStatus(cellId) : "unknown";
