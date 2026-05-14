@@ -1,30 +1,31 @@
 ---
 import ProtocolConstellation from '../islands/ProtocolConstellation';
 
+const base = import.meta.env.BASE_URL;
 const features = [
   {
     title: 'IETF Draft',
     description: 'Read the standard',
     href: 'https://datatracker.ietf.org/doc/draft-ietf-ocm-open-cloud-mesh/',
-    logo: '/logos/ietf.svg',
+    logo: `${base}logos/ietf.svg`,
   },
   {
     title: 'OCM API',
     description: 'View the specification',
     href: 'https://cs3org.github.io/OCM-API/',
-    logo: '/logos/ocm-logo.svg',
+    logo: `${base}logos/ocm-logo.svg`,
   },
   {
     title: 'CS3 Community',
     description: 'Join the cloud storage sync & share community',
     href: 'https://cs3community.org/',
-    logo: '/logos/cs3.png',
+    logo: `${base}logos/cs3.png`,
   },
   {
     title: 'Matrix Chat',
     description: 'Join discussions',
     href: 'https://matrix.to/#/#ocm:matrix.org',
-    logo: '/logos/matrix.svg',
+    logo: `${base}logos/matrix.svg`,
   },
 ];
 ---
