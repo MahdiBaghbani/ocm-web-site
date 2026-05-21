@@ -1,6 +1,6 @@
-# Open Cloud Mesh Website
+# OpenCloudMesh Website
 
-This repository contains the website for the OCM Test Suite Compatibility
+This repository contains the website for the OpenCloudMesh Test Suite
 Observatory. It is a static site that visualizes published test runs as a
 compatibility matrix, and lets you drill into per-cell evidence like
 screenshots, network traces, logs, and run metadata.
