@@ -17,8 +17,10 @@ const features = [
   },
   {
     title: 'CS3 Community',
-    description: 'Join the cloud storage sync & share community',
-    href: 'https://cs3community.org/',
+    description: 'Conferences, interest groups, and OCM ecosystem',
+    href: 'https://www.cs3community.org/',
+    secondaryHref: 'https://www.cs3community.org/ocm',
+    secondaryLabel: 'OCM on CS3',
     logo: `${base}logos/cs3.png`,
   },
   {
@@ -56,22 +58,34 @@ const features = [
 
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
       {features.map(feature => (
-        <a
-          href={feature.href}
-          target={feature.href.startsWith('http') ? '_blank' : undefined}
-          rel={feature.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-          class="group flex flex-col items-center text-center bg-[rgba(190,215,235,0.14)] border border-white/15 rounded-xl p-5 hover:border-white/30 hover:-translate-y-1 transition-all duration-200 pointer-events-auto"
-        >
-          <div class="w-16 h-16 flex items-center justify-center mb-3 rounded-lg bg-[rgba(140,190,225,0.36)] border border-white/20 p-2">
-            <img
-              src={feature.logo}
-              alt={feature.title}
-              class={`w-full h-full object-contain opacity-95 group-hover:opacity-100 transition-opacity ${feature.title === 'Matrix Chat' ? 'filter brightness-0 invert' : ''}`}
-            />
-          </div>
-          <h3 class="text-white font-semibold text-base mb-1">{feature.title}</h3>
-          <p class="text-gray-400 text-xs leading-relaxed">{feature.description}</p>
-        </a>
+        <div class="group flex flex-col items-center text-center bg-[rgba(190,215,235,0.14)] border border-white/15 rounded-xl p-5 hover:border-white/30 hover:-translate-y-1 transition-all duration-200 pointer-events-auto">
+          <a
+            href={feature.href}
+            target={feature.href.startsWith('http') ? '_blank' : undefined}
+            rel={feature.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            class="flex w-full flex-col items-center text-center no-underline"
+          >
+            <div class="w-16 h-16 flex items-center justify-center mb-3 rounded-lg bg-[rgba(140,190,225,0.36)] border border-white/20 p-2">
+              <img
+                src={feature.logo}
+                alt={feature.title}
+                class={`w-full h-full object-contain opacity-95 group-hover:opacity-100 transition-opacity ${feature.title === 'Matrix Chat' ? 'filter brightness-0 invert' : ''}`}
+              />
+            </div>
+            <h3 class="text-white font-semibold text-base mb-1">{feature.title}</h3>
+            <p class="text-gray-400 text-xs leading-relaxed">{feature.description}</p>
+          </a>
+          {'secondaryHref' in feature && feature.secondaryHref && (
+            <a
+              href={feature.secondaryHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-2 text-xs text-sky-300/90 underline-offset-2 hover:text-sky-200 hover:underline"
+            >
+              {feature.secondaryLabel}
+            </a>
+          )}
+        </div>
       ))}
     </div>
   </div>
