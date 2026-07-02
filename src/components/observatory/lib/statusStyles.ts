@@ -1,19 +1,36 @@
-import type { CellStatus } from "./contracts";
+import type { CellStatus, DisplayStatus } from "./contracts";
 
 export type { CellStatus };
 
 // Subset of CellStatus shown in legends and rollup badges.
-// Excludes vendor-unsupported, vendor-out-of-scope, and unknown (display-only states).
+// Excludes vendor-out-of-scope and unknown (display-only states).
 export const STATUS_OPTIONS: readonly CellStatus[] = [
   "passed",
   "failed",
   "infra-failed",
   "cleanup-failed",
   "down-failed",
+  "vendor-unsupported",
   "test-implementation-pending",
   "not-run",
   "placeholder",
 ];
+
+/** Map matrix-rules display_status to the matrix cell chip when no run result exists. */
+export function displayStatusToCellStatus(displayStatus: DisplayStatus): CellStatus {
+  switch (displayStatus) {
+    case "supported":
+      return "not-run";
+    case "test-pending":
+      return "test-implementation-pending";
+    case "vendor-unsupported":
+      return "vendor-unsupported";
+    case "placeholder":
+      return "placeholder";
+    default:
+      return "unknown";
+  }
+}
 
 export interface StatusUi {
   label: string;

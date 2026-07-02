@@ -28,7 +28,12 @@ export function parseOverlayFromUrl(url: string | URL): OverlayState {
   return { kind: "closed" };
 }
 
-export function setOverlayInUrl(overlay: OverlayState): void {
+export interface SetOverlayInUrlOptions {
+  /** Replace the current history entry instead of pushing (hydration upgrades). */
+  replace?: boolean;
+}
+
+function overlayUrlForState(overlay: OverlayState): string {
   const u = new URL(window.location.href);
   u.searchParams.delete("cell");
   u.searchParams.delete("run");
@@ -44,8 +49,19 @@ export function setOverlayInUrl(overlay: OverlayState): void {
   }
 
   const next = `${u.pathname}?${u.searchParams.toString()}${u.hash}`;
-  const clean = next.replace(/\?$/, "");
-  window.history.pushState({}, "", clean);
+  return next.replace(/\?$/, "");
+}
+
+export function setOverlayInUrl(
+  overlay: OverlayState,
+  options?: SetOverlayInUrlOptions,
+): void {
+  const clean = overlayUrlForState(overlay);
+  if (options?.replace) {
+    window.history.replaceState({}, "", clean);
+  } else {
+    window.history.pushState({}, "", clean);
+  }
 }
 
 export function parseExpandedFromUrl(url: string | URL): string[] | null {
