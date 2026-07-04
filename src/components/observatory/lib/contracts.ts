@@ -1,12 +1,11 @@
 // TypeScript mirrors of the generated JSON artifact shapes consumed by the site.
 // Shape changes here must match the ocmts ingest pipeline's output schemas.
 
-/** Display status on a matrix cell or capability entry. */
+/** Display status on a kept matrix-rules cell (matrix-rules.v1.json). */
 export type DisplayStatus =
   | 'supported'
+  | 'test-pending'
   | 'vendor-unsupported'
-  | 'test-implementation-pending'
-  | 'vendor-out-of-scope'
   | 'placeholder';
 
 /** Terminal outcome of a single cell run. */
@@ -57,7 +56,7 @@ export interface FlowMetadata {
 }
 
 export interface MatrixRuleScenario {
-  scenario: string;
+  matrix_key: string;
   flow_id: string;
   pair: string;
   enabled: boolean;
@@ -83,65 +82,7 @@ export interface MatrixRules {
   sources: SourceEntry[];
   source: string;
   flows: FlowMetadata[];
-  scenarios: MatrixRuleScenario[];
-}
-
-// --- ImplementedCells  (public/implemented-cells.v1.json) ---
-
-/** Entry in the `blocked_by[]` list on a cell record. */
-export interface BlockedByEntry {
-  role: string;
-  capability: string;
-  status: DisplayStatus;
-  rationale?: string;
-  tracking_url?: string;
-  tracking_note?: string;
-}
-
-/** Capability requirement wired to an adapter key. */
-export interface RequirementEntry {
-  capability: string;
-  role: string;
-  adapter_key: string;
-}
-
-/** Fully expanded blocker with reason code and adapter coordinates. */
-export interface BlockerEntry {
-  reason_code: string;
-  role: string;
-  adapter_key: string;
-  capability: string;
-  status: DisplayStatus;
-  rationale?: string;
-}
-
-export interface ImplementedCell {
-  scenario: string;
-  flow_id: string;
-  pair: string;
-  browser: string;
-  sender_platform: string;
-  sender_version: string;
-  receiver_platform: string;
-  receiver_version: string;
-  artifact_name: string;
-  mitm: boolean;
-  display_status: DisplayStatus;
-  /** Concise blocking constraints used for matrix tooltip rendering. */
-  blocked_by: BlockedByEntry[];
-  /** Legacy boolean retained for back-compat (true iff display_status === 'supported'). */
-  implemented: boolean;
-  requirements: RequirementEntry[];
-  blockers: BlockerEntry[];
-}
-
-export interface ImplementedCells {
-  schema_version: number;
-  generated_at: string;
-  generator: string;
-  producer: ProducerMeta;
-  sources: SourceEntry[];
-  cells: Record<string, ImplementedCell>;
+  matrix: MatrixRuleScenario[];
 }
 
 // --- MatrixNotInScope  (public/matrix-not-in-scope.v1.json) ---
@@ -185,16 +126,12 @@ export interface CellManifestEntry {
   scenario_module: string;
 }
 
-export interface ImageProvenanceEntry {
-  local_image_id: string;
-  repo_digests: string[];
-}
-
 export interface RunEntry {
   id: string;
   cell_id: string;
   execution_id: string;
   artifact_name: string;
+  matrix_key: string;
   attempt_number: number;
   retry_of_run_id: string | null;
   superseded_by_run_id: string | null;
@@ -203,11 +140,6 @@ export interface RunEntry {
   finished_at: string;
   stack_id: string;
   execution_context: ExecutionContext;
-  /** Role-keyed image tags as launched (legacy shape; see ImagesManifest for richer per-service data). */
-  images: Record<string, string>;
-  images_provenance: Record<string, ImageProvenanceEntry>;
-  stack_def_sha256: string | null;
-  stack_env_sha256: string | null;
 }
 
 export interface ResultSummaryEvidenceEntry {

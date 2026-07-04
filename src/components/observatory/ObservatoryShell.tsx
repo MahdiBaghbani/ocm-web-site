@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getBaseUrl, fetchJson } from "./lib/fetchManifest";
-import { STATUS_OPTIONS } from "./lib/statusStyles";
+import { STATUS_OPTIONS, displayStatusToCellStatus } from "./lib/statusStyles";
 import {
   parseOverlayFromUrl,
   setOverlayInUrl,
@@ -14,8 +14,6 @@ import type {
   FlowMetadata,
   MatrixNotInScope,
   SuiteManifest,
-  ImplementedCells,
-  ImplementedCell,
   CellStatus,
 } from "./lib/contracts";
 import { FilterBar } from "./filters/FilterBar";
@@ -29,6 +27,12 @@ interface ObservatoryShellProps {
   initialRunId?: string;
 }
 
+function latestRunIdForCell(mf: SuiteManifest | null, cellId: string): string {
+  const resId = mf?.indexes?.latest_terminal_result_by_cell?.[cellId] ?? "";
+  const res = resId ? (mf?.results?.[resId] ?? null) : null;
+  return res?.run_id ?? "";
+}
+
 // Loads observatory JSON artifacts, owns filter and overlay URL state, and
 // renders scenarios grouped by flow. Overlay open/close uses pushState; all
 // other URL mutations (tab, mitm, stack, expanded) use replaceState.
@@ -40,7 +44,6 @@ export default function ObservatoryShell({
 
   const [rules, setRules] = useState<MatrixRules | null>(null);
   const [mf, setMf] = useState<SuiteManifest | null>(null);
-  const [impl, setImpl] = useState<ImplementedCells | null>(null);
   const [notInScope, setNotInScope] = useState<MatrixNotInScope | null>(null);
   const [err, setErr] = useState("");
 
@@ -63,16 +66,14 @@ export default function ObservatoryShell({
     let alive = true;
     (async () => {
       try {
-        const [r, m, i, nis] = await Promise.all([
+        const [r, m, nis] = await Promise.all([
           fetchJson<MatrixRules>(`${baseUrl}matrix-rules.v1.json`),
           fetchJson<SuiteManifest>(`${baseUrl}suite-manifest.v1.json`),
-          fetchJson<ImplementedCells>(`${baseUrl}implemented-cells.v1.json`).catch(() => null),
           fetchJson<MatrixNotInScope>(`${baseUrl}matrix-not-in-scope.v1.json`).catch(() => null),
         ]);
         if (!alive) return;
         setRules(r);
         setMf(m);
-        setImpl(i);
         setNotInScope(nis);
       } catch (e) {
         if (!alive) return;
@@ -103,6 +104,21 @@ export default function ObservatoryShell({
     }
   }, [initialCellId, initialRunId]);
 
+  // Deep-link boot: resolve latest run once manifest is available (same as openCell).
+  useEffect(() => {
+    if (!mf) return;
+    if (overlay.kind !== "run" || overlay.runId || !overlay.cellId) return;
+    const latestRunId = latestRunIdForCell(mf, overlay.cellId);
+    if (!latestRunId) return;
+    const next: OverlayState = {
+      kind: "run",
+      runId: latestRunId,
+      cellId: overlay.cellId,
+    };
+    setOverlay(next);
+    setOverlayInUrl(next, { replace: true });
+  }, [mf, overlay]);
+
   // Debounce query; clear immediately when empty.
   useEffect(() => {
     if (filters.query === "") { setQueryDebounced(""); return; }
@@ -110,7 +126,7 @@ export default function ObservatoryShell({
     return () => clearTimeout(t);
   }, [filters.query]);
 
-  const scenarios = Array.isArray(rules?.scenarios) ? rules.scenarios : [];
+  const scenarios = Array.isArray(rules?.matrix) ? rules.matrix : [];
 
   const matrixByCell = useMemo(() => {
     const m = new Map<string, MatrixRuleScenario>();
@@ -119,11 +135,6 @@ export default function ObservatoryShell({
     }
     return m;
   }, [scenarios]);
-
-  const implementedByCell = useMemo<Record<string, ImplementedCell>>(
-    () => (impl?.cells && typeof impl.cells === "object" ? impl.cells : {}),
-    [impl],
-  );
 
   const flowOptions = useMemo(() => {
     const set = new Set<string>();
@@ -141,14 +152,13 @@ export default function ObservatoryShell({
 
   const getCellStatus = (cellId: string): CellStatus => {
     const scenario = matrixByCell.get(cellId);
-    if (scenario?.display_status === "vendor-out-of-scope") return "vendor-out-of-scope";
-    if (scenario?.enabled === false) return "placeholder";
+    if (!scenario) return "unknown";
     const resId = mf?.indexes?.latest_terminal_result_by_cell?.[cellId] ?? "";
-    if (resId) return mf?.results?.[resId]?.status ?? "unknown";
-    const implEntry = implementedByCell?.[cellId] ?? null;
-    if (implEntry && implEntry.implemented === false) return "test-implementation-pending";
-    if (impl && !implEntry) return "test-implementation-pending";
-    return "not-run";
+    if (resId) {
+      const resultStatus = mf?.results?.[resId]?.status;
+      if (resultStatus) return resultStatus;
+    }
+    return displayStatusToCellStatus(scenario.display_status);
   };
 
   const getCellDimmed = (cellId: string): boolean => {
@@ -170,7 +180,7 @@ export default function ObservatoryShell({
       if (filters.flow !== "all" && (s?.flow_id || "unknown") !== filters.flow) continue;
       if (q) {
         const hay = [
-          s?.cell_id, s?.scenario, s?.flow_id, s?.browser,
+          s?.cell_id, s?.matrix_key, s?.flow_id, s?.browser,
           s?.sender_platform, s?.sender_version, s?.receiver_platform,
           s?.receiver_version, s?.artifact_name,
         ].filter(Boolean).join(" ").toLowerCase();
@@ -209,7 +219,7 @@ export default function ObservatoryShell({
       })
       // Skip flows with zero visible cells after all filters.
       .filter(({ cells }) => cells.length > 0);
-  }, [scenarios, filters.flow, queryDebounced, mf, matrixByCell, impl, implementedByCell, flowMetaById]);
+  }, [scenarios, filters.flow, queryDebounced, mf, matrixByCell, flowMetaById]);
 
   const isExpanded = (flowId: string): boolean =>
     expandedFlows === null || expandedFlows.has(flowId);
@@ -239,10 +249,11 @@ export default function ObservatoryShell({
   }
 
   function openCell(cellId: string) {
-    const resId = mf?.indexes?.latest_terminal_result_by_cell?.[cellId] ?? "";
-    const res = resId ? (mf?.results?.[resId] ?? null) : null;
-    const latestRunId = res?.run_id ?? "";
-    pushOverlay({ kind: "run", runId: latestRunId, cellId });
+    pushOverlay({
+      kind: "run",
+      runId: latestRunIdForCell(mf, cellId),
+      cellId,
+    });
   }
 
   function closeOverlay() {

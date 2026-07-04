@@ -10,8 +10,8 @@ export async function getStaticPaths() {
   try {
     const raw = await fs.readFile(rulesPath, "utf-8");
     const rules = JSON.parse(raw);
-    const scenarios = Array.isArray(rules?.scenarios) ? rules.scenarios : [];
-    const cellIds = [...new Set(scenarios.map((s) => s?.cell_id).filter(Boolean))];
+    const matrix = Array.isArray(rules?.matrix) ? rules.matrix : [];
+    const cellIds = [...new Set(matrix.map((s) => s?.cell_id).filter(Boolean))];
     return cellIds.map((cell_id) => ({ params: { cell_id } }));
   } catch {
     return [];
