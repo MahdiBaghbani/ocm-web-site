@@ -55,6 +55,13 @@ export interface FlowMetadata {
   mitm: boolean;
 }
 
+/** Platform catalog entry from matrix-rules.v1.json `platforms[]`. */
+export interface PlatformMetadata {
+  id: string;
+  display_name: string;
+  version_lines: string[];
+}
+
 export interface MatrixRuleScenario {
   matrix_key: string;
   flow_id: string;
@@ -82,6 +89,8 @@ export interface MatrixRules {
   sources: SourceEntry[];
   source: string;
   flows: FlowMetadata[];
+  /** Canonical platform display names. */
+  platforms?: PlatformMetadata[];
   matrix: MatrixRuleScenario[];
 }
 

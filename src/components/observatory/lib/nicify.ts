@@ -1,44 +1,38 @@
 import type { FlowMetadata } from "./contracts";
-
-const PLATFORM_MAP: Record<string, string> = {
-  nextcloud: "Nextcloud",
-  ocis: "oCIS",
-  opencloud: "OpenCloud",
-  ocmgo: "OCM-Go",
-  seafile: "Seafile",
-};
+import type { PlatformLabelResolver } from "./platformLabels";
 
 /**
- * Convert a platform name to its canonical display form.
- * Uses a hard-coded brand map first; falls back to capitalizing the first letter.
- *
- * @example titleCasePlatform("nextcloud") // => "Nextcloud"
- * @example titleCasePlatform("ocis")      // => "oCIS"
- */
-export function titleCasePlatform(name: string): string {
-  if (Object.prototype.hasOwnProperty.call(PLATFORM_MAP, name)) {
-    return PLATFORM_MAP[name]!;
-  }
-  if (!name) return name;
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
-
-/**
- * Format a cell ID as a human-readable title using flow labels and platform names.
+ * Format a cell ID as a human-readable title using flow labels and resolved
+ * platform display names.
  *
  * Cell ID shape:
  *   Two-party:   `<flow_id>__<sender-platform>-<sender-version>__<receiver-platform>-<receiver-version>`
  *   Single-party: `<flow_id>__<platform>-<version>`
  *
+ * @param platformLabel - Maps platform slug ids to display names (see
+ *   `createPlatformLabelResolver`).
+ *
  * @example
- * nicifyCellId("share-with__nextcloud-v32__nextcloud-v32", [{flow_id:"share-with", label:"Share With Flow", ...}])
+ * nicifyCellId(
+ *   "share-with__nextcloud-v32__nextcloud-v32",
+ *   [{ flow_id: "share-with", label: "Share With Flow", ... }],
+ *   (platformId) => (platformId === "nextcloud" ? "Nextcloud" : platformId),
+ * )
  * // => "Share With Flow: Nextcloud v32 to Nextcloud v32"
  *
  * @example
- * nicifyCellId("login__nextcloud-v32", [{flow_id:"login", label:"Login Flow", ...}])
+ * nicifyCellId(
+ *   "login__nextcloud-v32",
+ *   [{ flow_id: "login", label: "Login Flow", ... }],
+ *   (platformId) => (platformId === "nextcloud" ? "Nextcloud" : platformId),
+ * )
  * // => "Login Flow: Nextcloud v32"
  */
-export function nicifyCellId(cellId: string, flows: FlowMetadata[]): string {
+export function nicifyCellId(
+  cellId: string,
+  flows: FlowMetadata[],
+  platformLabel: PlatformLabelResolver,
+): string {
   if (!cellId) return cellId;
 
   try {
@@ -68,14 +62,14 @@ export function nicifyCellId(cellId: string, flows: FlowMetadata[]): string {
     }
 
     const [senderPlatform, senderVersion] = splitPair(senderStr);
-    const senderTitle = titleCasePlatform(senderPlatform);
+    const senderTitle = platformLabel(senderPlatform);
 
     if (receiverStr === null) {
       return `${label}: ${senderTitle} ${senderVersion}`;
     }
 
     const [receiverPlatform, receiverVersion] = splitPair(receiverStr);
-    const receiverTitle = titleCasePlatform(receiverPlatform);
+    const receiverTitle = platformLabel(receiverPlatform);
 
     return `${label}: ${senderTitle} ${senderVersion} to ${receiverTitle} ${receiverVersion}`;
   } catch {

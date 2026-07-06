@@ -4,7 +4,7 @@ import {
   compareAxisSenderKey,
   compareAxisReceiverKey,
 } from "../lib/versionSorting";
-import { titleCasePlatform } from "../lib/nicify";
+import type { PlatformLabelResolver } from "../lib/platformLabels";
 import { MatrixCell } from "./MatrixCell";
 import { FlowGlyph } from "./FlowGlyph";
 
@@ -14,6 +14,7 @@ export interface MatrixGridProps {
   onOpenCell: (cellId: string) => void;
   getCellDimmed: (cellId: string) => boolean;
   flowId?: string;
+  platformLabel: PlatformLabelResolver;
 }
 
 interface PlatformGroup {
@@ -57,6 +58,7 @@ export function MatrixGrid({
   onOpenCell,
   getCellDimmed,
   flowId,
+  platformLabel,
 }: MatrixGridProps): React.ReactElement {
   // Receivers = column axis (top); senders = row axis (left).
   const senders = useMemo(() => {
@@ -210,7 +212,7 @@ export function MatrixGrid({
                   "whitespace-nowrap px-2 py-1.5 text-center",
                 ].join(" ")}
               >
-                {platform ? titleCasePlatform(platform) : "—"}
+                {platform ? platformLabel(platform) : "—"}
               </th>
             ))}
           </tr>
@@ -309,7 +311,7 @@ export function MatrixGrid({
                   "whitespace-nowrap px-2 py-1.5 text-center",
                 ].join(" ")}
               >
-                {platform ? titleCasePlatform(platform) : "—"}
+                {platform ? platformLabel(platform) : "—"}
               </th>
             ))}
           </tr>
@@ -379,7 +381,7 @@ export function MatrixGrid({
                     ].join(" ")}
                     style={axisColStyle}
                   >
-                    {platform ? titleCasePlatform(platform) : "—"}
+                    {platform ? platformLabel(platform) : "—"}
                   </th>
                 ) : null}
 
