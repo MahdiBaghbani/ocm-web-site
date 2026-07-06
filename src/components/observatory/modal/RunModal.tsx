@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { EvidenceItem, EvidenceManifest, EvidenceTab, FlowMetadata, SuiteManifest } from "../lib/contracts";
 import { fetchJson, HttpError, isAbortError } from "../lib/fetchManifest";
 import { nicifyCellId } from "../lib/nicify";
+import type { PlatformLabelResolver } from "../lib/platformLabels";
 import { parseTabFromUrl, setTabInUrl } from "../lib/urlState";
 import { OverlayFrame } from "./OverlayFrame";
 import OverviewTab from "./tabs/OverviewTab";
@@ -19,6 +20,7 @@ interface RunModalProps {
   mf: SuiteManifest | null;
   baseUrl: string;
   flows: FlowMetadata[];
+  platformLabel: PlatformLabelResolver;
   onClose: () => void;
   onSelectRun: (runId: string) => void;
 }
@@ -80,6 +82,7 @@ export function RunModal({
   mf,
   baseUrl,
   flows,
+  platformLabel,
   onClose,
   onSelectRun,
 }: RunModalProps) {
@@ -195,7 +198,7 @@ export function RunModal({
 
   const sharedProps: EvidenceTabProps = { evidenceItems, artifactBase };
 
-  const title = nicifyCellId(effectiveCellId, flows);
+  const title = nicifyCellId(effectiveCellId, flows, platformLabel);
 
   function renderEvidenceTab(makeTab: () => React.ReactNode): React.ReactNode {
     switch (evidenceState.status) {

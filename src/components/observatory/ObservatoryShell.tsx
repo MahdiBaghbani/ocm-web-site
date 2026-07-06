@@ -16,6 +16,7 @@ import type {
   SuiteManifest,
   CellStatus,
 } from "./lib/contracts";
+import { createPlatformLabelResolver } from "./lib/platformLabels";
 import { FilterBar } from "./filters/FilterBar";
 import { FlowAccordionSection } from "./matrix/FlowAccordionSection";
 import { MatrixGrid } from "./matrix/MatrixGrid";
@@ -173,6 +174,11 @@ export default function ObservatoryShell({
     return m;
   }, [rules]);
 
+  const platformLabel = useMemo(
+    () => createPlatformLabelResolver(rules?.platforms),
+    [rules?.platforms],
+  );
+
   const flows = useMemo(() => {
     const byFlow = new Map<string, MatrixRuleScenario[]>();
     const q = queryDebounced.trim().toLowerCase();
@@ -183,6 +189,8 @@ export default function ObservatoryShell({
           s?.cell_id, s?.matrix_key, s?.flow_id, s?.browser,
           s?.sender_platform, s?.sender_version, s?.receiver_platform,
           s?.receiver_version, s?.artifact_name,
+          platformLabel(s?.sender_platform ?? ""),
+          platformLabel(s?.receiver_platform ?? ""),
         ].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) continue;
       }
@@ -219,7 +227,7 @@ export default function ObservatoryShell({
       })
       // Skip flows with zero visible cells after all filters.
       .filter(({ cells }) => cells.length > 0);
-  }, [scenarios, filters.flow, queryDebounced, mf, matrixByCell, flowMetaById]);
+  }, [scenarios, filters.flow, queryDebounced, mf, matrixByCell, flowMetaById, platformLabel]);
 
   const isExpanded = (flowId: string): boolean =>
     expandedFlows === null || expandedFlows.has(flowId);
@@ -309,8 +317,13 @@ export default function ObservatoryShell({
                   onOpenCell={openCell}
                   getCellDimmed={getCellDimmed}
                   flowId={flowId}
+                  platformLabel={platformLabel}
                 />
-                <NotInScopeNote flowId={flowId} notInScope={notInScope} />
+                <NotInScopeNote
+                  flowId={flowId}
+                  notInScope={notInScope}
+                  platformLabel={platformLabel}
+                />
               </FlowAccordionSection>
             ))}
           </div>
@@ -324,6 +337,7 @@ export default function ObservatoryShell({
           mf={mf}
           baseUrl={baseUrl}
           flows={rules?.flows ?? []}
+          platformLabel={platformLabel}
           onClose={closeOverlay}
           onSelectRun={handleSelectRun}
         />

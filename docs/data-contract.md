@@ -6,11 +6,11 @@ suite emits.
 
 ## Inputs under `public/`
 
-| File                            | Source                     | Purpose                                      |
-| ------------------------------- | -------------------------- | -------------------------------------------- |
-| `matrix-rules.v1.json`          | test suite publish step    | Matrix cells, display status, flow metadata  |
-| `matrix-not-in-scope.v1.json`   | test suite publish step    | Per-flow out-of-scope rationale by role      |
-| `suite-manifest.v1.json`        | test suite publish step    | Latest-per-cell run records and result data  |
+| File                            | Source                     | Purpose                                       |
+| ------------------------------- | -------------------------- | --------------------------------------------- |
+| `matrix-rules.v1.json`          | test suite publish step    | Matrix cells, platform catalog, flow metadata |
+| `matrix-not-in-scope.v1.json`   | test suite publish step    | Per-flow out-of-scope rationale by role       |
+| `suite-manifest.v1.json`        | test suite publish step    | Latest-per-cell run records and result data   |
 | `artifacts/<flow>/<pair>/<id>/` | artifact tree copied as-is | Screenshots, traces, logs, and meta sidecars  |
 
 Cell capability and blocked-by status now live on each kept matrix cell as
@@ -23,9 +23,21 @@ Top-level fields consumed by the observatory UI:
 
 - `flows[]`: flow metadata (`flow_id`, `label`, `subtitle`, `display_order`,
   `enabled`, `two_party`, `mitm`).
+- `platforms[]`: canonical platform catalog for rendered labels. Each entry
+  includes `id`, `display_name`, and `version_lines`. The UI resolves human
+  labels from this catalog; older published artifacts may omit it.
 - `matrix[]`: one entry per kept matrix cell. Each entry includes
   `matrix_key`, `flow_id`, `pair`, platform/version coordinates, `browser`,
   `mitm`, `cell_id`, `artifact_name`, and `display_status`.
+
+Platform identity vs display labels:
+
+- `platforms[]` is the source of truth for rendered platform names in the UI.
+- Matrix cells keep machine-readable slug ids, not display labels:
+  `sender_platform`, `receiver_platform`, `cell_id`, and `tracking_url` (when
+  present) all use those ids.
+- `matrix-not-in-scope.v1.json` entries also use slug `platform` ids; the UI
+  resolves labels from `platforms[]` when rendering them.
 
 `display_status` values:
 

@@ -1,9 +1,12 @@
 import React from "react";
 import type { MatrixNotInScope } from "../lib/contracts";
 
+import type { PlatformLabelResolver } from "../lib/platformLabels";
+
 export interface NotInScopeNoteProps {
   flowId: string;
   notInScope: MatrixNotInScope | null;
+  platformLabel: PlatformLabelResolver;
 }
 
 function roleLabel(role: string): string {
@@ -14,6 +17,7 @@ function roleLabel(role: string): string {
 export function NotInScopeNote({
   flowId,
   notInScope,
+  platformLabel,
 }: NotInScopeNoteProps): React.ReactElement | null {
   const entries = notInScope?.flows?.[flowId];
   if (!entries || entries.length === 0) return null;
@@ -53,7 +57,7 @@ export function NotInScopeNote({
           Not in scope ({roleLabel(role)}):{" "}
           {pairs.map((p, idx) => (
             <span key={`${p.platform}:${p.version}`}>
-              {p.platform} {p.version}
+              {platformLabel(p.platform)} {p.version}
               {idx < pairs.length - 1 ? ", " : ""}
             </span>
           ))}
