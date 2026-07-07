@@ -74,6 +74,13 @@ ASTRO_BASE=/ocm-test-suite/ bun run build
 - [docs/architecture.md](docs/architecture.md): UI structure and URL state
 - [docs/data-contract.md](docs/data-contract.md): what the Observatory reads
 
+## DeepWiki
+
+If you want a browsable, AI-generated map of this repository, see
+[DeepWiki](https://deepwiki.com/MahdiBaghbani/ocm-web-site). It gives a useful
+overview of the broader OCM website and the Observatory UI, but the files under
+[`docs/`](docs/) are still the source of truth.
+
 ## Related repos
 
 Open Cloud Mesh spans a few repositories:
