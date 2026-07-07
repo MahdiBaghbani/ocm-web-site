@@ -930,7 +930,7 @@ export default function ProtocolConstellation() {
     if (!gl) return;
 
     const basePath = import.meta.env.BASE_URL || '/';
-    const logoUrl = `${basePath}images/cern.svg`;
+    const logoUrl = `${basePath}logos/orgs/cern.svg`;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';

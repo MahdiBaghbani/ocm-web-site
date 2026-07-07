@@ -1,0 +1,20 @@
+{
+  "repo_notes": [
+    {
+      "author": "OpenCloudMesh website maintainers",
+      "content": "This repository is the public website for Open Cloud Mesh. It is not the protocol specification and it is not the system that runs interoperability tests. Treat it as the public front door and hub for OCM, with one major surface dedicated to the OCM Test Suite Observatory. Normative protocol semantics live in cs3org/OCM-API, not here."
+    },
+    {
+      "author": "OpenCloudMesh website maintainers",
+      "content": "The site has two surfaces. The homepage is a broad OCM landing page for orientation and links into the wider ecosystem. The Observatory is a static, evidence-first reader for published compatibility results: it shows the latest terminal result per matrix cell and lets users open a cell to inspect screenshots, network (MITM) traces, logs, run metadata, and the container stack behind the run. It supports deep links to a specific cell, run, and tab."
+    },
+    {
+      "author": "OpenCloudMesh website maintainers",
+      "content": "Keep the repo boundary clear. This repo (MahdiBaghbani/ocm-web-site) owns the website, the Observatory UI, and the presentation layer. The sibling cs3org/ocm-test-suite repo owns compatibility runs, result aggregation, site ingest, public artifact generation, and the build and publish workflow that deploys this site to GitHub Pages at https://cs3org.github.io/ocm-test-suite/."
+    },
+    {
+      "author": "OpenCloudMesh website maintainers",
+      "content": "When documenting or summarizing this repo, emphasize what matters most to contributors and readers: the Astro and React site structure, the Observatory deep-link UX, the evidence presentation model (see docs/architecture.md), and the data contract the Observatory reads from public/ (see docs/data-contract.md). Do not describe this repo as the OCM protocol itself or as the test runner, and do not claim it is served from a dedicated standalone domain."
+    }
+  ]
+}
