@@ -2,6 +2,8 @@
 
 > The public website for Open Cloud Mesh, home to the OCM Test Suite Observatory.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/MahdiBaghbani/ocm-web-site)
+
 This is the public front door for Open Cloud Mesh (OCM): a place to learn what
 OCM is, find the spec and community, and see how well implementations actually
 work together.
