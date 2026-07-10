@@ -7,8 +7,10 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "bun run check:matrix-rules && astro build",
     "preview": "astro preview",
+    "test": "bun test",
+    "check:matrix-rules": "bun run scripts/check-matrix-rules-artifact.ts",
     "astro": "astro"
   },
   "dependencies": {
@@ -22,5 +24,8 @@
     "react-dom": "^19.2.5",
     "tailwindcss": "^4.2.4",
     "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
   }
 }
