@@ -21,8 +21,10 @@ Cell capability and blocked-by status now live on each kept matrix cell as
 
 Top-level fields consumed by the observatory UI:
 
-- `flows[]`: flow metadata (`flow_id`, `label`, `subtitle`, `display_order`,
-  `enabled`, `two_party`, `mitm`).
+- `flows[]`: flow metadata (`flow_id`, `label`, `subtitle`, `glyph_id`,
+  `display_order`, `enabled`, `two_party`, `mitm`). `glyph_id` selects the
+  flow's decorative matrix icon. Supported values are `key`, `share-2`,
+  `ticket`, `compass`, and `app-window`.
 - `platforms[]`: canonical platform catalog for rendered labels. Each entry
   includes `id`, `display_name`, and `version_lines`. The UI resolves human
   labels from this catalog; older published artifacts may omit it.

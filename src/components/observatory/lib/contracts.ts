@@ -49,6 +49,7 @@ export interface FlowMetadata {
   flow_id: string;
   label: string;
   subtitle: string;
+  glyph_id: string;
   display_order: number;
   enabled: boolean;
   two_party: boolean;
