@@ -1,9 +1,14 @@
 import React from "react";
 import { STATUS_OPTIONS, statusToUi } from "../lib/statusStyles";
 
+export interface FlowFilterOption {
+  flowId: string;
+  label: string;
+}
+
 export interface FilterBarProps {
   browserOptions: string[];
-  flowOptions: string[];
+  flowFilterOptions: FlowFilterOption[];
   filters: { browser: string; flow: string; query: string };
   onChange: (next: { browser: string; flow: string; query: string }) => void;
   onClear: () => void;
@@ -11,7 +16,7 @@ export interface FilterBarProps {
 
 export function FilterBar({
   browserOptions,
-  flowOptions,
+  flowFilterOptions,
   filters,
   onChange,
   onClear,
@@ -61,9 +66,9 @@ export function FilterBar({
             onChange={(e) => onChange({ ...filters, flow: e.target.value })}
           >
             <option value="all">all</option>
-            {flowOptions.map((f) => (
-              <option key={f} value={f}>
-                {f}
+            {flowFilterOptions.map((f) => (
+              <option key={f.flowId} value={f.flowId}>
+                {f.label}
               </option>
             ))}
           </select>

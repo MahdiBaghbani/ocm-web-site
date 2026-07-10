@@ -22,6 +22,11 @@ import { FlowAccordionSection } from "./matrix/FlowAccordionSection";
 import { MatrixGrid } from "./matrix/MatrixGrid";
 import { NotInScopeNote } from "./matrix/NotInScopeNote";
 import { RunModal } from "./modal/RunModal";
+import {
+  canRenderObservatory,
+  evaluateMatrixRulesLoad,
+  runModalRenderContext,
+} from "./lib/matrixRulesLoad";
 
 interface ObservatoryShellProps {
   initialCellId?: string;
@@ -73,12 +78,27 @@ export default function ObservatoryShell({
           fetchJson<MatrixNotInScope>(`${baseUrl}matrix-not-in-scope.v1.json`).catch(() => null),
         ]);
         if (!alive) return;
-        setRules(r);
+        const outcome = evaluateMatrixRulesLoad(r);
         setMf(m);
         setNotInScope(nis);
+        if (outcome.error) {
+          setErr(outcome.error);
+          setRules(outcome.rules);
+          if (outcome.closeOverlay) {
+            const closed: OverlayState = { kind: "closed" };
+            setOverlay(closed);
+            setOverlayInUrl(closed, { replace: true });
+          }
+        } else {
+          setRules(outcome.rules);
+        }
       } catch (e) {
         if (!alive) return;
         setErr(String(e instanceof Error ? e.message : e));
+        setRules(null);
+        const closed: OverlayState = { kind: "closed" };
+        setOverlay(closed);
+        setOverlayInUrl(closed, { replace: true });
       }
     })();
     return () => { alive = false; };
@@ -92,6 +112,7 @@ export default function ObservatoryShell({
   }, []);
 
   useEffect(() => {
+    if (err || !rules) return;
     const fromUrl = parseOverlayFromUrl(window.location.href);
     if (fromUrl.kind !== "closed") return;
     if (initialRunId) {
@@ -103,11 +124,11 @@ export default function ObservatoryShell({
       setOverlayInUrl(next);
       setOverlay(next);
     }
-  }, [initialCellId, initialRunId]);
+  }, [initialCellId, initialRunId, err, rules]);
 
   // Deep-link boot: resolve latest run once manifest is available (same as openCell).
   useEffect(() => {
-    if (!mf) return;
+    if (!mf || err || !rules) return;
     if (overlay.kind !== "run" || overlay.runId || !overlay.cellId) return;
     const latestRunId = latestRunIdForCell(mf, overlay.cellId);
     if (!latestRunId) return;
@@ -118,7 +139,7 @@ export default function ObservatoryShell({
     };
     setOverlay(next);
     setOverlayInUrl(next, { replace: true });
-  }, [mf, overlay]);
+  }, [mf, overlay, err, rules]);
 
   // Debounce query; clear immediately when empty.
   useEffect(() => {
@@ -137,11 +158,21 @@ export default function ObservatoryShell({
     return m;
   }, [scenarios]);
 
-  const flowOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of scenarios) set.add(s?.flow_id || "unknown");
-    return [...set].sort((a, b) => String(a).localeCompare(String(b)));
-  }, [scenarios]);
+  const flowFilterOptions = useMemo(() => {
+    const idsInScenarios = new Set<string>();
+    for (const s of scenarios) {
+      idsInScenarios.add(s.flow_id);
+    }
+    return (rules?.flows ?? [])
+      .filter((f) => idsInScenarios.has(f.flow_id))
+      .sort((a, b) => a.display_order - b.display_order)
+      .map((f) => ({ flowId: f.flow_id, label: f.label }));
+  }, [rules?.flows, scenarios]);
+
+  const flowOptions = useMemo(
+    () => flowFilterOptions.map((f) => f.flowId),
+    [flowFilterOptions],
+  );
 
   const browserOptions = useMemo(() => {
     const set = new Set<string>();
@@ -183,7 +214,7 @@ export default function ObservatoryShell({
     const byFlow = new Map<string, MatrixRuleScenario[]>();
     const q = queryDebounced.trim().toLowerCase();
     for (const s of scenarios) {
-      if (filters.flow !== "all" && (s?.flow_id || "unknown") !== filters.flow) continue;
+      if (filters.flow !== "all" && s.flow_id !== filters.flow) continue;
       if (q) {
         const hay = [
           s?.cell_id, s?.matrix_key, s?.flow_id, s?.browser,
@@ -194,39 +225,37 @@ export default function ObservatoryShell({
         ].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) continue;
       }
-      const f = s?.flow_id || "unknown";
+      const f = s.flow_id;
       if (!byFlow.has(f)) byFlow.set(f, []);
       byFlow.get(f)!.push(s);
     }
     for (const rows of byFlow.values())
       rows.sort((a, b) => String(a?.cell_id || "").localeCompare(String(b?.cell_id || "")));
 
-    // Sort by display_order; flows not in metadata fall to the end alphabetically.
+    // Sort by published display_order (load validation guarantees metadata exists).
     const sorted = [...byFlow.entries()].sort((a, b) => {
       const ma = flowMetaById.get(a[0]);
       const mb = flowMetaById.get(b[0]);
-      if (ma != null && mb != null) return ma.display_order - mb.display_order;
-      if (ma != null) return -1;
-      if (mb != null) return 1;
-      return String(a[0]).localeCompare(String(b[0]));
+      return (ma?.display_order ?? 0) - (mb?.display_order ?? 0);
     });
 
-    return sorted
-      .map(([flowId, cells]) => {
-        const meta = flowMetaById.get(flowId);
-        return {
-          flowId,
-          cells,
-          label: meta?.label || "",
-          subtitle: meta?.subtitle || "",
-          rollupBadges: STATUS_OPTIONS.map((status) => ({
-            status,
-            count: cells.filter((c) => getCellStatus(c.cell_id) === status).length,
-          })),
-        };
-      })
-      // Skip flows with zero visible cells after all filters.
-      .filter(({ cells }) => cells.length > 0);
+    return sorted.flatMap(([flowId, cells]) => {
+      if (cells.length === 0) return [];
+      const meta = flowMetaById.get(flowId);
+      // Load validation guarantees metadata; omit impossible entries at runtime.
+      if (!meta) return [];
+      return [{
+        flowId,
+        glyphId: meta.glyph_id,
+        cells,
+        label: meta.label,
+        subtitle: meta.subtitle,
+        rollupBadges: STATUS_OPTIONS.map((status) => ({
+          status,
+          count: cells.filter((c) => getCellStatus(c.cell_id) === status).length,
+        })),
+      }];
+    });
   }, [scenarios, filters.flow, queryDebounced, mf, matrixByCell, flowMetaById, platformLabel]);
 
   const isExpanded = (flowId: string): boolean =>
@@ -276,31 +305,35 @@ export default function ObservatoryShell({
     pushOverlay({ kind: "run", runId: newRunId, cellId: newCellId });
   }
 
+  const runModal = runModalRenderContext(rules, err, overlay);
+
   return (
     <div className="space-y-6">
       {err ? (
         <div className="rounded-2xl border border-rose-900/50 bg-rose-950/30 p-5 text-sm text-rose-200">
-          Missing inputs. Run `ocmts site ingest` before build/deploy.
+          Observatory data is missing or does not satisfy the published site
+          contract. Run `ocmts site ingest` before build/deploy when inputs are
+          absent; otherwise fix the published matrix-rules payload.
           <div className="mt-2 font-mono text-xs text-rose-200/90">{err}</div>
         </div>
       ) : null}
 
-      {!rules ? (
+      {!rules && !err ? (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6 text-sm text-zinc-300">
           Loading matrix...
         </div>
-      ) : (
+      ) : canRenderObservatory(rules, err) ? (
         <>
           <FilterBar
             browserOptions={browserOptions}
-            flowOptions={flowOptions}
+            flowFilterOptions={flowFilterOptions}
             filters={filters}
             onChange={setFilters}
             onClear={() => setFilters({ browser: "all", flow: "all", query: "" })}
           />
 
           <div className="space-y-4">
-            {flows.map(({ flowId, cells, label, subtitle, rollupBadges }) => (
+            {flows.map(({ flowId, glyphId, cells, label, subtitle, rollupBadges }) => (
               <FlowAccordionSection
                 key={flowId}
                 flowId={flowId}
@@ -317,6 +350,7 @@ export default function ObservatoryShell({
                   onOpenCell={openCell}
                   getCellDimmed={getCellDimmed}
                   flowId={flowId}
+                  glyphId={glyphId}
                   platformLabel={platformLabel}
                 />
                 <NotInScopeNote
@@ -328,15 +362,15 @@ export default function ObservatoryShell({
             ))}
           </div>
         </>
-      )}
+      ) : null}
 
-      {overlay.kind === "run" ? (
+      {runModal ? (
         <RunModal
-          cellId={overlay.cellId}
-          runId={overlay.runId}
+          cellId={runModal.overlay.cellId}
+          runId={runModal.overlay.runId}
           mf={mf}
           baseUrl={baseUrl}
-          flows={rules?.flows ?? []}
+          flows={runModal.rules.flows ?? []}
           platformLabel={platformLabel}
           onClose={closeOverlay}
           onSelectRun={handleSelectRun}

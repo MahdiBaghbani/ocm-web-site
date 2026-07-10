@@ -13,7 +13,8 @@ export interface MatrixGridProps {
   getCellStatus: (cellId: string) => CellStatus;
   onOpenCell: (cellId: string) => void;
   getCellDimmed: (cellId: string) => boolean;
-  flowId?: string;
+  flowId: string;
+  glyphId: string;
   platformLabel: PlatformLabelResolver;
 }
 
@@ -58,6 +59,7 @@ export function MatrixGrid({
   onOpenCell,
   getCellDimmed,
   flowId,
+  glyphId,
   platformLabel,
 }: MatrixGridProps): React.ReactElement {
   // Receivers = column axis (top); senders = row axis (left).
@@ -155,17 +157,23 @@ export function MatrixGrid({
     "border-b border-r border-zinc-800",
   ].join(" ");
 
-  const cornerContent = flowId ? (
-    <div className="flex h-full w-full items-center justify-center text-zinc-600">
-      <FlowGlyph flowId={flowId} />
+  const cornerContent = (
+    <div
+      className="flex h-full w-full items-center justify-center text-zinc-600"
+      data-flow-id={flowId}
+    >
+      <FlowGlyph glyphId={glyphId} />
     </div>
-  ) : null;
+  );
 
-  const singlePartyCornerContent = flowId ? (
-    <div className="flex h-full w-full items-center justify-center text-zinc-500">
-      <FlowGlyph flowId={flowId} className="h-10 w-10" />
+  const singlePartyCornerContent = (
+    <div
+      className="flex h-full w-full items-center justify-center text-zinc-500"
+      data-flow-id={flowId}
+    >
+      <FlowGlyph glyphId={glyphId} className="h-10 w-10" />
     </div>
-  ) : null;
+  );
 
   // ---- single-party layout: senders as columns, no left receiver axis ----
   function renderSinglePartyTable() {
