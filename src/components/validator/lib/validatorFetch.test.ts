@@ -1,0 +1,499 @@
+import { describe, expect, test } from "bun:test";
+
+import {
+  fetchReport,
+  joinValidatorUrl,
+  parseErrorEnvelope,
+  parseRetryAfter,
+  pollSession,
+  startSession,
+  stopSession,
+  waitForBackoff,
+  type FetchLike,
+  type ValidatorFetchDeps,
+} from "./validatorFetch";
+
+const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
+const STORE_DOWN = { error: "store_error", message: "down" };
+const CREATED = { state: "created", ts: 1, optInActive: false };
+
+function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers },
+  });
+}
+
+function unreadResponse(status: number, onRead?: () => void): Response {
+  const response = new Response("{}", { status });
+  const fail = async (): Promise<string> => {
+    onRead?.();
+    throw new Error("body read failed");
+  };
+  Object.defineProperty(response, "text", { value: fail });
+  Object.defineProperty(response, "json", { value: fail });
+  return response;
+}
+
+function captureFetch(handler: (url: string, init: RequestInit) => Response | Promise<Response>) {
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  const fetchLike: FetchLike = async (input, init = {}) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    calls.push({ url, init });
+    return handler(url, init);
+  };
+  return { fetchLike, calls };
+}
+
+function trackedSleep(): { sleeps: number[]; sleep: NonNullable<ValidatorFetchDeps["sleep"]> } {
+  const sleeps: number[] = [];
+  return { sleeps, sleep: async (ms) => { sleeps.push(ms); } };
+}
+
+describe("joinValidatorUrl", () => {
+  test("joins same-origin and absolute origins onto /validator", () => {
+    expect(joinValidatorUrl("", "/start")).toBe("/validator/start");
+    expect(joinValidatorUrl("https://api.example.com/", "/api/session/abc")).toBe(
+      "https://api.example.com/validator/api/session/abc",
+    );
+  });
+});
+
+describe("error envelopes and Retry-After", () => {
+  test("parses the flat ocmgo envelope and the nested API envelope", () => {
+    expect(parseErrorEnvelope({ error: "session_not_found", message: "session not found" })).toEqual({
+      error: "session_not_found",
+      message: "session not found",
+    });
+    expect(parseErrorEnvelope({
+      error: { code: "Too Many Requests", reasonCode: "rate_limited", message: "too many requests" },
+    })).toEqual({ error: "rate_limited", message: "too many requests", reasonCode: "rate_limited" });
+  });
+
+  test("parses Retry-After seconds and HTTP dates", () => {
+    expect(parseRetryAfter("12", 0)).toBe(12_000);
+    const now = Date.UTC(2026, 0, 1, 0, 0, 0);
+    expect(parseRetryAfter(new Date(now + 4000).toUTCString(), now)).toBe(4000);
+    expect(parseRetryAfter("not-a-date", now)).toBeUndefined();
+  });
+});
+
+describe("startSession", () => {
+  test("POSTs target plus optInActive and reads the create body", async () => {
+    const { fetchLike, calls } = captureFetch(() =>
+      jsonResponse(201, { id: SESSION_ID, optInStats: true, optInPermanent: false }),
+    );
+    const result = await startSession(
+      { target: "https://peer.example", optInActive: true, optInStats: true },
+      { fetch: fetchLike, origin: "https://api.example.com" },
+    );
+    expect(result).toEqual({
+      ok: true,
+      status: 201,
+      data: { id: SESSION_ID, optInStats: true, optInPermanent: false },
+    });
+    expect(calls[0]?.url).toBe("https://api.example.com/validator/start");
+    expect(calls[0]?.init.method).toBe("POST");
+    expect(calls[0]?.init.body).toBe(
+      JSON.stringify({ target: "https://peer.example", optInActive: true, optInStats: true }),
+    );
+  });
+
+  test("does not retry POST 5xx", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    let hits = 0;
+    const result = await startSession(
+      { target: "https://peer.example", optInActive: false },
+      { fetch: captureFetch(() => { hits += 1; return jsonResponse(503, STORE_DOWN); }).fetchLike, sleep },
+    );
+    expect(hits).toBe(1);
+    expect(sleeps).toEqual([]);
+    expect(result).toMatchObject({ ok: false, kind: "http", error: "store_error" });
+  });
+});
+
+describe("pollSession", () => {
+  test("GETs /api/session/{id} and keeps optional fields", async () => {
+    const body = {
+      state: "invite_minted",
+      ts: 100,
+      optInActive: true,
+      nextInstruction: "paste_s1",
+      failModeLabel: "ok",
+    };
+    const { fetchLike, calls } = captureFetch(() => jsonResponse(200, body));
+    const result = await pollSession(SESSION_ID, { fetch: fetchLike });
+    expect(calls[0]?.url).toBe(`/validator/api/session/${SESSION_ID}`);
+    expect(calls[0]?.init.method).toBe("GET");
+    expect(result).toEqual({ ok: true, status: 200, data: body });
+  });
+
+  test("maps only exact SESSION_NOT_FOUND envelopes to terminal loss", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    const result = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => jsonResponse(404, { error: "SESSION_NOT_FOUND", message: "session not found" })).fetchLike,
+      sleep,
+    });
+    expect(sleeps).toEqual([]);
+    expect(result).toMatchObject({ ok: false, kind: "session_not_found", error: "SESSION_NOT_FOUND" });
+  });
+
+  test("bare 404 and lowercase envelopes are retryable http, not terminal", async () => {
+    const bare = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => new Response("", { status: 404 })).fetchLike,
+    });
+    expect(bare).toMatchObject({ ok: false, kind: "http", status: 404, error: "http_error" });
+    const lower = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() =>
+        jsonResponse(404, { error: "session_not_found", message: "session not found" }),
+      ).fetchLike,
+    });
+    expect(lower).toMatchObject({ ok: false, kind: "http", error: "session_not_found" });
+  });
+
+  test("maps 410 gone to terminal expiry", async () => {
+    expect(await pollSession(SESSION_ID, { fetch: captureFetch(() => jsonResponse(410, { error: "gone", message: "session expired" })).fetchLike })).toMatchObject({ ok: false, kind: "expired", status: 410 });
+  });
+
+  test("unreadable 410 is terminal expired, not invalid_response", async () => {
+    expect(await pollSession(SESSION_ID, { fetch: captureFetch(() => unreadResponse(410)).fetchLike })).toMatchObject({ ok: false, kind: "expired", status: 410 });
+  });
+  test("unreadable 404 is terminal expired, not retryable http", async () => {
+    expect(await pollSession(SESSION_ID, { fetch: captureFetch(() => unreadResponse(404)).fetchLike })).toMatchObject({ ok: false, kind: "expired", status: 404 });
+  });
+
+  test("returns nested 429 envelopes with Retry-After and does not auto-retry", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    let hits = 0;
+    const result = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => {
+        hits += 1;
+        return jsonResponse(
+          429,
+          { error: { code: "Too Many Requests", reasonCode: "rate_limited", message: "too many requests" } },
+          { "Retry-After": "7" },
+        );
+      }).fetchLike,
+      sleep,
+    });
+    expect(hits).toBe(1);
+    expect(sleeps).toEqual([]);
+    expect(result).toEqual({
+      ok: false,
+      kind: "http",
+      status: 429,
+      error: "rate_limited",
+      message: "too many requests",
+      retryAfterMs: 7000,
+    });
+  });
+
+  test("retries GET 5xx with bounded exponential backoff", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    let hits = 0;
+    const result = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => {
+        hits += 1;
+        return hits < 4
+          ? jsonResponse(503, STORE_DOWN)
+          : jsonResponse(200, { state: "passive_running", ts: 1, optInActive: false, nextInstruction: "wait_probe" });
+      }).fetchLike,
+      sleep,
+    });
+    expect(hits).toBe(4);
+    expect(sleeps).toEqual([1000, 2000, 4000]);
+    expect(result.ok).toBe(true);
+  });
+
+  test("retries GET network failures with the same backoff schedule", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    let hits = 0;
+    const result = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => {
+        hits += 1;
+        if (hits === 1) throw new Error("socket reset");
+        return jsonResponse(200, { ...CREATED, ts: 3, nextInstruction: "wait_probe" });
+      }).fetchLike,
+      sleep,
+    });
+    expect(hits).toBe(2);
+    expect(sleeps).toEqual([1000]);
+    expect(result.ok).toBe(true);
+  });
+
+  test("uses capped Retry-After while backing off 5xx", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    const now = Date.UTC(2026, 0, 1, 0, 0, 0);
+    let hits = 0;
+    const result = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => {
+        hits += 1;
+        if (hits === 1) return jsonResponse(503, STORE_DOWN, { "Retry-After": "3" });
+        if (hits === 2) {
+          return jsonResponse(502, STORE_DOWN, { "Retry-After": new Date(now + 60_000).toUTCString() });
+        }
+        return jsonResponse(200, { ...CREATED, ts: 2, nextInstruction: "wait_probe" });
+      }).fetchLike,
+      now: () => now,
+      sleep,
+    });
+    expect(result.ok).toBe(true);
+    expect(sleeps).toEqual([3000, 8000]);
+  });
+
+  test("exhausts bounded 5xx retries as http", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    let hits = 0;
+    const result = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => { hits += 1; return jsonResponse(503, STORE_DOWN); }).fetchLike,
+      maxRetries: 2,
+      sleep,
+    });
+    expect(hits).toBe(3);
+    expect(sleeps).toEqual([1000, 2000]);
+    expect(result).toMatchObject({ ok: false, kind: "http", status: 503, error: "store_error" });
+  });
+
+  test("malformed 2xx and body-read throws are invalid_response", async () => {
+    const malformed = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => new Response("{not-json", { status: 200 })).fetchLike,
+    });
+    expect(malformed).toMatchObject({ ok: false, kind: "invalid_response", status: 200 });
+    const unread = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => unreadResponse(200)).fetchLike,
+    });
+    expect(unread).toMatchObject({ ok: false, kind: "invalid_response", status: 200 });
+  });
+
+  test("retries unreadable GET 5xx then notes unreadable_body", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    let hits = 0;
+    const recovered = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => {
+        hits += 1;
+        return hits === 1 ? unreadResponse(503) : jsonResponse(200, CREATED);
+      }).fetchLike,
+      sleep,
+    });
+    expect(hits).toBe(2);
+    expect(sleeps).toEqual([1000]);
+    expect(recovered.ok).toBe(true);
+
+    hits = 0;
+    sleeps.length = 0;
+    const exhausted = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => { hits += 1; return unreadResponse(503); }).fetchLike,
+      maxRetries: 1,
+      sleep,
+    });
+    expect(hits).toBe(2);
+    expect(sleeps).toEqual([1000]);
+    expect(exhausted).toMatchObject({ ok: false, kind: "http", status: 503, error: "unreadable_body" });
+  });
+
+  test("caller abort is terminal before fetch and during body read", async () => {
+    const pre = new AbortController();
+    pre.abort();
+    let preHits = 0;
+    const preResult = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => { preHits += 1; return jsonResponse(200, CREATED); }).fetchLike,
+      signal: pre.signal,
+      maxRetries: 4,
+    });
+    expect(preHits).toBe(0);
+    expect(preResult).toMatchObject({ ok: false, kind: "aborted", error: "aborted" });
+
+    const mid = new AbortController();
+    let midHits = 0;
+    const midResult = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => { midHits += 1; return jsonResponse(503, STORE_DOWN); }).fetchLike,
+      signal: mid.signal,
+      sleep: () => { mid.abort(); return new Promise(() => {}); },
+    });
+    expect(midHits).toBe(1);
+    expect(midResult).toMatchObject({ ok: false, kind: "aborted" });
+
+    const duringBody = new AbortController();
+    const duringBodyResult = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => unreadResponse(200, () => duringBody.abort())).fetchLike,
+      signal: duringBody.signal,
+    });
+    expect(duringBodyResult).toMatchObject({ ok: false, kind: "aborted", error: "aborted" });
+  });
+
+  test("sleep rejection is a typed failure with or without abort", async () => {
+    let hits = 0;
+    const rejectSleep = async (): Promise<void> => { throw new Error("sleep rejected"); };
+    const withoutSignal = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => { hits += 1; return jsonResponse(503, STORE_DOWN); }).fetchLike,
+      maxRetries: 2,
+      sleep: rejectSleep,
+    });
+    expect(hits).toBe(1);
+    expect(withoutSignal).toMatchObject({ ok: false, kind: "network", error: "backoff_failed" });
+
+    hits = 0;
+    const liveSignal = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => { hits += 1; return jsonResponse(503, STORE_DOWN); }).fetchLike,
+      signal: new AbortController().signal,
+      maxRetries: 2,
+      sleep: rejectSleep,
+    });
+    expect(hits).toBe(1);
+    expect(liveSignal).toMatchObject({ ok: false, kind: "network", error: "backoff_failed" });
+
+    const controller = new AbortController();
+    hits = 0;
+    const aborted = await pollSession(SESSION_ID, {
+      fetch: captureFetch(() => { hits += 1; return jsonResponse(503, STORE_DOWN); }).fetchLike,
+      signal: controller.signal,
+      maxRetries: 2,
+      sleep: async () => { controller.abort(); throw new Error("sleep rejected"); },
+    });
+    expect(hits).toBe(1);
+    expect(aborted).toMatchObject({ ok: false, kind: "aborted" });
+  });
+
+  test("fetch timeout retries then exhausts as timeout", async () => {
+    let hits = 0;
+    const result = await pollSession(SESSION_ID, {
+      fetch: captureFetch((_url, init) => {
+        hits += 1;
+        if (init.signal?.aborted) {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          throw error;
+        }
+        return jsonResponse(200, CREATED);
+      }).fetchLike,
+      timeoutMs: 5,
+      maxRetries: 2,
+      sleep: async () => undefined,
+      setTimeout: (handler) => { handler(); return 0; },
+      clearTimeout: () => undefined,
+    });
+    expect(hits).toBe(3);
+    expect(result).toMatchObject({ ok: false, kind: "timeout", error: "timeout" });
+  });
+
+  test("timeout during body read retries then exhausts as timeout", async () => {
+    const { sleeps, sleep } = trackedSleep();
+    let hits = 0;
+    let fireTimeout: (() => void) | undefined;
+    const clock: Pick<ValidatorFetchDeps, "timeoutMs" | "sleep" | "setTimeout" | "clearTimeout"> = {
+      timeoutMs: 25,
+      sleep,
+      setTimeout: (handler) => {
+        fireTimeout = handler;
+        return 0;
+      },
+      clearTimeout: () => { fireTimeout = undefined; },
+    };
+    const hangBody = (init: RequestInit): Response => {
+      expect(init.signal?.aborted).toBe(false);
+      const response = new Response("{}", { status: 200 });
+      const fail = async (): Promise<string> => {
+        fireTimeout?.();
+        expect(init.signal?.aborted).toBe(true);
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        throw error;
+      };
+      Object.defineProperty(response, "text", { value: fail });
+      Object.defineProperty(response, "json", { value: fail });
+      return response;
+    };
+
+    const recovered = await pollSession(SESSION_ID, {
+      fetch: captureFetch((_url, init) => {
+        hits += 1;
+        return hits === 1 ? hangBody(init) : jsonResponse(200, CREATED);
+      }).fetchLike,
+      signal: new AbortController().signal,
+      ...clock,
+    });
+    expect(hits).toBe(2);
+    expect(sleeps).toEqual([1000]);
+    expect(recovered.ok).toBe(true);
+
+    hits = 0;
+    sleeps.length = 0;
+    const exhausted = await pollSession(SESSION_ID, {
+      fetch: captureFetch((_url, init) => {
+        hits += 1;
+        return hangBody(init);
+      }).fetchLike,
+      signal: new AbortController().signal,
+      maxRetries: 2,
+      ...clock,
+    });
+    expect(hits).toBe(3);
+    expect(sleeps).toEqual([1000, 2000]);
+    expect(exhausted).toMatchObject({ ok: false, kind: "timeout", error: "timeout" });
+  });
+});
+
+describe("waitForBackoff", () => {
+  test("uses an injected timer and returns aborted when cancelled", async () => {
+    let cleared = false;
+    await expect(waitForBackoff(50, {
+      setTimeoutFn: (handler) => { handler(); return 1; },
+      clearTimeoutFn: () => { cleared = true; },
+    })).resolves.toEqual({ ok: true });
+    expect(cleared).toBe(true);
+    const controller = new AbortController();
+    const pending = waitForBackoff(60_000, { signal: controller.signal });
+    controller.abort();
+    await expect(pending).resolves.toEqual({ ok: false, reason: "aborted" });
+  });
+});
+
+describe("stopSession", () => {
+  test("POSTs {id} to /stop", async () => {
+    const { fetchLike, calls } = captureFetch(() => jsonResponse(200, { id: SESSION_ID, state: "interrupted" }));
+    const result = await stopSession(SESSION_ID, { fetch: fetchLike });
+    expect(calls[0]?.url).toBe("/validator/stop");
+    expect(calls[0]?.init.body).toBe(JSON.stringify({ id: SESSION_ID }));
+    expect(result).toEqual({ ok: true, status: 200, data: { id: SESSION_ID, state: "interrupted" } });
+  });
+});
+
+describe("fetchReport", () => {
+  test("GETs /api/report/{id}", async () => {
+    const data = { schema: "federation_tester_report.v1", id: SESSION_ID, visibility: "session", score: { grade: null } };
+    const { fetchLike, calls } = captureFetch(() => jsonResponse(200, data));
+    expect(await fetchReport(SESSION_ID, { fetch: fetchLike })).toEqual({ ok: true, status: 200, data });
+    expect(calls[0]?.url).toBe(`/validator/api/report/${SESSION_ID}`);
+  });
+
+  test("preserves retentionTier as string, null, or omitted undefined", async () => {
+    const base = { schema: "federation_tester_report.v1", id: SESSION_ID, visibility: "session" };
+    const run = (body: object) => fetchReport(SESSION_ID, { fetch: captureFetch(() => jsonResponse(200, body)).fetchLike });
+    expect(await run({ ...base, retentionTier: "ephemeral" })).toEqual({ ok: true, status: 200, data: { ...base, retentionTier: "ephemeral" } });
+    expect(await run({ ...base, retentionTier: null })).toEqual({ ok: true, status: 200, data: { ...base, retentionTier: null } });
+    const absent = await run(base);
+    expect(absent).toEqual({ ok: true, status: 200, data: base });
+    if (absent.ok) expect(absent.data.retentionTier).toBeUndefined();
+  });
+
+  test("treats report 410 expired payload as terminal expiry", async () => {
+    const result = await fetchReport(SESSION_ID, {
+      fetch: captureFetch(() => jsonResponse(410, {
+        schema: "federation_tester_report.v1",
+        id: SESSION_ID,
+        visibility: "expired",
+      })).fetchLike,
+    });
+    expect(result).toMatchObject({ ok: false, kind: "expired", status: 410 });
+  });
+
+  test("keeps report_not_public as an HTTP error, not session_not_found", async () => {
+    const result = await fetchReport(SESSION_ID, {
+      fetch: captureFetch(() => jsonResponse(404, {
+        error: "report_not_public",
+        message: "report is not public",
+      })).fetchLike,
+    });
+    expect(result).toEqual({ ok: false, kind: "http", status: 404, error: "report_not_public", message: "report is not public" });
+  });
+});
