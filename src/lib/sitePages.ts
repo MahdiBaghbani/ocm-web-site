@@ -103,3 +103,15 @@ export function landing(): PageKey {
   }
   return mounted[0];
 }
+
+const PAGE_PATHS = {
+  home: "",
+  observatory: "observatory/",
+  validator: "validator/",
+  statistics: "validator/statistics/",
+} as const satisfies Record<PageKey, string>;
+
+/** Relative site path for `key` (home is the empty prefix). */
+export function pagePath(key: PageKey): string {
+  return PAGE_PATHS[key];
+}

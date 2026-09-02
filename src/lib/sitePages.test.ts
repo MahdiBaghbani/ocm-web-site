@@ -14,6 +14,7 @@ import {
   enabledPages,
   isPageMounted,
   landing,
+  pagePath,
 } from "./sitePages";
 
 const SITE_ENV_KEYS = ["SITE_PROFILE", "SITE_PAGES"] as const;
@@ -51,7 +52,7 @@ afterEach(() => {
 
 describe("sitePages catalog", () => {
   test("four-key catalog and canonical order", () => {
-    const expected = ["home", "observatory", "validator", "statistics"];
+    const expected = ["home", "observatory", "validator", "statistics"] as const;
     expect(PAGE_ORDER).toEqual(expected);
     expect(PAGE_CATALOG).toEqual(expected);
     expect([...PAGE_ORDER]).toEqual([...PAGE_CATALOG]);
@@ -169,5 +170,20 @@ describe("sitePages landing", () => {
     delete process.env.SITE_PROFILE;
     process.env.SITE_PAGES = "validator,statistics";
     expect(landing()).toBe("validator");
+  });
+});
+
+describe("sitePages pagePath", () => {
+  test("returns the relative path for every page key", () => {
+    const expected = {
+      home: "",
+      observatory: "observatory/",
+      validator: "validator/",
+      statistics: "validator/statistics/",
+    } as const satisfies Record<(typeof PAGE_ORDER)[number], string>;
+
+    for (const key of PAGE_ORDER) {
+      expect(pagePath(key)).toBe(expected[key]);
+    }
   });
 });

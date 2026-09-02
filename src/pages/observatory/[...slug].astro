@@ -1,0 +1,127 @@
+---
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import InnerLayout from "../../layouts/InnerLayout.astro";
+import ObservatoryShell from "../../components/observatory/ObservatoryShell.tsx";
+import { resolveMatrixRulesArtifactPath } from "../../components/observatory/lib/checkMatrixRulesArtifact";
+import type { MatrixRules, SuiteManifest } from "../../components/observatory/lib/contracts";
+import {
+  buildObservatoryStaticPaths,
+  isEnoent,
+  SUITE_MANIFEST_FILENAME,
+  type ObservatoryRouteProps,
+} from "../../components/observatory/lib/observatoryStaticPaths";
+import { isPageMounted, pagePath } from "../../lib/sitePages";
+
+export async function getStaticPaths() {
+  if (!isPageMounted("observatory")) {
+    return [];
+  }
+
+  const repoRoot = process.cwd();
+  const rulesPath = resolveMatrixRulesArtifactPath(repoRoot);
+  let rules: MatrixRules;
+  try {
+    rules = JSON.parse(await readFile(rulesPath, "utf-8")) as MatrixRules;
+  } catch (error) {
+    if (isEnoent(error)) {
+      throw new Error(`matrix-rules artifact not found: ${rulesPath}`);
+    }
+    throw error;
+  }
+
+  // Matrix rules and suite manifest are both published under public/.
+  const manifestPath = join(repoRoot, "public", SUITE_MANIFEST_FILENAME);
+  let manifest: SuiteManifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as SuiteManifest;
+  } catch (error) {
+    if (isEnoent(error)) {
+      throw new Error(`suite-manifest artifact not found: ${manifestPath}`);
+    }
+    throw error;
+  }
+
+  return buildObservatoryStaticPaths(rules, manifest);
+}
+
+const { view, cellId, runId } = Astro.props as ObservatoryRouteProps;
+const base = import.meta.env.BASE_URL;
+---
+
+{view === "index" && (
+  <InnerLayout
+    title="OCM Test Suite Observatory"
+    description="OCM Test Suite compatibility matrix and run evidence."
+  >
+    <main class="space-y-6">
+      <header class="space-y-2">
+        <h1 class="text-2xl font-semibold text-white md:text-3xl">
+          OCM Test Suite Observatory
+        </h1>
+        <p class="text-sm text-gray-300">
+          Latest run only. Click a cell for evidence.
+        </p>
+      </header>
+
+      <ObservatoryShell client:load />
+    </main>
+  </InnerLayout>
+)}
+
+{view === "cell" && cellId && (
+  <InnerLayout
+    title={`Cell ${cellId} - OCM Test Suite Observatory`}
+    description="OCM Test Suite compatibility matrix and run evidence."
+  >
+    <main class="space-y-6">
+      <header class="space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h1 class="text-xl font-semibold text-white md:text-2xl">
+            Cell {cellId} - OCM Test Suite Observatory
+          </h1>
+          <a
+            class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
+            href={`${base}${pagePath("observatory")}`}
+          >
+            Back to matrix
+          </a>
+        </div>
+        <p class="text-sm text-gray-300">
+          Cell deep link. Overlay opens on load.
+        </p>
+      </header>
+
+      <ObservatoryShell client:load initialCellId={cellId} />
+    </main>
+  </InnerLayout>
+)}
+
+{view === "run" && runId && (
+  <InnerLayout
+    title={`Run ${runId} - OCM Test Suite Observatory`}
+    description="OCM Test Suite compatibility matrix and run evidence."
+  >
+    <main class="space-y-6">
+      <header class="space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h1 class="text-xl font-semibold text-white md:text-2xl">
+            Run {runId} - OCM Test Suite Observatory
+          </h1>
+          <a
+            class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
+            href={`${base}${pagePath("observatory")}`}
+          >
+            Back to matrix
+          </a>
+        </div>
+        <p class="text-sm text-gray-300">
+          Run deep link. Overlay opens on load.
+        </p>
+      </header>
+
+      <ObservatoryShell client:load initialRunId={runId} />
+    </main>
+  </InnerLayout>
+)}

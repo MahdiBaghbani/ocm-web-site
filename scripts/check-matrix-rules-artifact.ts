@@ -4,6 +4,14 @@ import {
   checkMatrixRulesArtifactAtPath,
   resolveMatrixRulesArtifactPath,
 } from "../src/components/observatory/lib/checkMatrixRulesArtifact";
+import { isPageMounted } from "../src/lib/sitePages";
+
+if (!isPageMounted("observatory")) {
+  console.log(
+    "Skipping matrix-rules artifact check: observatory is not mounted.",
+  );
+  process.exit(0);
+}
 
 const repoRoot = join(import.meta.dir, "..");
 const artifactPath = resolveMatrixRulesArtifactPath(repoRoot);

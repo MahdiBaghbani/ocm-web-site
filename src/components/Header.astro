@@ -1,9 +1,32 @@
 ---
+import {
+  PAGE_ORDER,
+  isPageMounted,
+  landing,
+  pagePath,
+  type PageKey,
+} from '../lib/sitePages';
+
 const base = import.meta.env.BASE_URL;
-const navLinks = [
-  { label: 'Home', href: base },
-  { label: 'Observatory', href: `${base}observatory/` },
-];
+
+const PAGE_NAV: Record<
+  PageKey,
+  { label: string; showInNav?: boolean }
+> = {
+  home: { label: 'Home' },
+  observatory: { label: 'Observatory' },
+  validator: { label: 'Validator' },
+  statistics: { label: 'Statistics', showInNav: false },
+};
+
+const navLinks = PAGE_ORDER.filter(
+  (key) => isPageMounted(key) && PAGE_NAV[key].showInNav !== false,
+).map((key) => ({
+  label: PAGE_NAV[key].label,
+  href: `${base}${pagePath(key)}`,
+}));
+
+const logoHref = `${base}${pagePath(landing())}`;
 ---
 
 <header
@@ -11,7 +34,7 @@ const navLinks = [
   class="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 border-b border-gray-800 transition-all duration-300"
 >
   <div class="max-w-7xl mx-auto px-6 flex items-center justify-between h-16">
-    <a href={base} class="flex items-center gap-3 group" aria-label="OpenCloudMesh home">
+    <a href={logoHref} class="flex items-center gap-3 group" aria-label="OpenCloudMesh">
       <img
         src={`${base}logos/brand/ocm-text-horizontal.svg`}
         alt="OpenCloudMesh"
