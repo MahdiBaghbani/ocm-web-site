@@ -1,0 +1,263 @@
+import React from "react";
+import { describe, expect, test } from "bun:test";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import AreaGrid, { VALIDATOR_AREA_IDS } from "./AreaGrid";
+import DomainField from "./DomainField";
+import Pill, { PILL_KINDS } from "./Pill";
+import RawJsonPanel from "./RawJsonPanel";
+import StepRow from "./StepRow";
+import VerdictBanner, { verdictKindFromScore } from "./VerdictBanner";
+
+function render(node: React.ReactElement): string {
+  return renderToStaticMarkup(node);
+}
+
+function countAttr(html: string, attr: string): number {
+  return html.split(attr).length - 1;
+}
+
+const FILE_VIEWER_CHIP = 'data-testid="file-viewer-chip"';
+const FILE_VIEWER_CHIP_SURFACE = "rounded-xl border border-zinc-800 bg-zinc-900/30";
+
+function countChipsInFileViewerPanel(html: string): number {
+  const panelCount = countAttr(html, FILE_VIEWER_CHIP);
+  return panelCount !== 1 ? panelCount : countAttr(html, FILE_VIEWER_CHIP_SURFACE);
+}
+
+function pillLabels(html: string): string[] {
+  const pillLabelRe =
+    /<span class="h-2 w-2 shrink-0 rounded-full [^"]*" aria-hidden="true"><\/span>([^<]*)<\/span>/g;
+  return [...html.matchAll(pillLabelRe)].map((match) => match[1]);
+}
+
+function firstPillLabel(html: string): string | null {
+  const labels = pillLabels(html);
+  return labels.length === 0 ? null : labels[0];
+}
+
+function areaCardHtml(html: string, title: string): string {
+  const heading = `>${title}</h3>`;
+  const start = html.indexOf(heading);
+  if (start === -1) throw new Error(`missing area heading: ${title}`);
+  const rest = html.slice(start + heading.length);
+  const next = rest.indexOf('<h3 class="text-sm font-semibold text-zinc-100">');
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+function areaGradeText(html: string, title: string): string {
+  const card = areaCardHtml(html, title);
+  const label = firstPillLabel(card);
+  if (label === null) throw new Error(`missing grade pill for ${title}`);
+  return label;
+}
+
+function areaRateText(html: string, title: string): string {
+  const card = areaCardHtml(html, title);
+  const match = /<div class="text-lg font-semibold text-zinc-100">([^<]*)<\/div>/.exec(
+    card,
+  );
+  if (match === null) throw new Error(`missing rate for ${title}`);
+  return match[1];
+}
+
+function stepIndexNumeral(html: string): string | null {
+  const match =
+    /<span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-medium text-zinc-200">(\d+)<\/span>/.exec(
+      html,
+    );
+  return match === null ? null : match[1];
+}
+
+describe("VerdictBanner", () => {
+  test("renders each verdict kind with distinguishing content", () => {
+    const pass = render(<VerdictBanner verdict="pass" />);
+    const fail = render(<VerdictBanner verdict="fail" message="probe failed" />);
+    const warn = render(<VerdictBanner verdict="warn" />);
+    const running = render(<VerdictBanner verdict="running" />);
+    const interrupted = render(<VerdictBanner verdict="interrupted" />);
+    expect(pass).toContain("Pass"); expect(pass).toContain('role="status"');
+    expect(fail).toContain("Fail"); expect(fail).toContain("probe failed");
+    expect(fail).toContain('role="alert"'); expect(warn).toContain("Warn");
+    expect(running).toContain("Scan in progress"); expect(interrupted).toContain("Interrupted");
+    expect(pass).toContain('aria-hidden="true"');
+  });
+
+  test("maps null grade to running or interrupted", () => {
+    expect(verdictKindFromScore({ grade: null, terminal: false })).toBe("running");
+    expect(verdictKindFromScore({ grade: null, terminal: true })).toBe("interrupted");
+    expect(verdictKindFromScore({ grade: "pass", terminal: true })).toBe("pass");
+    expect(render(<VerdictBanner verdict="running" />)).toContain("Scan in progress");
+  });
+
+  test("shows heading once and pill as a status indicator", () => {
+    const html = render(<VerdictBanner verdict="pass" title="Compatible" />);
+    expect(countAttr(html, "Compatible")).toBe(1);
+    expect(firstPillLabel(html)).toBe("pass");
+  });
+});
+describe("StepRow", () => {
+  test("renders pending, current, and complete statuses", () => {
+    const pending = render(<StepRow step="queue_or_rest" status="pending" index={2} />);
+    const current = render(<StepRow step="probe" status="current" index={1} />);
+    const complete = render(<StepRow step="result" status="complete" index={6} />);
+    expect(pending).toContain("Queue/Rest");
+    expect(pending).toContain("pending");
+    expect(current).toContain("Probe");
+    expect(current).toContain("current");
+    expect(stepIndexNumeral(current)).toBe("1");
+    expect(complete).toContain("Result");
+    expect(complete).toContain("complete");
+  });
+
+  test("renders a CTA on a complete invite row and hides hidden steps", () => {
+    const withCta = render(
+      <StepRow step="invite" status="complete" index={3} ctaLabel="Paste invite" onCta={() => undefined} />,
+    );
+    expect(withCta).toContain("Invite");
+    expect(withCta).toContain("Paste invite");
+    expect(render(<StepRow step="share" status="hidden" index={5} />)).toBe("");
+  });
+});
+describe("Pill", () => {
+  test("renders every kind with its default label", () => {
+    const expected = {
+      pass: "pass",
+      fail: "fail",
+      warn: "warn",
+      pending: "pending",
+      info: "info",
+      unassessed: "unassessed",
+      notrun: "not-run",
+    } as const;
+    for (const kind of PILL_KINDS) {
+      expect(firstPillLabel(render(<Pill kind={kind} />))).toBe(expected[kind]);
+    }
+    expect(firstPillLabel(render(<Pill kind="unassessed" label="idle" />))).toBe("idle");
+  });
+});
+describe("AreaGrid", () => {
+  test("always renders the eight canonical areas", () => {
+    const html = render(<AreaGrid />);
+    expect(html).toContain("Discovery"); expect(html).toContain("TLS");
+    expect(html).toContain("JWKS"); expect(html).toContain("HTTPSig");
+    expect(html).toContain("Sharing"); expect(html).toContain("Notification");
+    expect(html).toContain("Token"); expect(html).toContain("Capability");
+    expect(html).toContain(`0/${VALIDATOR_AREA_IDS.length} areas assessed`);
+  });
+
+  test("overlays grades and pass rates", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          { area: "discovery", grade: "pass", evidenceCount: 2 },
+          { area: "tls", pass: 3, warn: 1, fail: 0 },
+          { area: "jwks", passRate: 0.5 },
+          { area: "httpsig", passRate: 1.7 },
+          { area: "sharing", passRate: -0.4 },
+          { area: "token", grade: "warn", evidenceCount: 1 },
+        ]}
+      />,
+    );
+    expect(html).toContain("75%"); expect(html).toContain("50%");
+    expect(html).toContain("100%");
+    expect(areaRateText(html, "Sharing")).toBe("0%");
+    expect(html).toContain("2 evidence items"); expect(html).toContain("1 evidence item");
+    expect(html).toContain("6/8 areas assessed");
+    expect(areaGradeText(html, "Discovery")).toBe("pass");
+    expect(areaGradeText(html, "TLS")).toBe("warn");
+    expect(areaGradeText(html, "Token")).toBe("warn");
+  });
+
+  test("renders the TLS area grade as exact pill text", () => {
+    const html = render(<AreaGrid areas={[{ area: "tls", grade: "pass" }]} />);
+    expect(areaGradeText(html, "TLS")).toBe("pass");
+  });
+
+  test("explicit grade wins over conflicting evidence counts", () => {
+    const html = render(
+      <AreaGrid
+        areas={[{ area: "tls", grade: "pass", pass: 0, warn: 0, fail: 5 }]}
+      />,
+    );
+    expect(areaGradeText(html, "TLS")).toBe("pass");
+  });
+
+  test("renders explicit pass, fail, and warn grade labels", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          { area: "discovery", grade: "pass" },
+          { area: "tls", grade: "fail" },
+          { area: "jwks", grade: "warn" },
+        ]}
+      />,
+    );
+    expect(areaGradeText(html, "Discovery")).toBe("pass");
+    expect(areaGradeText(html, "TLS")).toBe("fail");
+    expect(areaGradeText(html, "JWKS")).toBe("warn");
+    expect(areaGradeText(html, "HTTPSig")).toBe("unassessed");
+    expect(areaGradeText(html, "Sharing")).toBe("unassessed");
+  });
+
+  test("renders zero evidence counts and the missing-count fallback", () => {
+    const html = render(
+      <AreaGrid areas={[{ area: "discovery", evidenceCount: 0 }, { area: "tls", grade: "pass" }]} />,
+    );
+    expect(html).toContain("0 evidence items");
+    expect(html).toContain("pass rate");
+  });
+
+  test("keeps canonical areas only and last overlay wins", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          { area: "discovery", grade: "pass" },
+          { area: "discovery", grade: "fail" },
+          { area: "not-an-area", grade: "pass", label: "Mystery" },
+        ]}
+      />,
+    );
+    expect(html).toContain("Discovery");
+    expect(html).toContain("Capability");
+    expect(html).not.toContain("Mystery");
+    expect(html).toContain(`1/${VALIDATOR_AREA_IDS.length} areas assessed`);
+    expect(areaGradeText(html, "Discovery")).toBe("fail");
+    expect(pillLabels(html).includes("pass")).toBe(false);
+  });
+});
+describe("RawJsonPanel", () => {
+  test("renders one JSON panel without throwing", () => {
+    const html = render(
+      <RawJsonPanel
+        title="Report"
+        downloadName="report-abc.json"
+        value={{ schema: "federation_tester_report.v1", id: "abc" }}
+      />,
+    );
+    expect(html).toContain("Report");
+    expect(html).toContain("federation_tester_report.v1");
+    expect(html).toContain("abc");
+    expect(html).toContain("Download");
+    expect(countAttr(html, FILE_VIEWER_CHIP)).toBe(1);
+    expect(countChipsInFileViewerPanel(html)).toBe(1);
+  });
+});
+describe("DomainField", () => {
+  test("renders a labeled read-only domain value", () => {
+    const html = render(<DomainField value="peer.example:8443" />);
+    expect(html).toContain("Domain");
+    expect(html).toContain("peer.example:8443");
+    expect(html).toContain("readOnly");
+  });
+
+  test("renders an editable field with an error", () => {
+    const html = render(
+      <DomainField label="Target host" value="bad host" error="Enter a host" onChange={() => undefined} />,
+    );
+    expect(html).toContain("Target host");
+    expect(html).toContain("Enter a host");
+    expect(html).toContain('role="alert"');
+    expect(html).not.toContain("readOnly");
+  });
+});
