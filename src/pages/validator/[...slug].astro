@@ -1,0 +1,135 @@
+---
+import InnerLayout from "../../layouts/InnerLayout.astro";
+import { isPageMounted, pagePath } from "../../lib/sitePages";
+
+type ValidatorView = "index" | "results" | "statistics";
+
+type ValidatorRouteProps = {
+  view: ValidatorView;
+};
+
+export async function getStaticPaths() {
+  const validatorMounted = isPageMounted("validator");
+  const statisticsMounted = isPageMounted("statistics");
+
+  if (!validatorMounted && !statisticsMounted) {
+    return [];
+  }
+
+  const paths: Array<{
+    params: { slug: string | undefined };
+    props: ValidatorRouteProps;
+  }> = [];
+
+  paths.push({ params: { slug: undefined }, props: { view: "index" } });
+
+  if (validatorMounted) {
+    paths.push({ params: { slug: "results" }, props: { view: "results" } });
+  }
+
+  if (statisticsMounted) {
+    paths.push({
+      params: { slug: "statistics" },
+      props: { view: "statistics" },
+    });
+  }
+
+  return paths;
+}
+
+const { view } = Astro.props as ValidatorRouteProps;
+const base = import.meta.env.BASE_URL;
+const validatorMounted = isPageMounted("validator");
+const statisticsMounted = isPageMounted("statistics");
+---
+
+{view === "index" && (
+  <InnerLayout
+    title="OCM Validator"
+    description="OCM compatibility validator hub."
+  >
+    <main class="space-y-6">
+      <header class="space-y-2">
+        <h1 class="text-2xl font-semibold text-white md:text-3xl">
+          OCM Validator
+        </h1>
+        <p class="text-sm text-gray-300">
+          Validator UI is coming soon. This page is a build-time placeholder.
+        </p>
+      </header>
+
+      {(validatorMounted || statisticsMounted) && (
+        <nav class="flex flex-wrap gap-3 text-sm">
+          {validatorMounted && (
+            <a
+              class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-gray-200 hover:bg-gray-900"
+              href={`${base}${pagePath("validator")}results/`}
+            >
+              Results
+            </a>
+          )}
+          {statisticsMounted && (
+            <a
+              class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-gray-200 hover:bg-gray-900"
+              href={`${base}${pagePath("statistics")}`}
+            >
+              Statistics
+            </a>
+          )}
+        </nav>
+      )}
+    </main>
+  </InnerLayout>
+)}
+
+{view === "results" && (
+  <InnerLayout
+    title="Validator Results - OCM Validator"
+    description="OCM compatibility validator results."
+  >
+    <main class="space-y-6">
+      <header class="space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h1 class="text-2xl font-semibold text-white md:text-3xl">
+            Validator Results
+          </h1>
+          <a
+            class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
+            href={`${base}${pagePath("validator")}`}
+          >
+            Back to validator
+          </a>
+        </div>
+        <p class="text-sm text-gray-300">
+          Results UI is coming soon. This page is a build-time placeholder.
+        </p>
+      </header>
+    </main>
+  </InnerLayout>
+)}
+
+{view === "statistics" && (
+  <InnerLayout
+    title="Validator Statistics - OCM Validator"
+    description="OCM compatibility validator statistics."
+  >
+    <main class="space-y-6">
+      <header class="space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h1 class="text-2xl font-semibold text-white md:text-3xl">
+            Validator Statistics
+          </h1>
+          <a
+            class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
+            href={`${base}${pagePath("validator")}`}
+          >
+            Back to validator
+          </a>
+        </div>
+        <p class="text-sm text-gray-300">
+          Statistics UI is coming soon. This page is a build-time placeholder.
+        </p>
+      </header>
+    </main>
+  </InnerLayout>
+)}
