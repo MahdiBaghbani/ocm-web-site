@@ -32,6 +32,12 @@ const idleMinutes = Math.floor(maxDriveIdleSeconds / 60);
   <h2 class="text-base font-semibold text-amber-50">Public validator notice</h2>
 
   <p>
+    This service runs at ocm.azadehafzar.io. It is a same-origin JSON validator
+    that performs external probes against your target and returns a graded
+    report.
+  </p>
+
+  <p>
     This validator accepts anonymous, unauthenticated scan requests from the
     public internet. Each client IP may start at most {startPublicRequests} new
     sessions every {startPublicWindowSeconds} seconds. Outbound probe traffic
@@ -41,8 +47,9 @@ const idleMinutes = Math.floor(maxDriveIdleSeconds / 60);
 
   <p>
     Concurrent driving work is capped at {sessionLimit} sessions per validator
-    process.
-    An idle active drive is interrupted after {maxDriveIdleSeconds} seconds
+    process. Only one active run is allowed per target at a time; different
+    targets may run concurrently (v1.3.1). An idle active drive is interrupted
+    after {maxDriveIdleSeconds} seconds
     ({idleMinutes} minutes) without progress. Terminal report rows are retained
     for about {terminalRetentionDays} days unless you opt in to a permanent
     report tier at start time.
@@ -50,10 +57,17 @@ const idleMinutes = Math.floor(maxDriveIdleSeconds / 60);
 
   <p>
     Statistics contribution and active validation are opt-in at start time and
-    default to off. Active validation appears only when the service manifest
+    default to off. Statistics are published only when explicitly opted in and
+    only after a k-anonymity threshold of 5 is met. Active validation appears
+    only when the service manifest
     exposes the required opt-in field. Passive results are informational, not a
     certification, and may miss platform-specific behavior or time-limited
     failures.
+  </p>
+
+  <p>
+    Out of scope: inbound OCM, user accounts, OAuth, alerts, and unrelated
+    Matrix features.
   </p>
 
   <p>

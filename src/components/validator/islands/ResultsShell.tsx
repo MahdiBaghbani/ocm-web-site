@@ -201,6 +201,11 @@ export default function ResultsShell({
   }, [config, session]);
 
   const terminalReportReady = report !== null || reportError !== "";
+  const evidence = evidenceItems(report?.evidence);
+  const showPermanentEvidence =
+    report?.visibility === "permanent" &&
+    evidence.length > 0 &&
+    reportError === "";
 
   if (session === null) {
     if (!mounted) {
@@ -264,11 +269,13 @@ export default function ResultsShell({
       {report !== null ? (
         <RawJsonPanel value={report} title="Report JSON" downloadName="report.json" />
       ) : null}
-      <EvidenceDisclosure
-        title="Evidence"
-        items={evidenceItems(report?.evidence)}
-        defaultExpanded={false}
-      />
+      {showPermanentEvidence ? (
+        <EvidenceDisclosure
+          title="Evidence"
+          items={evidence}
+          defaultExpanded={false}
+        />
+      ) : null}
     </div>
   );
 }
