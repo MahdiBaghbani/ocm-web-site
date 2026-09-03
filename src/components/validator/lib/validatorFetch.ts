@@ -3,30 +3,24 @@
  * GET 5xx/network uses injected bounded backoff. POST is not retried.
  */
 
+import { DEFAULT_VALIDATOR_CONFIG, type FetchLike } from "./validatorConfig";
+import { parseValidatorManifest, type ValidatorManifest } from "./validatorManifest";
+import { isRecord } from "./validatorShared";
 import {
-  DEFAULT_VALIDATOR_CONFIG,
-  type FetchLike,
-} from "./validatorConfig";
+  parseValidatorStatistics,
+  statisticsDaysSelector,
+  type ValidatorStatistics,
+  type ValidatorStatisticsArea,
+} from "./validatorStatistics";
 
-export type { FetchLike };
+export type { FetchLike, ValidatorManifest, ValidatorStatistics, ValidatorStatisticsArea };
 
 export const VALIDATOR_SERVICE_PREFIX = "/validator";
 const DEFAULT_MAX_RETRIES = 4;
 
-export interface StartSessionRequest {
-  target: string;
-  optInActive?: boolean;
-  optInStats?: boolean;
-  optInPermanent?: boolean;
-}
+export interface StartSessionRequest { target: string; optInActive?: boolean; optInStats?: boolean; optInPermanent?: boolean }
 export interface StartSessionResponse { id: string; optInStats: boolean; optInPermanent: boolean }
-export interface SessionPollResponse {
-  state: string;
-  ts: number;
-  optInActive: boolean;
-  nextInstruction?: string;
-  failModeLabel?: string;
-}
+export interface SessionPollResponse { state: string; ts: number; optInActive: boolean; nextInstruction?: string; failModeLabel?: string }
 export interface StopSessionResponse { id: string; state: string }
 export interface ReportResponse {
   schema: string;
@@ -40,13 +34,7 @@ export interface ReportResponse {
 }
 
 export type ValidatorFailureKind =
-  | "session_not_found"
-  | "expired"
-  | "http"
-  | "network"
-  | "invalid_response"
-  | "aborted"
-  | "timeout";
+  | "session_not_found" | "expired" | "http" | "network" | "invalid_response" | "aborted" | "timeout";
 
 export interface ValidatorFailure {
   ok: false;
@@ -80,10 +68,6 @@ export interface ValidatorFetchDeps {
 }
 
 export interface ParsedErrorEnvelope { error: string; message: string; reasonCode?: string }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function readString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
@@ -494,4 +478,17 @@ export function fetchReport(id: string, deps?: ValidatorFetchDeps): Promise<Vali
     parse: parseReportResponse,
     retry: true,
   }, deps);
+}
+
+export function fetchManifest(deps?: ValidatorFetchDeps): Promise<ValidatorResult<ValidatorManifest>> {
+  return validatorRequest({ method: "GET", path: "/api/manifest", parse: parseValidatorManifest, retry: true }, deps);
+}
+
+export function fetchStatistics(
+  daysSelector?: string | number,
+  deps?: ValidatorFetchDeps,
+): Promise<ValidatorResult<ValidatorStatistics>> {
+  const days = statisticsDaysSelector(daysSelector);
+  const path = `/api/statistics?days=${encodeURIComponent(days)}`;
+  return validatorRequest({ method: "GET", path, parse: parseValidatorStatistics, retry: true }, deps);
 }

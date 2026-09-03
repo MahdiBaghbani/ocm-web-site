@@ -1,5 +1,10 @@
 ---
 import InnerLayout from "../../layouts/InnerLayout.astro";
+import ValidatorHero from "../../components/sections/ValidatorHero.astro";
+import ValidatorNotice from "../../components/sections/ValidatorNotice.astro";
+import ValidatorShell from "../../components/validator/islands/ValidatorShell.tsx";
+import ResultsShell from "../../components/validator/islands/ResultsShell.tsx";
+import StatisticsShell from "../../components/validator/islands/StatisticsShell.tsx";
 import { isPageMounted, pagePath } from "../../lib/sitePages";
 
 type ValidatorView = "index" | "results" | "statistics";
@@ -41,43 +46,57 @@ const { view } = Astro.props as ValidatorRouteProps;
 const base = import.meta.env.BASE_URL;
 const validatorMounted = isPageMounted("validator");
 const statisticsMounted = isPageMounted("statistics");
+const resultsHref = `${base}${pagePath("validator")}results/`;
+const statisticsHref = `${base}${pagePath("statistics")}`;
+const validatorHref = `${base}${pagePath("validator")}`;
 ---
 
-{view === "index" && (
+{view === "index" && validatorMounted && (
   <InnerLayout
     title="OCM Validator"
-    description="OCM compatibility validator hub."
+    description="OCM compatibility validator for remote hosts."
+  >
+    <main class="space-y-6">
+      <ValidatorHero />
+      {statisticsMounted && (
+        <nav>
+          <a
+            class="inline-flex rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
+            href={statisticsHref}
+          >
+            View statistics
+          </a>
+        </nav>
+      )}
+      <ValidatorShell client:load resultsHref={resultsHref} />
+      <ValidatorNotice />
+    </main>
+  </InnerLayout>
+)}
+
+{view === "index" && !validatorMounted && statisticsMounted && (
+  <InnerLayout
+    title="OCM Validator"
+    description="OCM compatibility validator statistics hub."
   >
     <main class="space-y-6">
       <header class="space-y-2">
         <h1 class="text-2xl font-semibold text-white md:text-3xl">
-          OCM Validator
+          OCM Validator Statistics
         </h1>
         <p class="text-sm text-gray-300">
-          Validator UI is coming soon. This page is a build-time placeholder.
+          Validator scans are not enabled on this site profile. Open the
+          statistics view for aggregate pass rates and grade distribution.
         </p>
       </header>
-
-      {(validatorMounted || statisticsMounted) && (
-        <nav class="flex flex-wrap gap-3 text-sm">
-          {validatorMounted && (
-            <a
-              class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-gray-200 hover:bg-gray-900"
-              href={`${base}${pagePath("validator")}results/`}
-            >
-              Results
-            </a>
-          )}
-          {statisticsMounted && (
-            <a
-              class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-gray-200 hover:bg-gray-900"
-              href={`${base}${pagePath("statistics")}`}
-            >
-              Statistics
-            </a>
-          )}
-        </nav>
-      )}
+      <nav>
+        <a
+          class="inline-flex rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
+          href={statisticsHref}
+        >
+          View statistics
+        </a>
+      </nav>
     </main>
   </InnerLayout>
 )}
@@ -95,15 +114,17 @@ const statisticsMounted = isPageMounted("statistics");
           </h1>
           <a
             class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
-            href={`${base}${pagePath("validator")}`}
+            href={validatorHref}
           >
             Back to validator
           </a>
         </div>
         <p class="text-sm text-gray-300">
-          Results UI is coming soon. This page is a build-time placeholder.
+          Live session status, manifest summary, and report evidence.
         </p>
       </header>
+
+      <ResultsShell client:load />
     </main>
   </InnerLayout>
 )}
@@ -121,15 +142,17 @@ const statisticsMounted = isPageMounted("statistics");
           </h1>
           <a
             class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
-            href={`${base}${pagePath("validator")}`}
+            href={validatorHref}
           >
             Back to validator
           </a>
         </div>
         <p class="text-sm text-gray-300">
-          Statistics UI is coming soon. This page is a build-time placeholder.
+          Aggregate pass rates and grade distribution from opted-in scans.
         </p>
       </header>
+
+      <StatisticsShell client:load />
     </main>
   </InnerLayout>
 )}

@@ -2,6 +2,8 @@
  * Runtime validator config. Empty API origin means same-origin /validator.
  */
 
+import { isRecord } from "./validatorShared";
+
 export const CONFIG_JSON_PATH = "/config.json";
 export const CONFIG_ORIGIN_KEY = "validator_api_origin";
 
@@ -31,10 +33,6 @@ export type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit,
 ) => Promise<Response>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function cloneDefaults(): ValidatorRuntimeConfig {
   return {
