@@ -1,0 +1,8 @@
+{
+  "validator_api_origin": "",
+  "poll_interval_ms": 1000,
+  "active_poll_interval_ms": 2000,
+  "backoff_initial_ms": 1000,
+  "backoff_max_ms": 8000,
+  "request_timeout_ms": 10000
+}

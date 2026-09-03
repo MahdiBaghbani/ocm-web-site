@@ -4,6 +4,7 @@ dist/
 # generated observatory artifacts
 public/artifacts/
 public/*.json
+!public/config.json
 
 # generated types
 .astro/
