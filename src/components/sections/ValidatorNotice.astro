@@ -1,0 +1,84 @@
+---
+import { isPageMounted } from "../../lib/sitePages";
+import { normalizeValidatorContact } from "../validator/lib/validatorContact";
+
+const contactRaw = import.meta.env.VALIDATOR_CONTACT;
+const contactInput =
+  typeof contactRaw === "string" ? contactRaw.trim() : String(contactRaw ?? "").trim();
+
+if (isPageMounted("validator") && contactInput === "") {
+  throw new Error("VALIDATOR_CONTACT is required when the validator page is mounted");
+}
+
+const contactLink =
+  contactInput === "" ? null : normalizeValidatorContact(contactInput);
+
+// Defaults from opencloudmesh-go/internal/platform/store/validatorcore/session_config.go
+const sessionLimit = 16;
+const maxDriveIdleSeconds = 1800;
+const terminalRetentionDays = 30;
+
+// Public start rate limit from opencloudmesh-go/internal/platform/config/presets.go
+const startPublicRequests = 10;
+const startPublicWindowSeconds = 60;
+
+const idleMinutes = Math.floor(maxDriveIdleSeconds / 60);
+---
+
+<aside
+  class="space-y-4 rounded-2xl border border-amber-900/50 bg-amber-950/20 p-5 text-sm leading-relaxed text-amber-100/90"
+  aria-label="Validator service notice"
+>
+  <h2 class="text-base font-semibold text-amber-50">Public validator notice</h2>
+
+  <p>
+    This service runs at ocm.azadehafzar.io. It is a same-origin JSON validator
+    that performs external probes against your target and returns a graded
+    report.
+  </p>
+
+  <p>
+    This validator accepts anonymous, unauthenticated scan requests from the
+    public internet. Each client IP may start at most {startPublicRequests} new
+    sessions every {startPublicWindowSeconds} seconds. Outbound probe traffic
+    uses strict SSRF controls: private addresses, link-local targets, and other
+    disallowed destinations are rejected.
+  </p>
+
+  <p>
+    Concurrent driving work is capped at {sessionLimit} sessions per validator
+    process. Only one active run is allowed per target at a time; different
+    targets may run concurrently (v1.3.1). An idle active drive is interrupted
+    after {maxDriveIdleSeconds} seconds
+    ({idleMinutes} minutes) without progress. Terminal report rows are retained
+    for about {terminalRetentionDays} days unless you opt in to a permanent
+    report tier at start time.
+  </p>
+
+  <p>
+    Statistics contribution and active validation are opt-in at start time and
+    default to off. Statistics are published only when explicitly opted in and
+    only after a k-anonymity threshold of 5 is met. Active validation appears
+    only when the service manifest
+    exposes the required opt-in field. Passive results are informational, not a
+    certification, and may miss platform-specific behavior or time-limited
+    failures.
+  </p>
+
+  <p>
+    Out of scope: inbound OCM, user accounts, OAuth, alerts, and unrelated
+    Matrix features.
+  </p>
+
+  <p>
+    Operator contact:
+    {contactLink?.ok === true && (
+      <a
+        class="text-sky-300 underline-offset-2 hover:text-sky-200 hover:underline"
+        href={contactLink.href}
+      >
+        {contactLink.label}
+      </a>
+    )}
+  </p>
+</aside>
