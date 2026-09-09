@@ -33,7 +33,7 @@ const logoHref = `${base}${pagePath(landing())}`;
   id="site-header"
   class="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 border-b border-gray-800 transition-all duration-300"
 >
-  <div class="max-w-7xl mx-auto px-6 flex items-center justify-between h-16">
+  <div class="max-w-screen-2xl mx-auto px-6 flex items-center justify-between h-16">
     <a href={logoHref} class="flex items-center gap-3 group" aria-label="OpenCloudMesh">
       <img
         src={`${base}logos/brand/ocm-text-horizontal.svg`}
@@ -70,7 +70,7 @@ const logoHref = `${base}${pagePath(landing())}`;
   </div>
 
   <div id="mobile-menu" class="hidden md:hidden bg-gray-950/95 backdrop-blur-lg border-t border-white/10">
-    <nav class="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-3" aria-label="Mobile navigation">
+    <nav class="max-w-screen-2xl mx-auto px-6 py-4 flex flex-col gap-3" aria-label="Mobile navigation">
       {navLinks.map(link => (
         <a
           href={link.href}

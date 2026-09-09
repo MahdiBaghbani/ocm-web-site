@@ -86,7 +86,7 @@ export default function StatisticsShell({
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
-      const loaded = await loadValidatorConfig(fetchConfigSource(fetch));
+      const loaded = await loadValidatorConfig(fetchConfigSource(fetch.bind(globalThis)));
       if (controller.signal.aborted) {
         return;
       }

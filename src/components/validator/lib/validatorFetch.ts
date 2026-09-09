@@ -197,7 +197,8 @@ type AbortCause = "caller" | "timeout" | undefined;
 function attachTimeout(
   timeoutMs: number,
   external: AbortSignal | undefined,
-  timers: { setTimeout: TimerFn; clearTimeout: NonNullable<ValidatorFetchDeps["clearTimeout"]> },
+  setTimer: TimerFn,
+  clearTimer: NonNullable<ValidatorFetchDeps["clearTimeout"]>,
 ): { signal: AbortSignal | undefined; cleanup: () => void; cause: () => AbortCause } {
   if (timeoutMs <= 0 && external === undefined) {
     return { signal: undefined, cleanup() {}, cause: () => undefined };
@@ -206,7 +207,7 @@ function attachTimeout(
   let cause: AbortCause;
   let timer: TimerHandle | undefined;
   if (timeoutMs > 0) {
-    timer = timers.setTimeout(() => {
+    timer = setTimer(() => {
       cause ??= "timeout";
       controller.abort();
     }, timeoutMs);
@@ -225,7 +226,7 @@ function attachTimeout(
     signal: controller.signal,
     cause: () => cause,
     cleanup() {
-      if (timer !== undefined) timers.clearTimeout(timer);
+      if (timer !== undefined) clearTimer(timer);
       external?.removeEventListener("abort", onAbort);
     },
   };
@@ -355,13 +356,14 @@ async function validatorRequest<T>(
   spec: { method: "GET" | "POST"; path: string; body?: unknown; parse: (body: unknown) => T | null; retry: boolean },
   deps: ValidatorFetchDeps = {},
 ): Promise<ValidatorResult<T>> {
-  const fetchLike = deps.fetch ?? fetch;
+  const fetchLike = deps.fetch ?? fetch.bind(globalThis);
   const now = deps.now ?? Date.now;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_VALIDATOR_CONFIG.requestTimeoutMs;
   const initialMs = deps.backoffInitialMs ?? DEFAULT_VALIDATOR_CONFIG.backoffInitialMs;
   const maxMs = deps.backoffMaxMs ?? DEFAULT_VALIDATOR_CONFIG.backoffMaxMs;
   const maxRetries = spec.retry ? Math.max(0, deps.maxRetries ?? DEFAULT_MAX_RETRIES) : 0;
-  const timers = { setTimeout: deps.setTimeout ?? setTimeout, clearTimeout: deps.clearTimeout ?? clearTimeout };
+  const setTimer = deps.setTimeout ?? setTimeout.bind(globalThis);
+  const clearTimer = deps.clearTimeout ?? clearTimeout.bind(globalThis);
   const url = joinValidatorUrl(deps.origin ?? "", spec.path);
   const headers: HeadersInit = spec.method === "POST"
     ? { Accept: "application/json", "Content-Type": "application/json" }
@@ -372,7 +374,7 @@ async function validatorRequest<T>(
     if (deps.signal?.aborted) {
       return failure("aborted", null, "aborted", "request aborted");
     }
-    const attached = attachTimeout(timeoutMs, deps.signal, timers);
+    const attached = attachTimeout(timeoutMs, deps.signal, setTimer, clearTimer);
     let response: Response;
     try {
       response = await fetchLike(url, {
