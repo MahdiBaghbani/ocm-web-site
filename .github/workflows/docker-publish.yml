@@ -1,0 +1,74 @@
+# Publish the OCM website image to GHCR.
+# Express path: manual workflow_dispatch with a version input. No Changie,
+# no GPG tag, no release-PR chain. Bakes the VPS profile + contact into
+# the image at build time.
+
+name: Publish ocm-web image
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag to publish, e.g. v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  IMAGE: ghcr.io/mahdibaghbani/ocm-web
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba80825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.version }}
+          persist-credentials: false
+
+      - name: setup buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+
+      - name: login ghcr
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          load: false
+          build-args: |
+            ASTRO_BASE=/
+            ASTRO_SITE=https://ocm.azadehafzar.io
+            SITE_PAGES=home,validator,statistics
+            VALIDATOR_CONTACT=${{ vars.VPS_VALIDATOR_CONTACT }}
+          tags: |
+            ${{ env.IMAGE }}:${{ inputs.version }}
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
