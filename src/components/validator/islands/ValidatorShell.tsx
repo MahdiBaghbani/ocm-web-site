@@ -102,7 +102,7 @@ export default function ValidatorShell({
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
-      const loaded = await loadValidatorConfig(fetchConfigSource(fetch));
+      const loaded = await loadValidatorConfig(fetchConfigSource(fetch.bind(globalThis)));
       if (controller.signal.aborted) {
         return;
       }
@@ -135,7 +135,7 @@ export default function ValidatorShell({
     setSubmitting(true);
     setError("");
     const result = await startSession({
-      target: host,
+      target: `https://${host}`,
       optInStats,
       optInPermanent,
       ...(canUseActive ? { optInActive } : {}),
@@ -158,53 +158,53 @@ export default function ValidatorShell({
   }
 
   return (
-    <div className="space-y-6">
-      <form
-        className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/20 p-5"
-        onSubmit={(event) => {
-          void handleSubmit(event);
-        }}
-      >
-        <DomainField
-          label="Target host"
-          value={target}
-          placeholder="peer.example.com"
+    <form
+      className="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6"
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+    >
+      <DomainField
+        label="Target host"
+        value={target}
+        placeholder="peer.example.com"
+        disabled={submitting}
+        onChange={setTarget}
+      />
+      <div className="space-y-2">
+        {canUseActive ? (
+          <OptInCheck
+            id="validator-opt-in-active"
+            label="Active validation"
+            checked={optInActive}
+            disabled={submitting}
+            onChange={setOptInActive}
+          />
+        ) : null}
+        <OptInCheck
+          id="validator-opt-in-stats"
+          label="Contribute statistics"
+          checked={optInStats}
           disabled={submitting}
-          onChange={setTarget}
+          onChange={setOptInStats}
         />
-        <div className="space-y-2">
-          {canUseActive ? (
-            <OptInCheck
-              id="validator-opt-in-active"
-              label="Active validation"
-              checked={optInActive}
-              disabled={submitting}
-              onChange={setOptInActive}
-            />
-          ) : null}
-          <OptInCheck
-            id="validator-opt-in-stats"
-            label="Contribute statistics"
-            checked={optInStats}
-            disabled={submitting}
-            onChange={setOptInStats}
-          />
-          <OptInCheck
-            id="validator-opt-in-permanent"
-            label="Keep a permanent report"
-            checked={optInPermanent}
-            disabled={submitting}
-            onChange={setOptInPermanent}
-          />
-        </div>
-        {manifestNote !== "" ? (
-          <p className="text-sm text-zinc-500">manifest unavailable: {manifestNote}</p>
-        ) : null}
-        {error !== "" ? (
-          <p className="text-sm text-rose-200" role="alert">
-            {error}
-          </p>
-        ) : null}
+        <OptInCheck
+          id="validator-opt-in-permanent"
+          label="Keep a permanent report"
+          checked={optInPermanent}
+          disabled={submitting}
+          onChange={setOptInPermanent}
+        />
+      </div>
+      {manifestNote !== "" ? (
+        <p className="text-sm text-zinc-500">manifest unavailable: {manifestNote}</p>
+      ) : null}
+      {error !== "" ? (
+        <p className="text-sm text-rose-200" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="border-t border-zinc-800 pt-3">
         <button
           type="submit"
           disabled={submitting || config === null}
@@ -212,7 +212,7 @@ export default function ValidatorShell({
         >
           {submitting ? "Starting..." : "Start scan"}
         </button>
-      </form>
-    </div>
+      </div>
+    </form>
   );
 }

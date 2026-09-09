@@ -26,10 +26,10 @@ const idleMinutes = Math.floor(maxDriveIdleSeconds / 60);
 ---
 
 <aside
-  class="space-y-4 rounded-2xl border border-amber-900/50 bg-amber-950/20 p-5 text-sm leading-relaxed text-amber-100/90"
+  class="space-y-3 rounded-2xl border border-amber-900/50 bg-amber-950/20 p-6 text-base leading-7 text-amber-100/90"
   aria-label="Validator service notice"
 >
-  <h2 class="text-base font-semibold text-amber-50">Public validator notice</h2>
+  <h2 class="text-lg font-semibold text-amber-50">Public validator notice</h2>
 
   <p>
     This service runs at ocm.azadehafzar.io. It is a same-origin JSON validator
@@ -48,7 +48,7 @@ const idleMinutes = Math.floor(maxDriveIdleSeconds / 60);
   <p>
     Concurrent driving work is capped at {sessionLimit} sessions per validator
     process. Only one active run is allowed per target at a time; different
-    targets may run concurrently (v1.3.1). An idle active drive is interrupted
+    targets may run concurrently. An idle active drive is interrupted
     after {maxDriveIdleSeconds} seconds
     ({idleMinutes} minutes) without progress. Terminal report rows are retained
     for about {terminalRetentionDays} days unless you opt in to a permanent
@@ -66,8 +66,7 @@ const idleMinutes = Math.floor(maxDriveIdleSeconds / 60);
   </p>
 
   <p>
-    Out of scope: inbound OCM, user accounts, OAuth, alerts, and unrelated
-    Matrix features.
+    Out of scope: inbound OCM, user accounts, OAuth, and alerts.
   </p>
 
   <p>
