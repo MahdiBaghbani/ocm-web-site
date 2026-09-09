@@ -20,7 +20,7 @@ permissions:
   attestations: write
 
 env:
-  IMAGE: ghcr.io/mahdibaghbani/ocm-web
+  IMAGE: ghcr.io/mahdibaghbani/ocm-web-site
 
 concurrency:
   group: publish-${{ github.ref }}
