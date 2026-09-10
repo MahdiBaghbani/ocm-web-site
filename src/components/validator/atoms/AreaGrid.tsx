@@ -3,31 +3,16 @@
  */
 import React from "react";
 import SummaryCard from "../../observatory/ui/SummaryCard";
+import {
+  CANONICAL_AREA_IDS,
+  CANONICAL_AREA_LABELS,
+  type CanonicalAreaId,
+} from "../lib/validatorScore";
 import Pill, { type GradeKind, type PillKind } from "./Pill";
 
-export const VALIDATOR_AREA_IDS = [
-  "discovery",
-  "tls",
-  "jwks",
-  "httpsig",
-  "sharing",
-  "notification",
-  "token",
-  "capability",
-] as const;
-
-export type ValidatorAreaId = (typeof VALIDATOR_AREA_IDS)[number];
-
-export const VALIDATOR_AREA_LABELS = {
-  discovery: "Discovery",
-  tls: "TLS",
-  jwks: "JWKS",
-  httpsig: "HTTPSig",
-  sharing: "Sharing",
-  notification: "Notification",
-  token: "Token",
-  capability: "Capability",
-} as const satisfies Record<ValidatorAreaId, string>;
+export const VALIDATOR_AREA_IDS = CANONICAL_AREA_IDS;
+export type ValidatorAreaId = CanonicalAreaId;
+export const VALIDATOR_AREA_LABELS = CANONICAL_AREA_LABELS;
 
 const AREA_ID_SET: ReadonlySet<string> = new Set(VALIDATOR_AREA_IDS);
 
@@ -41,6 +26,8 @@ export interface AreaGridEntry {
   /** Fraction in [0, 1]. Wins over pass/warn/fail counts when set. */
   passRate?: number | null;
   evidenceCount?: number;
+  description?: string;
+  pillLabel?: string;
 }
 
 export interface AreaGridProps {
@@ -161,13 +148,22 @@ export default function AreaGrid({ areas }: AreaGridProps): React.ReactElement {
           const grade = foldGrade(entry);
           const rate = passRateOf(entry);
           const rateLabel = rate === null ? "-" : formatRate(rate);
+          const pill =
+            entry.pillLabel !== undefined ? (
+              <Pill kind={pillKindFor(grade)} label={entry.pillLabel} />
+            ) : (
+              <Pill kind={pillKindFor(grade)} />
+            );
           return (
             <SummaryCard
               key={entry.area}
               title={areaLabel(entry)}
-              badge={<Pill kind={pillKindFor(grade)} />}
+              badge={pill}
               padding="sm"
             >
+              {entry.description !== undefined && entry.description !== "" ? (
+                <p className="mb-2 text-sm text-zinc-300">{entry.description}</p>
+              ) : null}
               <div className="text-lg font-semibold text-zinc-100">{rateLabel}</div>
               <div className="mt-1 text-xs text-zinc-400">
                 {evidenceCaption(entry.evidenceCount)}

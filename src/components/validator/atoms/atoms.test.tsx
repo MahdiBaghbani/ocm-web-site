@@ -2,6 +2,12 @@ import React from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import {
+  AREA_RESULT_PILL,
+  CANONICAL_AREA_IDS,
+  areaGridEntriesFromScore,
+  parseSpecificationScore,
+} from "../lib/validatorScore";
 import AreaGrid, { VALIDATOR_AREA_IDS } from "./AreaGrid";
 import DomainField from "./DomainField";
 import Pill, { PILL_KINDS } from "./Pill";
@@ -224,6 +230,127 @@ describe("AreaGrid", () => {
     expect(html).toContain(`1/${VALIDATOR_AREA_IDS.length} areas assessed`);
     expect(areaGradeText(html, "Discovery")).toBe("fail");
     expect(pillLabels(html).includes("pass")).toBe(false);
+  });
+
+  test("result path renders custom description and custom pill label", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          {
+            area: "discovery",
+            grade: "pass",
+            description: "Plain discovery copy",
+            pillLabel: "Custom pass pill",
+            evidenceCount: 0,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Plain discovery copy");
+    expect(areaGradeText(html, "Discovery")).toBe("Custom pass pill");
+    expect(html).toContain("Discovery");
+    expect(areaRateText(html, "Discovery")).toBe("-");
+    expect(html).toContain("0 evidence items");
+  });
+
+  test("result tile title is unchanged when description and pill label are set", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          {
+            area: "tls",
+            label: "TLS",
+            grade: "warn",
+            description: "Plain TLS copy",
+            pillLabel: "Compatible with warnings",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain(">TLS</h3>");
+    expect(html).not.toContain(">Plain TLS copy</h3>");
+    expect(areaGradeText(html, "TLS")).toBe("Compatible with warnings");
+  });
+
+  test("null grade can render Not tested", () => {
+    const html = render(
+      <AreaGrid
+        areas={[{ area: "jwks", grade: null, pillLabel: AREA_RESULT_PILL.notTested }]}
+      />,
+    );
+    expect(areaGradeText(html, "JWKS")).toBe("Not tested");
+  });
+
+  test("missing row can render Not reported through the adapter", () => {
+    const parsed = parseSpecificationScore({
+      grade: "pass",
+      state: "terminal_pass",
+      terminal: true,
+      assessedAreas: 1,
+      totalAreas: 8,
+      areas: [{ area: "discovery", grade: "pass", evidenceCount: 0 }],
+    });
+    const html = render(<AreaGrid areas={areaGridEntriesFromScore(parsed)} />);
+    expect(areaGradeText(html, "Discovery")).toBe("pass");
+    expect(areaGradeText(html, "TLS")).toBe(AREA_RESULT_PILL.notReported);
+    expect(areaGradeText(html, "Capability")).toBe(AREA_RESULT_PILL.notReported);
+    for (const title of [
+      "Discovery",
+      "TLS",
+      "JWKS",
+      "HTTPSig",
+      "Sharing",
+      "Notification",
+      "Token",
+      "Capability",
+    ]) {
+      expect(html).toContain(`>${title}</h3>`);
+    }
+    expect(VALIDATOR_AREA_IDS).toEqual(CANONICAL_AREA_IDS);
+  });
+
+  test("statistics path still renders percent pill and sample caption", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          { area: "tls", pass: 3, warn: 1, fail: 0 },
+          { area: "jwks", passRate: 0.5 },
+        ]}
+      />,
+    );
+    expect(areaRateText(html, "TLS")).toBe("75%");
+    expect(areaRateText(html, "JWKS")).toBe("50%");
+    expect(areaGradeText(html, "TLS")).toBe("warn");
+    expect(areaGradeText(html, "JWKS")).toBe("unassessed");
+    expect(html).toContain("pass rate");
+    expect(html).not.toContain("Plain discovery copy");
+    expect(html).not.toContain("Not tested");
+    expect(html).not.toContain("Not reported");
+    expect(html).toContain(`2/${VALIDATOR_AREA_IDS.length} areas assessed`);
+  });
+
+  test("all eight canonical areas remain after result overlays", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          {
+            area: "discovery",
+            grade: null,
+            description: "Plain discovery copy",
+            pillLabel: AREA_RESULT_PILL.notTested,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Discovery");
+    expect(html).toContain("TLS");
+    expect(html).toContain("JWKS");
+    expect(html).toContain("HTTPSig");
+    expect(html).toContain("Sharing");
+    expect(html).toContain("Notification");
+    expect(html).toContain("Token");
+    expect(html).toContain("Capability");
+    expect(html).toContain(`0/${VALIDATOR_AREA_IDS.length} areas assessed`);
   });
 });
 describe("RawJsonPanel", () => {
