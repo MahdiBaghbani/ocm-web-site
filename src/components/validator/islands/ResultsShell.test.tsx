@@ -742,7 +742,7 @@ describe("ResultsShell session change reset", () => {
       expect(container.textContent).toContain(CACHED_SESSION_JSON_NOTE);
       expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
       expect(container.textContent).toContain(cacheMarker);
-      expect(container.textContent).toContain("Queue/Rest");
+      expect(container.textContent).toContain("Check capabilities");
 
       await act(() => {
         root.render(<ResultsShell host="peer.example" id={sessionB} />);
@@ -754,7 +754,7 @@ describe("ResultsShell session change reset", () => {
       expect(container.textContent).not.toContain(CACHED_SESSION_JSON_NOTE);
       expect(container.textContent).not.toContain(EVIDENCE_NOT_SAVED);
       expect(container.textContent).not.toContain(cacheMarker);
-      expect(container.textContent).not.toContain("Queue/Rest");
+      expect(container.textContent).not.toContain("Check capabilities");
       expect(container.textContent).not.toContain("This scan was not saved");
       expect(container.textContent).not.toContain("Last session JSON");
 

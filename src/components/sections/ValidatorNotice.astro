@@ -13,71 +13,56 @@ if (isPageMounted("validator") && contactInput === "") {
 const contactLink =
   contactInput === "" ? null : normalizeValidatorContact(contactInput);
 
-// Defaults from opencloudmesh-go/internal/platform/store/validatorcore/session_config.go
-const sessionLimit = 16;
-const maxDriveIdleSeconds = 1800;
-const terminalRetentionDays = 30;
-
 // Public start rate limit from opencloudmesh-go/internal/platform/config/presets.go
 const startPublicRequests = 10;
 const startPublicWindowSeconds = 60;
-
-const idleMinutes = Math.floor(maxDriveIdleSeconds / 60);
 ---
 
 <aside
-  class="space-y-3 rounded-2xl border border-amber-900/50 bg-amber-950/20 p-6 text-base leading-7 text-amber-100/90"
+  class="space-y-3 rounded-2xl border border-amber-900/50 bg-amber-950/20 p-5 text-sm leading-6 text-amber-100/90"
   aria-label="Validator service notice"
 >
-  <h2 class="text-lg font-semibold text-amber-50">Public validator notice</h2>
+  <h2 class="text-lg font-semibold text-amber-50">Public validator</h2>
+
+  <p>Anyone can use this service. Rate limits and safe target rules apply.</p>
+
+  <p>Results are informational and are not a certification.</p>
 
   <p>
-    This service runs at ocm.azadehafzar.io. It is a same-origin JSON validator
-    that performs external probes against your target and returns a graded
-    report.
+    Saving a public report makes it available to anyone with the link.
   </p>
 
-  <p>
-    This validator accepts anonymous, unauthenticated scan requests from the
-    public internet. Each client IP may start at most {startPublicRequests} new
-    sessions every {startPublicWindowSeconds} seconds. Outbound probe traffic
-    uses strict SSRF controls: private addresses, link-local targets, and other
-    disallowed destinations are rejected.
-  </p>
+  <details class="rounded-xl border border-amber-900/40 bg-amber-950/30 p-3">
+    <summary class="cursor-pointer font-medium text-amber-50">
+      Service details
+    </summary>
 
-  <p>
-    Concurrent driving work is capped at {sessionLimit} sessions per validator
-    process. Only one active run is allowed per target at a time; different
-    targets may run concurrently. An idle active drive is interrupted
-    after {maxDriveIdleSeconds} seconds
-    ({idleMinutes} minutes) without progress. Terminal report rows are retained
-    for about {terminalRetentionDays} days unless you opt in to a permanent
-    report tier at start time.
-  </p>
-
-  <p>
-    Statistics contribution and active validation are opt-in at start time and
-    default to off. Statistics are published only when explicitly opted in and
-    only after a k-anonymity threshold of 5 is met. Active validation appears
-    only when the service manifest
-    exposes the required opt-in field. Passive results are informational, not a
-    certification, and may miss platform-specific behavior or time-limited
-    failures.
-  </p>
-
-  <p>
-    Out of scope: inbound OCM, user accounts, OAuth, and alerts.
-  </p>
-
-  <p>
-    Operator contact:
-    {contactLink?.ok === true && (
-      <a
-        class="text-sky-300 underline-offset-2 hover:text-sky-200 hover:underline"
-        href={contactLink.href}
-      >
-        {contactLink.label}
-      </a>
-    )}
-  </p>
+    <ul class="mt-3 list-disc space-y-2 pl-5">
+      <li>
+        Each client IP address can start up to {startPublicRequests} scans per {startPublicWindowSeconds} seconds.
+      </li>
+      <li>
+        Private, loopback, link-local, metadata, and otherwise unsafe targets
+        are blocked.
+      </li>
+      <li>
+        Outbound validation requests do not carry browser cookies or user
+        credentials, and redirects are re-checked before they are followed.
+      </li>
+      <li>Active validation may require interactive federation steps.</li>
+      <li>Aggregate statistics apply the validator privacy threshold.</li>
+      <li>Saved report availability follows the server retention policy.</li>
+      <li>
+        Operator contact:
+        {contactLink?.ok === true && (
+          <a
+            class="text-sky-300 underline-offset-2 hover:text-sky-200 hover:underline"
+            href={contactLink.href}
+          >
+            {contactLink.label}
+          </a>
+        )}
+      </li>
+    </ul>
+  </details>
 </aside>
