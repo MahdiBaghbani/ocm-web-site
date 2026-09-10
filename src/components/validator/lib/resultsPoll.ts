@@ -65,7 +65,7 @@ export interface ResultsPollHooks {
   onPoll: (data: SessionPollResponse) => void;
   onView: (view: MachineView) => void;
   onReport: (data: ReportResponse) => void;
-  onReportError: (message: string) => void;
+  onReportFailure: (failure: ValidatorFailure | null) => void;
   onError: (message: string) => void;
 }
 
@@ -120,7 +120,7 @@ export async function runResultsPollLoop(
   ): Promise<void> => {
     const now = clock();
     const live = machine.continuePolling || machine.shouldPostStop;
-    const due = lastState !== state || machine.terminalize ||
+    const due = lastState !== state ||
       (live && (lastReportAt === undefined || now - lastReportAt >= refreshMs));
     if (!due) {
       return;
@@ -133,11 +133,11 @@ export async function runResultsPollLoop(
     if (result.ok) {
       lastReportAt = clock();
       hooks.onReport(result.data);
-      hooks.onReportError("");
+      hooks.onReportFailure(null);
       return;
     }
     if (result.kind !== "aborted") {
-      hooks.onReportError(result.message);
+      hooks.onReportFailure(result);
     }
   };
 

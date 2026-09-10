@@ -75,6 +75,15 @@ function stepIndexNumeral(html: string): string | null {
   return match === null ? null : match[1];
 }
 
+function hasNonAscii(value: string): boolean {
+  for (const char of value) {
+    if (char.charCodeAt(0) > 127) {
+      return true;
+    }
+  }
+  return false;
+}
+
 describe("VerdictBanner", () => {
   test("renders each verdict kind with distinguishing content", () => {
     const pass = render(<VerdictBanner verdict="pass" />);
@@ -82,18 +91,64 @@ describe("VerdictBanner", () => {
     const warn = render(<VerdictBanner verdict="warn" />);
     const running = render(<VerdictBanner verdict="running" />);
     const interrupted = render(<VerdictBanner verdict="interrupted" />);
+    const inconclusive = render(<VerdictBanner verdict="inconclusive" />);
     expect(pass).toContain("Pass"); expect(pass).toContain('role="status"');
     expect(fail).toContain("Fail"); expect(fail).toContain("probe failed");
     expect(fail).toContain('role="alert"'); expect(warn).toContain("Warn");
     expect(running).toContain("Scan in progress"); expect(interrupted).toContain("Interrupted");
+    expect(inconclusive).toContain("No compatibility result");
     expect(pass).toContain('aria-hidden="true"');
   });
 
-  test("maps null grade to running or interrupted", () => {
-    expect(verdictKindFromScore({ grade: null, terminal: false })).toBe("running");
-    expect(verdictKindFromScore({ grade: null, terminal: true })).toBe("interrupted");
-    expect(verdictKindFromScore({ grade: "pass", terminal: true })).toBe("pass");
-    expect(render(<VerdictBanner verdict="running" />)).toContain("Scan in progress");
+  test("maps explicit pass, warn, and fail grades", () => {
+    expect(verdictKindFromScore({ grade: "pass", state: "terminal_pass" })).toBe("pass");
+    expect(verdictKindFromScore({ grade: "warn", state: "terminal_pass" })).toBe("warn");
+    expect(verdictKindFromScore({ grade: "fail", state: "terminal_pass" })).toBe("fail");
+  });
+
+  test("keys interrupted from state even when grade is null or stale", () => {
+    expect(verdictKindFromScore({ grade: null, state: "interrupted" })).toBe("interrupted");
+    expect(verdictKindFromScore({ grade: "pass", state: "interrupted" })).toBe("interrupted");
+    expect(verdictKindFromScore({ grade: "warn", state: "interrupted" })).toBe("interrupted");
+  });
+
+  test("keys terminal fail from state when grade is absent or contradictory", () => {
+    expect(verdictKindFromScore({ grade: null, state: "terminal_fail" })).toBe("fail");
+    expect(verdictKindFromScore({ grade: "warn", state: "terminal_fail" })).toBe("fail");
+  });
+
+  test("maps validated terminal_pass null grade to inconclusive", () => {
+    expect(verdictKindFromScore({ grade: null, state: "terminal_pass" })).toBe("inconclusive");
+  });
+
+  test("maps non-terminal null grade to running", () => {
+    expect(verdictKindFromScore({ grade: null, state: "passive_running" })).toBe("running");
+    expect(verdictKindFromScore({ grade: null, state: "created" })).toBe("running");
+  });
+
+  test("lets grade fail take precedence over a contradictory pass-like state", () => {
+    expect(verdictKindFromScore({ grade: "fail", state: "terminal_pass" })).toBe("fail");
+    expect(verdictKindFromScore({ grade: "fail", state: "passive_running" })).toBe("fail");
+  });
+
+  test("renders inconclusive as neutral gray with an ASCII i glyph, not green", () => {
+    const html = render(<VerdictBanner verdict="inconclusive" />);
+    expect(html).toContain("No compatibility result");
+    expect(html).toContain(">i<");
+    expect(html).toContain("border-zinc-800");
+    expect(html).toContain("bg-zinc-900/20");
+    expect(html).not.toContain("emerald");
+    expect(html).not.toContain("Pass");
+    expect(firstPillLabel(html)).toBe("unassessed");
+  });
+
+  test("uses only ASCII glyphs and copy", () => {
+    const kinds = ["pass", "fail", "warn", "running", "interrupted", "inconclusive"] as const;
+    for (const kind of kinds) {
+      const html = render(<VerdictBanner verdict={kind} />);
+      expect(hasNonAscii(html)).toBe(false);
+    }
+    expect(verdictKindFromScore({ grade: "pass", state: "terminal_pass" })).toBe("pass");
   });
 
   test("shows heading once and pill as a status indicator", () => {

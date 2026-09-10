@@ -1,5 +1,6 @@
 /**
- * Overall scan verdict. pass/fail/warn plus in-progress and interrupted.
+ * Overall scan verdict. pass/fail/warn plus in-progress, interrupted, and
+ * inconclusive (terminal pass with no assessed areas).
  */
 import React from "react";
 import { statusToUi } from "../../observatory/lib/statusStyles";
@@ -11,6 +12,7 @@ export const VERDICT_KINDS = [
   "warn",
   "running",
   "interrupted",
+  "inconclusive",
 ] as const;
 
 export type VerdictKind = (typeof VERDICT_KINDS)[number];
@@ -27,6 +29,7 @@ const KIND_TO_STATUS = {
   warn: "infra-failed",
   running: "not-run",
   interrupted: "not-run",
+  inconclusive: "not-run",
 } as const;
 
 const TINT: Record<VerdictKind, string> = {
@@ -35,6 +38,7 @@ const TINT: Record<VerdictKind, string> = {
   warn: "border-amber-900/50 bg-amber-950/30",
   running: "border-zinc-800 bg-zinc-900/20",
   interrupted: "border-zinc-800 bg-zinc-900/20",
+  inconclusive: "border-zinc-800 bg-zinc-900/20",
 };
 
 const GLYPH: Record<VerdictKind, string> = {
@@ -43,6 +47,7 @@ const GLYPH: Record<VerdictKind, string> = {
   warn: "!",
   running: "i",
   interrupted: "i",
+  inconclusive: "i",
 };
 
 const DEFAULT_TITLE: Record<VerdictKind, string> = {
@@ -51,6 +56,7 @@ const DEFAULT_TITLE: Record<VerdictKind, string> = {
   warn: "Warn",
   running: "Scan in progress",
   interrupted: "Interrupted",
+  inconclusive: "No compatibility result",
 };
 
 const PILL_KIND = {
@@ -59,17 +65,36 @@ const PILL_KIND = {
   warn: "warn",
   running: "pending",
   interrupted: "notrun",
+  inconclusive: "unassessed",
 } as const;
 
-/** Map a report score grade and terminal flag to a banner kind. */
+/**
+ * Map a validated grade plus poll/session state to a banner kind.
+ * Interrupted and terminal_fail are keyed from state. Coverage is not inferred.
+ */
 export function verdictKindFromScore(input: {
   grade: GradeKind | null;
-  terminal: boolean;
+  state: string;
 }): VerdictKind {
-  if (input.grade === "pass" || input.grade === "fail" || input.grade === "warn") {
-    return input.grade;
+  if (input.state === "interrupted") {
+    return "interrupted";
   }
-  return input.terminal ? "interrupted" : "running";
+  if (input.state === "terminal_fail") {
+    return "fail";
+  }
+  if (input.grade === "fail") {
+    return "fail";
+  }
+  if (input.grade === "warn") {
+    return "warn";
+  }
+  if (input.grade === "pass") {
+    return "pass";
+  }
+  if (input.state === "terminal_pass") {
+    return "inconclusive";
+  }
+  return "running";
 }
 
 export default function VerdictBanner({
