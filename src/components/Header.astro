@@ -31,7 +31,7 @@ const logoHref = `${base}${pagePath(landing())}`;
 
 <header
   id="site-header"
-  class="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 border-b border-gray-800 transition-all duration-300"
+  class="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 border-b border-gray-800 shadow-lg transition-all duration-300"
 >
   <div class="max-w-screen-2xl mx-auto px-6 flex items-center justify-between h-16">
     <a href={logoHref} class="flex items-center gap-3 group" aria-label="OpenCloudMesh">
@@ -94,9 +94,9 @@ const logoHref = `${base}${pagePath(landing())}`;
   function updateHeader() {
     if (!header) return;
     if (window.scrollY > 20) {
-      header.classList.add('bg-gray-950/80', 'backdrop-blur-lg', 'border-b', 'border-white/5');
+      header.classList.add('bg-gray-950/80', 'backdrop-blur-lg');
     } else {
-      header.classList.remove('bg-gray-950/80', 'backdrop-blur-lg', 'border-b', 'border-white/5');
+      header.classList.remove('bg-gray-950/80', 'backdrop-blur-lg');
     }
   }
 

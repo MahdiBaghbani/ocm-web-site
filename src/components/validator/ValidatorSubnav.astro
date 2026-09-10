@@ -1,0 +1,37 @@
+---
+import { pagePath } from "../../lib/sitePages";
+
+interface Props {
+  active: "test" | "statistics";
+  statisticsMounted: boolean;
+}
+
+const { active, statisticsMounted } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const testHref = `${base}${pagePath("validator")}`;
+const statisticsHref = `${base}${pagePath("statistics")}`;
+
+const sharedLinkClass =
+  "inline-flex items-center rounded-t-lg border-b-2 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+const activeLinkClass = `${sharedLinkClass} border-white bg-gray-900/40 font-semibold text-white`;
+const inactiveLinkClass = `${sharedLinkClass} border-transparent font-medium text-gray-400 hover:bg-gray-900/20 hover:text-white`;
+---
+
+<nav class="flex flex-wrap items-center gap-1 border-b border-gray-800" aria-label="Validator sections">
+  <a
+    href={testHref}
+    class={active === "test" ? activeLinkClass : inactiveLinkClass}
+    aria-current={active === "test" ? "page" : undefined}
+  >
+    Test
+  </a>
+  {statisticsMounted && (
+    <a
+      href={statisticsHref}
+      class={active === "statistics" ? activeLinkClass : inactiveLinkClass}
+      aria-current={active === "statistics" ? "page" : undefined}
+    >
+      Statistics
+    </a>
+  )}
+</nav>
