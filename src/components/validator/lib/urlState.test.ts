@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  HOST_INPUT_MESSAGES,
   URL_HOST_PARAM,
   URL_ID_PARAM,
+  interpretHostInput,
   normalizeHost,
   normalizeSessionId,
   parseValidatorUrlState,
@@ -64,6 +66,92 @@ describe("normalizeHost", () => {
     expect(normalizeHost("localhost:")).toBeNull();
     expect(normalizeHost("[::1]:")).toBeNull();
     expect(normalizeHost("example.com:abc")).toBeNull();
+  });
+});
+
+describe("interpretHostInput", () => {
+  test("normalizes a domain to the host preview value", () => {
+    const result = interpretHostInput("  Example.COM/ocm  ");
+    expect(result).toEqual({ ok: true, host: "example.com" });
+    expect(normalizeHost("  Example.COM/ocm  ")).toBe("example.com");
+  });
+
+  test("keeps host and port and drops a full URL path", () => {
+    expect(interpretHostInput("peer.example:8443")).toEqual({
+      ok: true,
+      host: "peer.example:8443",
+    });
+    expect(interpretHostInput("https://peer.example:8443/ocm/files?x=1#y")).toEqual({
+      ok: true,
+      host: "peer.example:8443",
+    });
+  });
+
+  test("accepts IPv4 and bracketed IPv6 with an optional port", () => {
+    expect(interpretHostInput("127.0.0.1")).toEqual({ ok: true, host: "127.0.0.1" });
+    expect(interpretHostInput("https://[::1]/x")).toEqual({ ok: true, host: "[::1]" });
+    expect(interpretHostInput("[2001:db8::1]:8443/path")).toEqual({
+      ok: true,
+      host: "[2001:db8::1]:8443",
+    });
+  });
+
+  test("maps empty input to the entry page message", () => {
+    expect(interpretHostInput("")).toEqual({
+      ok: false,
+      reason: "empty",
+      message: "Enter a server address.",
+    });
+    expect(interpretHostInput("   ")).toEqual({
+      ok: false,
+      reason: "empty",
+      message: HOST_INPUT_MESSAGES.empty,
+    });
+    expect(normalizeHost("")).toBeNull();
+  });
+
+  test("maps an email-like value to the entry page message", () => {
+    expect(interpretHostInput("alice@example.com")).toEqual({
+      ok: false,
+      reason: "email",
+      message: "Enter a server address, not an email address.",
+    });
+    expect(normalizeHost("alice@example.com")).toBeNull();
+  });
+
+  test("maps a URL with username or password to the entry page message", () => {
+    expect(interpretHostInput("https://user:pass@example.com")).toEqual({
+      ok: false,
+      reason: "credentials",
+      message: "Remove the username and password from the address.",
+    });
+    expect(interpretHostInput("https://user@example.com/ocm")).toEqual({
+      ok: false,
+      reason: "credentials",
+      message: HOST_INPUT_MESSAGES.credentials,
+    });
+    expect(normalizeHost("https://user:pass@example.com")).toBeNull();
+  });
+
+  test("maps an unsupported scheme to the entry page message", () => {
+    expect(interpretHostInput("ftp://example.com")).toEqual({
+      ok: false,
+      reason: "unsupported_scheme",
+      message: "Use a domain or an http/https URL.",
+    });
+    expect(normalizeHost("ftp://example.com")).toBeNull();
+  });
+
+  test("maps a missing or malformed host to the entry page message", () => {
+    const message = "Enter a valid domain, IP address, or host with an optional port.";
+    for (const value of ["https://", "not a host", "-bad.example", "example.com:0", "//example.com"]) {
+      expect(interpretHostInput(value)).toEqual({
+        ok: false,
+        reason: "malformed_host",
+        message,
+      });
+      expect(normalizeHost(value)).toBeNull();
+    }
   });
 });
 

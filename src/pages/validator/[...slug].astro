@@ -2,6 +2,7 @@
 import InnerLayout from "../../layouts/InnerLayout.astro";
 import ValidatorHero from "../../components/sections/ValidatorHero.astro";
 import ValidatorNotice from "../../components/sections/ValidatorNotice.astro";
+import ValidatorSubnav from "../../components/validator/ValidatorSubnav.astro";
 import ValidatorShell from "../../components/validator/islands/ValidatorShell.tsx";
 import ResultsShell from "../../components/validator/islands/ResultsShell.tsx";
 import StatisticsShell from "../../components/validator/islands/StatisticsShell.tsx";
@@ -47,8 +48,8 @@ const base = import.meta.env.BASE_URL;
 const validatorMounted = isPageMounted("validator");
 const statisticsMounted = isPageMounted("statistics");
 const resultsHref = `${base}${pagePath("validator")}results/`;
-const statisticsHref = `${base}${pagePath("statistics")}`;
 const validatorHref = `${base}${pagePath("validator")}`;
+const statisticsHref = `${base}${pagePath("statistics")}`;
 ---
 
 {view === "index" && validatorMounted && (
@@ -58,21 +59,12 @@ const validatorHref = `${base}${pagePath("validator")}`;
   >
     <main class="flex flex-col gap-4">
       <ValidatorHero />
-      {statisticsMounted && (
-        <nav>
-          <a
-            class="inline-flex rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
-            href={statisticsHref}
-          >
-            View statistics
-          </a>
-        </nav>
-      )}
+      <ValidatorSubnav active="test" statisticsMounted={statisticsMounted} />
       <div class="grid items-start gap-6 xl:grid-cols-12">
-        <div class="xl:col-span-5">
+        <div class="xl:col-span-8">
           <ValidatorShell client:load resultsHref={resultsHref} />
         </div>
-        <div class="xl:col-span-7">
+        <div class="xl:col-span-4">
           <ValidatorNotice />
         </div>
       </div>
@@ -113,6 +105,24 @@ const validatorHref = `${base}${pagePath("validator")}`;
     description="OCM compatibility validator results."
   >
     <main class="space-y-6">
+      <nav aria-label="Breadcrumb" class="text-sm text-gray-400">
+        <ol class="flex flex-wrap items-center">
+          <li>
+            <a
+              class="font-medium text-gray-200 underline-offset-2 hover:text-white hover:underline"
+              href={validatorHref}
+            >
+              Test
+            </a>
+          </li>
+          <li class="flex items-center">
+            <span aria-hidden="true"> / </span>
+            <span class="font-semibold text-white" aria-current="page">
+              Result
+            </span>
+          </li>
+        </ol>
+      </nav>
       <header class="space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h1 class="text-2xl font-semibold text-white md:text-3xl">
@@ -122,15 +132,15 @@ const validatorHref = `${base}${pagePath("validator")}`;
             class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
             href={validatorHref}
           >
-            Back to validator
+            Back to Test
           </a>
         </div>
         <p class="text-sm text-gray-300">
-          Live session status, manifest summary, and report evidence.
+          Live session status and report evidence.
         </p>
       </header>
 
-      <ResultsShell client:load />
+      <ResultsShell client:load testHref={validatorHref} />
     </main>
   </InnerLayout>
 )}
@@ -142,21 +152,15 @@ const validatorHref = `${base}${pagePath("validator")}`;
   >
     <main class="space-y-6">
       <header class="space-y-2">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h1 class="text-2xl font-semibold text-white md:text-3xl">
-            Validator Statistics
-          </h1>
-          <a
-            class="rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-sm text-gray-200 hover:bg-gray-900"
-            href={validatorHref}
-          >
-            Back to validator
-          </a>
-        </div>
+        <h1 class="text-2xl font-semibold text-white md:text-3xl">
+          Validator Statistics
+        </h1>
         <p class="text-sm text-gray-300">
           Aggregate pass rates and grade distribution from opted-in scans.
         </p>
       </header>
+
+      <ValidatorSubnav active="statistics" statisticsMounted={statisticsMounted} />
 
       <StatisticsShell client:load />
     </main>

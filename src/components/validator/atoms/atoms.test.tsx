@@ -2,6 +2,12 @@ import React from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import {
+  AREA_RESULT_PILL,
+  CANONICAL_AREA_IDS,
+  areaGridEntriesFromScore,
+  parseSpecificationScore,
+} from "../lib/validatorScore";
 import AreaGrid, { VALIDATOR_AREA_IDS } from "./AreaGrid";
 import DomainField from "./DomainField";
 import Pill, { PILL_KINDS } from "./Pill";
@@ -69,6 +75,15 @@ function stepIndexNumeral(html: string): string | null {
   return match === null ? null : match[1];
 }
 
+function hasNonAscii(value: string): boolean {
+  for (const char of value) {
+    if (char.charCodeAt(0) > 127) {
+      return true;
+    }
+  }
+  return false;
+}
+
 describe("VerdictBanner", () => {
   test("renders each verdict kind with distinguishing content", () => {
     const pass = render(<VerdictBanner verdict="pass" />);
@@ -76,18 +91,64 @@ describe("VerdictBanner", () => {
     const warn = render(<VerdictBanner verdict="warn" />);
     const running = render(<VerdictBanner verdict="running" />);
     const interrupted = render(<VerdictBanner verdict="interrupted" />);
+    const inconclusive = render(<VerdictBanner verdict="inconclusive" />);
     expect(pass).toContain("Pass"); expect(pass).toContain('role="status"');
     expect(fail).toContain("Fail"); expect(fail).toContain("probe failed");
     expect(fail).toContain('role="alert"'); expect(warn).toContain("Warn");
     expect(running).toContain("Scan in progress"); expect(interrupted).toContain("Interrupted");
+    expect(inconclusive).toContain("No compatibility result");
     expect(pass).toContain('aria-hidden="true"');
   });
 
-  test("maps null grade to running or interrupted", () => {
-    expect(verdictKindFromScore({ grade: null, terminal: false })).toBe("running");
-    expect(verdictKindFromScore({ grade: null, terminal: true })).toBe("interrupted");
-    expect(verdictKindFromScore({ grade: "pass", terminal: true })).toBe("pass");
-    expect(render(<VerdictBanner verdict="running" />)).toContain("Scan in progress");
+  test("maps explicit pass, warn, and fail grades", () => {
+    expect(verdictKindFromScore({ grade: "pass", state: "terminal_pass" })).toBe("pass");
+    expect(verdictKindFromScore({ grade: "warn", state: "terminal_pass" })).toBe("warn");
+    expect(verdictKindFromScore({ grade: "fail", state: "terminal_pass" })).toBe("fail");
+  });
+
+  test("keys interrupted from state even when grade is null or stale", () => {
+    expect(verdictKindFromScore({ grade: null, state: "interrupted" })).toBe("interrupted");
+    expect(verdictKindFromScore({ grade: "pass", state: "interrupted" })).toBe("interrupted");
+    expect(verdictKindFromScore({ grade: "warn", state: "interrupted" })).toBe("interrupted");
+  });
+
+  test("keys terminal fail from state when grade is absent or contradictory", () => {
+    expect(verdictKindFromScore({ grade: null, state: "terminal_fail" })).toBe("fail");
+    expect(verdictKindFromScore({ grade: "warn", state: "terminal_fail" })).toBe("fail");
+  });
+
+  test("maps validated terminal_pass null grade to inconclusive", () => {
+    expect(verdictKindFromScore({ grade: null, state: "terminal_pass" })).toBe("inconclusive");
+  });
+
+  test("maps non-terminal null grade to running", () => {
+    expect(verdictKindFromScore({ grade: null, state: "passive_running" })).toBe("running");
+    expect(verdictKindFromScore({ grade: null, state: "created" })).toBe("running");
+  });
+
+  test("lets grade fail take precedence over a contradictory pass-like state", () => {
+    expect(verdictKindFromScore({ grade: "fail", state: "terminal_pass" })).toBe("fail");
+    expect(verdictKindFromScore({ grade: "fail", state: "passive_running" })).toBe("fail");
+  });
+
+  test("renders inconclusive as neutral gray with an ASCII i glyph, not green", () => {
+    const html = render(<VerdictBanner verdict="inconclusive" />);
+    expect(html).toContain("No compatibility result");
+    expect(html).toContain(">i<");
+    expect(html).toContain("border-zinc-800");
+    expect(html).toContain("bg-zinc-900/20");
+    expect(html).not.toContain("emerald");
+    expect(html).not.toContain("Pass");
+    expect(firstPillLabel(html)).toBe("unassessed");
+  });
+
+  test("uses only ASCII glyphs and copy", () => {
+    const kinds = ["pass", "fail", "warn", "running", "interrupted", "inconclusive"] as const;
+    for (const kind of kinds) {
+      const html = render(<VerdictBanner verdict={kind} />);
+      expect(hasNonAscii(html)).toBe(false);
+    }
+    expect(verdictKindFromScore({ grade: "pass", state: "terminal_pass" })).toBe("pass");
   });
 
   test("shows heading once and pill as a status indicator", () => {
@@ -95,18 +156,28 @@ describe("VerdictBanner", () => {
     expect(countAttr(html, "Compatible")).toBe(1);
     expect(firstPillLabel(html)).toBe("pass");
   });
+
+  test("running glyph stays ASCII ellipsis in a wider icon span", () => {
+    const running = render(<VerdictBanner verdict="running" />);
+    const pass = render(<VerdictBanner verdict="pass" />);
+    expect(running).toContain("...");
+    expect(running).toContain("w-6");
+    expect(running).not.toContain("w-3");
+    expect(pass).toContain(">v<");
+    expect(pass).toContain("w-6");
+  });
 });
 describe("StepRow", () => {
   test("renders pending, current, and complete statuses", () => {
     const pending = render(<StepRow step="queue_or_rest" status="pending" index={2} />);
     const current = render(<StepRow step="probe" status="current" index={1} />);
     const complete = render(<StepRow step="result" status="complete" index={6} />);
-    expect(pending).toContain("Queue/Rest");
+    expect(pending).toContain("Continue or finish");
     expect(pending).toContain("pending");
-    expect(current).toContain("Probe");
+    expect(current).toContain("Check server");
     expect(current).toContain("current");
     expect(stepIndexNumeral(current)).toBe("1");
-    expect(complete).toContain("Result");
+    expect(complete).toContain("Prepare result");
     expect(complete).toContain("complete");
   });
 
@@ -114,7 +185,7 @@ describe("StepRow", () => {
     const withCta = render(
       <StepRow step="invite" status="complete" index={3} ctaLabel="Paste invite" onCta={() => undefined} />,
     );
-    expect(withCta).toContain("Invite");
+    expect(withCta).toContain("Create invitation");
     expect(withCta).toContain("Paste invite");
     expect(render(<StepRow step="share" status="hidden" index={5} />)).toBe("");
   });
@@ -139,10 +210,10 @@ describe("Pill", () => {
 describe("AreaGrid", () => {
   test("always renders the eight canonical areas", () => {
     const html = render(<AreaGrid />);
-    expect(html).toContain("Discovery"); expect(html).toContain("TLS");
-    expect(html).toContain("JWKS"); expect(html).toContain("HTTPSig");
-    expect(html).toContain("Sharing"); expect(html).toContain("Notification");
-    expect(html).toContain("Token"); expect(html).toContain("Capability");
+    expect(html).toContain("Server discovery"); expect(html).toContain("Secure connection");
+    expect(html).toContain("Signing keys"); expect(html).toContain("Request signing");
+    expect(html).toContain("Share exchange"); expect(html).toContain("Notifications");
+    expect(html).toContain("Access tokens"); expect(html).toContain("Capabilities");
     expect(html).toContain(`0/${VALIDATOR_AREA_IDS.length} areas assessed`);
   });
 
@@ -161,17 +232,17 @@ describe("AreaGrid", () => {
     );
     expect(html).toContain("75%"); expect(html).toContain("50%");
     expect(html).toContain("100%");
-    expect(areaRateText(html, "Sharing")).toBe("0%");
+    expect(areaRateText(html, "Share exchange")).toBe("0%");
     expect(html).toContain("2 evidence items"); expect(html).toContain("1 evidence item");
     expect(html).toContain("6/8 areas assessed");
-    expect(areaGradeText(html, "Discovery")).toBe("pass");
-    expect(areaGradeText(html, "TLS")).toBe("warn");
-    expect(areaGradeText(html, "Token")).toBe("warn");
+    expect(areaGradeText(html, "Server discovery")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe("warn");
+    expect(areaGradeText(html, "Access tokens")).toBe("warn");
   });
 
   test("renders the TLS area grade as exact pill text", () => {
     const html = render(<AreaGrid areas={[{ area: "tls", grade: "pass" }]} />);
-    expect(areaGradeText(html, "TLS")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe("pass");
   });
 
   test("explicit grade wins over conflicting evidence counts", () => {
@@ -180,7 +251,7 @@ describe("AreaGrid", () => {
         areas={[{ area: "tls", grade: "pass", pass: 0, warn: 0, fail: 5 }]}
       />,
     );
-    expect(areaGradeText(html, "TLS")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe("pass");
   });
 
   test("renders explicit pass, fail, and warn grade labels", () => {
@@ -193,11 +264,11 @@ describe("AreaGrid", () => {
         ]}
       />,
     );
-    expect(areaGradeText(html, "Discovery")).toBe("pass");
-    expect(areaGradeText(html, "TLS")).toBe("fail");
-    expect(areaGradeText(html, "JWKS")).toBe("warn");
-    expect(areaGradeText(html, "HTTPSig")).toBe("unassessed");
-    expect(areaGradeText(html, "Sharing")).toBe("unassessed");
+    expect(areaGradeText(html, "Server discovery")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe("fail");
+    expect(areaGradeText(html, "Signing keys")).toBe("warn");
+    expect(areaGradeText(html, "Request signing")).toBe("unassessed");
+    expect(areaGradeText(html, "Share exchange")).toBe("unassessed");
   });
 
   test("renders zero evidence counts and the missing-count fallback", () => {
@@ -218,12 +289,133 @@ describe("AreaGrid", () => {
         ]}
       />,
     );
-    expect(html).toContain("Discovery");
-    expect(html).toContain("Capability");
+    expect(html).toContain("Server discovery");
+    expect(html).toContain("Capabilities");
     expect(html).not.toContain("Mystery");
     expect(html).toContain(`1/${VALIDATOR_AREA_IDS.length} areas assessed`);
-    expect(areaGradeText(html, "Discovery")).toBe("fail");
+    expect(areaGradeText(html, "Server discovery")).toBe("fail");
     expect(pillLabels(html).includes("pass")).toBe(false);
+  });
+
+  test("result path renders custom description and custom pill label", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          {
+            area: "discovery",
+            grade: "pass",
+            description: "Plain discovery copy",
+            pillLabel: "Custom pass pill",
+            evidenceCount: 0,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Plain discovery copy");
+    expect(areaGradeText(html, "Server discovery")).toBe("Custom pass pill");
+    expect(html).toContain("Server discovery");
+    expect(areaRateText(html, "Server discovery")).toBe("-");
+    expect(html).toContain("0 evidence items");
+  });
+
+  test("result tile title is unchanged when description and pill label are set", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          {
+            area: "tls",
+            label: "TLS",
+            grade: "warn",
+            description: "Plain TLS copy",
+            pillLabel: "Compatible with warnings",
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain(">TLS</h3>");
+    expect(html).not.toContain(">Plain TLS copy</h3>");
+    expect(areaGradeText(html, "TLS")).toBe("Compatible with warnings");
+  });
+
+  test("null grade can render Not tested", () => {
+    const html = render(
+      <AreaGrid
+        areas={[{ area: "jwks", grade: null, pillLabel: AREA_RESULT_PILL.notTested }]}
+      />,
+    );
+    expect(areaGradeText(html, "Signing keys")).toBe("Not tested");
+  });
+
+  test("missing row can render Not reported through the adapter", () => {
+    const parsed = parseSpecificationScore({
+      grade: "pass",
+      state: "terminal_pass",
+      terminal: true,
+      assessedAreas: 1,
+      totalAreas: 8,
+      areas: [{ area: "discovery", grade: "pass", evidenceCount: 0 }],
+    });
+    const html = render(<AreaGrid areas={areaGridEntriesFromScore(parsed)} />);
+    expect(areaGradeText(html, "Server discovery")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe(AREA_RESULT_PILL.notReported);
+    expect(areaGradeText(html, "Capabilities")).toBe(AREA_RESULT_PILL.notReported);
+    for (const title of [
+      "Server discovery",
+      "Secure connection",
+      "Signing keys",
+      "Request signing",
+      "Share exchange",
+      "Notifications",
+      "Access tokens",
+      "Capabilities",
+    ]) {
+      expect(html).toContain(`>${title}</h3>`);
+    }
+    expect(VALIDATOR_AREA_IDS).toEqual(CANONICAL_AREA_IDS);
+  });
+
+  test("statistics path still renders percent pill and sample caption", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          { area: "tls", pass: 3, warn: 1, fail: 0 },
+          { area: "jwks", passRate: 0.5 },
+        ]}
+      />,
+    );
+    expect(areaRateText(html, "Secure connection")).toBe("75%");
+    expect(areaRateText(html, "Signing keys")).toBe("50%");
+    expect(areaGradeText(html, "Secure connection")).toBe("warn");
+    expect(areaGradeText(html, "Signing keys")).toBe("unassessed");
+    expect(html).toContain("pass rate");
+    expect(html).not.toContain("Plain discovery copy");
+    expect(html).not.toContain("Not tested");
+    expect(html).not.toContain("Not reported");
+    expect(html).toContain(`2/${VALIDATOR_AREA_IDS.length} areas assessed`);
+  });
+
+  test("all eight canonical areas remain after result overlays", () => {
+    const html = render(
+      <AreaGrid
+        areas={[
+          {
+            area: "discovery",
+            grade: null,
+            description: "Plain discovery copy",
+            pillLabel: AREA_RESULT_PILL.notTested,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Server discovery");
+    expect(html).toContain("Secure connection");
+    expect(html).toContain("Signing keys");
+    expect(html).toContain("Request signing");
+    expect(html).toContain("Share exchange");
+    expect(html).toContain("Notifications");
+    expect(html).toContain("Access tokens");
+    expect(html).toContain("Capabilities");
+    expect(html).toContain(`0/${VALIDATOR_AREA_IDS.length} areas assessed`);
   });
 });
 describe("RawJsonPanel", () => {
@@ -246,7 +438,7 @@ describe("RawJsonPanel", () => {
 describe("DomainField", () => {
   test("renders a labeled read-only domain value", () => {
     const html = render(<DomainField value="peer.example:8443" />);
-    expect(html).toContain("Domain");
+    expect(html).toContain("Server address");
     expect(html).toContain("peer.example:8443");
     expect(html).toContain("readOnly");
   });
@@ -259,5 +451,30 @@ describe("DomainField", () => {
     expect(html).toContain("Enter a host");
     expect(html).toContain('role="alert"');
     expect(html).not.toContain("readOnly");
+  });
+
+  test("composes aria-describedby from helper, preview, and error", () => {
+    const html = render(
+      <DomainField
+        value="bad host"
+        helperText="Use a domain, IP address, or http/https URL."
+        helperId="validator-domain-help"
+        previewId="validator-host-preview"
+        error="Enter a server address."
+        onChange={() => undefined}
+      />,
+    );
+    expect(html).toContain(
+      'aria-describedby="validator-domain-help validator-host-preview validator-domain-error"',
+    );
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('id="validator-domain-help"');
+    expect(html).toContain("Use a domain, IP address, or http/https URL.");
+    expect(html).toContain('id="validator-domain-error"');
+    expect(html).toContain('autoComplete="off"');
+    expect(html).not.toContain('autoComplete="email"');
+    expect(html).not.toContain('autoComplete="url"');
+    expect(html).not.toContain('autoComplete="username"');
+    expect(html).not.toContain('autoComplete="current-password"');
   });
 });

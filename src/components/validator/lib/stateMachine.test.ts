@@ -7,6 +7,7 @@ import {
   OPT_IN_MANIFEST_PATH,
   SESSION_STATES,
   TERMINAL_STATES,
+  USER_STEP_LABELS,
   USER_STEPS,
   instructionForSession,
   isCta,
@@ -37,6 +38,25 @@ const STATE_INSTRUCTION: Record<SessionState, NextInstruction | null> = {
 describe("stateMachine contract tables", () => {
   test("manifest opt-in path is the form gate, not poll state", () => {
     expect(OPT_IN_MANIFEST_PATH).toBe("optIn.start.optInActive");
+  });
+
+  test("uses plain-language progress labels without changing step ids", () => {
+    expect(USER_STEPS).toEqual([
+      "probe",
+      "queue_or_rest",
+      "invite",
+      "reverse",
+      "share",
+      "result",
+    ]);
+    expect(USER_STEP_LABELS).toEqual({
+      probe: "Check server",
+      queue_or_rest: "Continue or finish",
+      invite: "Create invitation",
+      reverse: "Accept return invitation",
+      share: "Test sharing",
+      result: "Prepare result",
+    });
   });
 
   test("maps every documented session state", () => {

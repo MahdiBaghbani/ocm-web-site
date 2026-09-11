@@ -158,24 +158,30 @@ export function isValidHost(host: string): boolean {
   return isValidHostname(parts.name);
 }
 
-function hostFromAbsoluteUrl(raw: string): string | null {
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    return null;
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return null;
-  }
-  if (parsed.username !== "" || parsed.password !== "") {
-    return null;
-  }
-  const host = parsed.host.trim().toLowerCase();
-  if (!isValidHost(host)) {
-    return null;
-  }
-  return host;
+export const HOST_INPUT_REASONS = [
+  "empty",
+  "email",
+  "credentials",
+  "unsupported_scheme",
+  "malformed_host",
+] as const;
+
+export type HostInputReason = (typeof HOST_INPUT_REASONS)[number];
+
+export const HOST_INPUT_MESSAGES = {
+  empty: "Enter a server address.",
+  email: "Enter a server address, not an email address.",
+  credentials: "Remove the username and password from the address.",
+  unsupported_scheme: "Use a domain or an http/https URL.",
+  malformed_host: "Enter a valid domain, IP address, or host with an optional port.",
+} as const satisfies Record<HostInputReason, string>;
+
+export type HostInputResult =
+  | { ok: true; host: string }
+  | { ok: false; reason: HostInputReason; message: string };
+
+function hostInputFailure(reason: HostInputReason): HostInputResult {
+  return { ok: false, reason, message: HOST_INPUT_MESSAGES[reason] };
 }
 
 function hostFromBareInput(raw: string): string | null {
@@ -199,16 +205,52 @@ function hostFromBareInput(raw: string): string | null {
   return candidate;
 }
 
+function interpretAbsoluteUrl(raw: string, httpOnly: boolean): HostInputResult {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return hostInputFailure(httpOnly ? "malformed_host" : "unsupported_scheme");
+  }
+  if (parsed.username !== "" || parsed.password !== "") {
+    return hostInputFailure("credentials");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return hostInputFailure("unsupported_scheme");
+  }
+  const host = parsed.host.trim().toLowerCase();
+  if (!isValidHost(host)) {
+    return hostInputFailure("malformed_host");
+  }
+  return { ok: true, host };
+}
+
 /** Trim, lowercase, strip http(s) scheme and path, then validate as a host. */
-export function normalizeHost(raw: string): string | null {
+export function interpretHostInput(raw: string): HostInputResult {
   const trimmed = raw.trim();
   if (trimmed === "") {
-    return null;
+    return hostInputFailure("empty");
   }
   if (isAbsoluteHttpUrl(trimmed)) {
-    return hostFromAbsoluteUrl(trimmed);
+    return interpretAbsoluteUrl(trimmed, true);
   }
-  return hostFromBareInput(trimmed);
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    return interpretAbsoluteUrl(trimmed, false);
+  }
+  if (trimmed.includes("@")) {
+    return hostInputFailure("email");
+  }
+  const host = hostFromBareInput(trimmed);
+  if (host === null) {
+    return hostInputFailure("malformed_host");
+  }
+  return { ok: true, host };
+}
+
+/** Trim, lowercase, strip http(s) scheme and path, then validate as a host. */
+export function normalizeHost(raw: string): string | null {
+  const interpreted = interpretHostInput(raw);
+  return interpreted.ok ? interpreted.host : null;
 }
 
 function looksLikeRelativePageUrl(value: string): boolean {

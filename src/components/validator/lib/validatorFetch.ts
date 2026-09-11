@@ -22,10 +22,23 @@ export interface StartSessionRequest { target: string; optInActive?: boolean; op
 export interface StartSessionResponse { id: string; optInStats: boolean; optInPermanent: boolean }
 export interface SessionPollResponse { state: string; ts: number; optInActive: boolean; nextInstruction?: string; failModeLabel?: string }
 export interface StopSessionResponse { id: string; state: string }
+
+export const REPORT_VISIBILITY = [
+  "session",
+  "permanent",
+  "not_saved",
+  "expired",
+  "unknown",
+] as const;
+
+export type ReportVisibility = (typeof REPORT_VISIBILITY)[number];
+
+export const REPORT_NOT_PUBLIC_ERROR = "report_not_public";
+
 export interface ReportResponse {
   schema: string;
   id: string;
-  visibility: string;
+  visibility: ReportVisibility;
   reportUrl?: string;
   url?: string;
   score?: unknown;
@@ -154,14 +167,77 @@ export function joinValidatorUrl(origin: string, path: string): string {
   return trimmedOrigin === "" ? fullPath : `${trimmedOrigin}${fullPath}`;
 }
 
+export function normalizeReportVisibility(value: unknown): ReportVisibility {
+  if (
+    value === "session" ||
+    value === "permanent" ||
+    value === "not_saved" ||
+    value === "expired"
+  ) {
+    return value;
+  }
+  return "unknown";
+}
+
+export function isReportNotPublicFailure(failure: ValidatorFailure): boolean {
+  return failure.error === REPORT_NOT_PUBLIC_ERROR;
+}
+
+function originOf(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function resolveUrlBase(validatorApiOrigin: string | null | undefined): string | null {
+  if (typeof validatorApiOrigin !== "string") {
+    return null;
+  }
+  const trimmed = validatorApiOrigin.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/** Resolve a public report URL against the validator API origin. */
+export function resolvePublicReportUrl(
+  candidate: string | null | undefined,
+  validatorApiOrigin: string | null | undefined,
+): string | null {
+  if (typeof candidate !== "string") {
+    return null;
+  }
+  const trimmed = candidate.trim();
+  if (trimmed === "") {
+    return null;
+  }
+  const base = resolveUrlBase(validatorApiOrigin);
+  if (base === null) {
+    return null;
+  }
+  try {
+    const resolved = new URL(trimmed, base);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+      return null;
+    }
+    const expected = originOf(base);
+    if (expected === null || resolved.origin !== expected) {
+      return null;
+    }
+    return resolved.href;
+  } catch {
+    return null;
+  }
+}
+
 export function parseErrorEnvelope(body: unknown): ParsedErrorEnvelope | null {
   if (!isRecord(body)) {
     return null;
   }
   const flatError = readString(body.error);
   const flatMessage = readString(body.message);
-  if (flatError !== null && flatMessage !== null) {
-    return { error: flatError, message: flatMessage };
+  if (flatError !== null) {
+    return { error: flatError, message: flatMessage ?? "" };
   }
   if (!isRecord(body.error)) {
     return null;
@@ -327,11 +403,15 @@ function parseReportResponse(body: unknown): ReportResponse | null {
   }
   const schema = readString(body.schema);
   const id = readString(body.id);
-  const visibility = readString(body.visibility);
-  if (schema === null || id === null || visibility === null) {
+  const visibilityRaw = readString(body.visibility);
+  if (schema === null || id === null || visibilityRaw === null) {
     return null;
   }
-  const parsed: ReportResponse = { schema, id, visibility };
+  const parsed: ReportResponse = {
+    schema,
+    id,
+    visibility: normalizeReportVisibility(visibilityRaw),
+  };
   const reportUrl = readString(body.reportUrl);
   if (reportUrl !== null) parsed.reportUrl = reportUrl;
   const url = readString(body.url);

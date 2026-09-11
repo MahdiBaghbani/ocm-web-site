@@ -41,25 +41,25 @@ function fail(
 function hooks(): ResultsPollHooks & {
   polls: SessionPollResponse[];
   reports: ReportResponse[];
-  reportErrors: string[];
+  reportFailures: Array<ValidatorFailure | null>;
   errors: string[];
   terminal: boolean[];
 } {
   const polls: SessionPollResponse[] = [];
   const reports: ReportResponse[] = [];
-  const reportErrors: string[] = [];
+  const reportFailures: Array<ValidatorFailure | null> = [];
   const errors: string[] = [];
   const terminal: boolean[] = [];
   return {
     polls,
     reports,
-    reportErrors,
+    reportFailures,
     errors,
     terminal,
     onPoll: (data) => polls.push(data),
     onView: (view) => terminal.push(view.terminalize),
     onReport: (data) => reports.push(data),
-    onReportError: (message) => reportErrors.push(message),
+    onReportFailure: (failure) => reportFailures.push(failure),
     onError: (message) => errors.push(message),
   };
 }
@@ -158,7 +158,10 @@ describe("runResultsPollLoop", () => {
     });
     expect(polls).toBe(2);
     expect(reports).toBe(2);
-    expect(recorded.reportErrors).toEqual(["report unavailable", ""]);
+    expect(recorded.reportFailures).toEqual([
+      fail("invalid_response", "report unavailable"),
+      null,
+    ]);
     expect(recorded.reports).toEqual([REPORT]);
     expect(recorded.terminal.at(-1)).toBe(true);
   });
@@ -196,7 +199,11 @@ describe("runResultsPollLoop", () => {
       },
     });
     expect(reports).toBe(3);
-    expect(recorded.reportErrors).toEqual(["report 503", "report 503", ""]);
+    expect(recorded.reportFailures).toEqual([
+      fail("http", "report 503", { status: 503 }),
+      fail("http", "report 503", { status: 503 }),
+      null,
+    ]);
     expect(recorded.reports).toEqual([REPORT]);
   });
 
@@ -224,6 +231,55 @@ describe("runResultsPollLoop", () => {
     expect(polls).toBe(MAX_TRANSIENT_POLL_FAILURES);
     expect(delays).toEqual([2500, 1000, 1000, 1000]);
     expect(recorded.errors).toEqual(["bad poll"]);
+  });
+
+  test("preserves report_not_public on the structured failure callback", async () => {
+    const recorded = hooks();
+    const notPublic = fail("http", "report is not public", {
+      status: 404,
+      error: "report_not_public",
+    });
+    await runLoop(recorded, {
+      sessionId: SESSION_ID,
+      cadence: { pollIntervalMs: 1000, activePollIntervalMs: 2000 },
+      deps: {},
+      signal: new AbortController().signal,
+      poll: async () => okPoll({
+        state: "terminal_pass",
+        ts: 1,
+        optInActive: false,
+      }),
+      report: async () => notPublic,
+      wait: async () => ({ ok: true }),
+    });
+    expect(recorded.reports).toEqual([]);
+    expect(recorded.reportFailures).toEqual([notPublic]);
+    expect(recorded.reportFailures[0]?.error).toBe("report_not_public");
+    expect(recorded.terminal.at(-1)).toBe(true);
+  });
+
+  test("fetches the terminal report once for a terminal_pass transition", async () => {
+    let reports = 0;
+    const recorded = hooks();
+    await runLoop(recorded, {
+      sessionId: SESSION_ID,
+      cadence: { pollIntervalMs: 1000, activePollIntervalMs: 2000 },
+      deps: {},
+      signal: new AbortController().signal,
+      poll: async () => okPoll({
+        state: "terminal_pass",
+        ts: 1,
+        optInActive: false,
+      }),
+      report: async () => {
+        reports += 1;
+        return { ok: true, status: 200, data: REPORT };
+      },
+      wait: async () => ({ ok: true }),
+    });
+    expect(reports).toBe(1);
+    expect(recorded.reports).toEqual([REPORT]);
+    expect(recorded.reportFailures).toEqual([null]);
   });
 
   test("stops immediately on session_not_found", async () => {

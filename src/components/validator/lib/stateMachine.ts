@@ -45,12 +45,12 @@ export const USER_STEPS = [
 export type UserStep = (typeof USER_STEPS)[number];
 
 export const USER_STEP_LABELS = {
-  probe: "Probe",
-  queue_or_rest: "Queue/Rest",
-  invite: "Invite",
-  reverse: "Reverse",
-  share: "Share",
-  result: "Result",
+  probe: "Check server",
+  queue_or_rest: "Continue or finish",
+  invite: "Create invitation",
+  reverse: "Accept return invitation",
+  share: "Test sharing",
+  result: "Prepare result",
 } as const satisfies Record<UserStep, string>;
 
 export const SESSION_STATES = [
