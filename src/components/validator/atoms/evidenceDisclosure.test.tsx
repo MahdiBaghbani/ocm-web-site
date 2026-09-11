@@ -255,6 +255,171 @@ describe("EvidenceDisclosure", () => {
     expect(html).toContain('aria-hidden="true"');
   });
 
+  test("resolves confirmed slug copy while retaining the raw reason row", () => {
+    const html = render(
+      <EvidenceDisclosure
+        title="Discovery"
+        expanded={true}
+        items={[
+          {
+            reasonCode: "discovery_probed",
+            grade: "fail",
+            affectsGrade: true,
+          },
+        ]}
+      />,
+    );
+    // Resolved narrative copy from the SF-2.1 map.
+    expect(html).toContain("Discovery endpoint checked");
+    expect(html).toContain('data-reason-source="map"');
+    // Remedy shows for a fail outcome that affects the grade.
+    expect(html).toContain("Publish a 200 JSON document");
+    // Raw reason-code identity remains visible as a FieldRow.
+    expect(html).toContain(">reason<");
+    expect(html).toContain("discovery_probed");
+  });
+
+  test("renders map copy for all four confirmed slugs", () => {
+    const cases: { slug: string; title: string }[] = [
+      { slug: "jwks_unadvertised", title: "Signing keys not advertised" },
+      { slug: "discovery_probed", title: "Discovery endpoint checked" },
+      { slug: "tls_probed", title: "TLS handshake probed" },
+      { slug: "httpsig_probed", title: "HTTP signature probe" },
+    ];
+    for (const item of cases) {
+      const html = render(
+        <EvidenceDisclosure
+          title="Area"
+          expanded={true}
+          items={[{ reasonCode: item.slug, grade: "warn" }]}
+        />,
+      );
+      expect(html).toContain(item.title);
+      expect(html).toContain('data-reason-source="map"');
+      expect(html).toContain(item.slug);
+    }
+  });
+
+  test("renders the resolved why narrative for confirmed slugs", () => {
+    // Locks the rendered narrative body, not just titles/source hooks, using
+    // exact copy from the SF-2.1 resolver map. Covers the grade-specific
+    // jwks_unadvertised slug and a grade-agnostic _probed slug.
+    const cases: { slug: string; why: string }[] = [
+      {
+        slug: "jwks_unadvertised",
+        why: "The discovery document did not publish a jwksUri and did not advertise the http-sig capability, so signing keys are optional and the validator did not fetch a key set.",
+      },
+      {
+        slug: "discovery_probed",
+        why: "The validator sent an uncached GET to /.well-known/ocm and assessed the returned JSON discovery document. The pass, warn, or fail verdict is shown separately.",
+      },
+    ];
+    for (const item of cases) {
+      const html = render(
+        <EvidenceDisclosure
+          title="Area"
+          expanded={true}
+          items={[{ reasonCode: item.slug, grade: "warn" }]}
+        />,
+      );
+      expect(html).toContain(item.why);
+      expect(html).toContain('data-reason-source="map"');
+      expect(html).toContain(item.slug);
+    }
+  });
+
+  test("shows the fixed warn remedy for jwks_unadvertised", () => {
+    const html = render(
+      <EvidenceDisclosure
+        title="Signing"
+        expanded={true}
+        items={[{ reasonCode: "jwks_unadvertised", grade: "pass" }]}
+      />,
+    );
+    expect(html).toContain("Signing keys not advertised");
+    // jwks_unadvertised is grade-specific warn, so its remedy renders even
+    // when the caller passes a pass grade.
+    expect(html).toContain("publish an https jwksUri");
+  });
+
+  test("titleizes jwks_probed via the acronym-aware fallback", () => {
+    const html = render(
+      <EvidenceDisclosure
+        title="Signing"
+        expanded={true}
+        items={[{ reasonCode: "jwks_probed", grade: "pass" }]}
+      />,
+    );
+    expect(html).toContain("JWKS Probed");
+    expect(html).toContain('data-reason-source="titleize"');
+    expect(html).toContain("jwks_probed");
+  });
+
+  test("uses the unknown fallback for well_known_ok", () => {
+    const html = render(
+      <EvidenceDisclosure
+        title="Discovery"
+        expanded={true}
+        items={[{ reasonCode: "well_known_ok", grade: "pass" }]}
+      />,
+    );
+    // well_known_ok is deliberately absent from the map, so it falls through
+    // to the conservative titleized fallback, never a mapping.
+    expect(html).toContain("Well Known Ok");
+    expect(html).toContain('data-reason-source="titleize"');
+    expect(html).not.toContain('data-reason-source="map"');
+    expect(html).toContain("well_known_ok");
+  });
+
+  test("emits the redaction note for a true payloadRedacted and keeps raw reason", () => {
+    const html = render(
+      <EvidenceDisclosure
+        title="Discovery"
+        expanded={true}
+        items={[
+          {
+            reasonCode: "discovery_probed",
+            grade: "pass",
+            affectsGrade: true,
+            payloadRedacted: true,
+          },
+        ]}
+      />,
+    );
+    // The boolean redacted row is gone, replaced by a human-readable note.
+    expect(html).not.toContain(">redacted<");
+    expect(html).toContain("Supporting details were redacted from this report.");
+    // affectsGrade is not the redacted row and stays a FieldRow.
+    expect(html).toContain(">affects grade<");
+    // Raw reason-code identity is still retained.
+    expect(html).toContain(">reason<");
+    expect(html).toContain("discovery_probed");
+  });
+
+  test("omits the redaction note when payloadRedacted is false", () => {
+    const html = render(
+      <EvidenceDisclosure
+        title="Discovery"
+        expanded={true}
+        items={[
+          {
+            reasonCode: "discovery_probed",
+            grade: "pass",
+            affectsGrade: true,
+            payloadRedacted: false,
+          },
+        ]}
+      />,
+    );
+    // No boolean redacted row and no note when false.
+    expect(html).not.toContain(">redacted<");
+    expect(html).not.toContain("Supporting details were redacted from this report.");
+    // affectsGrade remains a FieldRow and the raw reason is retained.
+    expect(html).toContain(">affects grade<");
+    expect(html).toContain(">reason<");
+    expect(html).toContain("discovery_probed");
+  });
+
   test("uncontrolled disclosure toggles body open state on click", async () => {
     const { document: doc, restore } = installDomShim();
     try {
