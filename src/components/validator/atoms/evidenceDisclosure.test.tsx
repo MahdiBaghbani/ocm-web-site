@@ -340,6 +340,8 @@ describe("EvidenceDisclosure", () => {
     // jwks_unadvertised is grade-specific warn, so its remedy renders even
     // when the caller passes a pass grade.
     expect(html).toContain("publish an https jwksUri");
+    // The Pill reflects the resolved warn outcome, not the caller pass grade.
+    expect(firstPillLabel(html)).toBe("warn");
   });
 
   test("titleizes jwks_probed via the acronym-aware fallback", () => {

@@ -157,13 +157,24 @@ export default function EvidenceDisclosure({
               item.reasonCode !== undefined && item.reasonCode !== ""
                 ? `${item.reasonCode}-${index}`
                 : `evidence-${index}`;
+            // Pill must reflect the resolved outcome, not the raw entry grade:
+            // grade-specific slugs (for example jwks_unadvertised) fix the
+            // grade regardless of caller grade. Fall back to item.grade when
+            // the resolver leaves grade undefined.
+            const pillKind: GradeKind | null = (() => {
+              const effective = resolved.grade ?? item.grade;
+              if (
+                effective === "pass" ||
+                effective === "fail" ||
+                effective === "warn"
+              ) {
+                return effective;
+              }
+              return null;
+            })();
             return (
               <div key={key} className="space-y-2">
-                {item.grade === "pass" ||
-                item.grade === "fail" ||
-                item.grade === "warn" ? (
-                  <Pill kind={item.grade} />
-                ) : null}
+                {pillKind !== null ? <Pill kind={pillKind} /> : null}
                 <div className="space-y-1" data-reason-source={resolved.source}>
                   <p className="text-sm font-semibold text-zinc-100">
                     {resolved.title}
