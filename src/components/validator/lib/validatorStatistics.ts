@@ -239,3 +239,51 @@ export function parseValidatorStatistics(body: unknown): ValidatorStatistics | n
   }
   return parsed;
 }
+
+/** Fallback host count used when the manifest omits a positive k value. */
+export const DEFAULT_K_ANONYMITY_UNIQUE_HOSTS = 5;
+
+/**
+ * Resolve the k-anonymity unique-host threshold from a manifest value.
+ * A non-finite, non-positive, or missing k falls back to the default.
+ */
+export function resolveKAnonymityUniqueHosts(k: number | undefined): number {
+  return typeof k === "number" && Number.isFinite(k) && k > 0
+    ? k
+    : DEFAULT_K_ANONYMITY_UNIQUE_HOSTS;
+}
+
+/**
+ * True when statistics are suppressed or empty: all totals are zero and no
+ * platforms are present. Areas, daily, and dailyOmitted are ignored, so the
+ * live eight-zero-area shape still classifies as empty.
+ */
+export function isStatisticsSuppressedOrEmpty(stats: ValidatorStatistics): boolean {
+  const t = stats.totals;
+  return (
+    t.sessions === 0 &&
+    t.uniqueHosts === 0 &&
+    t.healthyPct === 0 &&
+    stats.platforms.length === 0
+  );
+}
+
+export type StatisticsPanelKind = "error" | "loading" | "empty" | "ready";
+
+/**
+ * Classify the exclusive statistics panel to render. Precedence is
+ * error -> loading -> empty -> ready; a null stats value is loading.
+ */
+export function statisticsPanelKind(
+  error: string,
+  loading: boolean,
+  stats: ValidatorStatistics | null,
+): StatisticsPanelKind {
+  if (error !== "") {
+    return "error";
+  }
+  if (loading || stats === null) {
+    return "loading";
+  }
+  return isStatisticsSuppressedOrEmpty(stats) ? "empty" : "ready";
+}
