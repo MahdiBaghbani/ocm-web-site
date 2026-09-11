@@ -162,7 +162,7 @@ describe("StepRow", () => {
     const pending = render(<StepRow step="queue_or_rest" status="pending" index={2} />);
     const current = render(<StepRow step="probe" status="current" index={1} />);
     const complete = render(<StepRow step="result" status="complete" index={6} />);
-    expect(pending).toContain("Check capabilities");
+    expect(pending).toContain("Continue or finish");
     expect(pending).toContain("pending");
     expect(current).toContain("Check server");
     expect(current).toContain("current");
@@ -175,7 +175,7 @@ describe("StepRow", () => {
     const withCta = render(
       <StepRow step="invite" status="complete" index={3} ctaLabel="Paste invite" onCta={() => undefined} />,
     );
-    expect(withCta).toContain("Invite");
+    expect(withCta).toContain("Create invitation");
     expect(withCta).toContain("Paste invite");
     expect(render(<StepRow step="share" status="hidden" index={5} />)).toBe("");
   });
@@ -200,10 +200,10 @@ describe("Pill", () => {
 describe("AreaGrid", () => {
   test("always renders the eight canonical areas", () => {
     const html = render(<AreaGrid />);
-    expect(html).toContain("Discovery"); expect(html).toContain("TLS");
-    expect(html).toContain("JWKS"); expect(html).toContain("HTTPSig");
-    expect(html).toContain("Sharing"); expect(html).toContain("Notification");
-    expect(html).toContain("Token"); expect(html).toContain("Capability");
+    expect(html).toContain("Server discovery"); expect(html).toContain("Secure connection");
+    expect(html).toContain("Signing keys"); expect(html).toContain("Request signing");
+    expect(html).toContain("Share exchange"); expect(html).toContain("Notifications");
+    expect(html).toContain("Access tokens"); expect(html).toContain("Capabilities");
     expect(html).toContain(`0/${VALIDATOR_AREA_IDS.length} areas assessed`);
   });
 
@@ -222,17 +222,17 @@ describe("AreaGrid", () => {
     );
     expect(html).toContain("75%"); expect(html).toContain("50%");
     expect(html).toContain("100%");
-    expect(areaRateText(html, "Sharing")).toBe("0%");
+    expect(areaRateText(html, "Share exchange")).toBe("0%");
     expect(html).toContain("2 evidence items"); expect(html).toContain("1 evidence item");
     expect(html).toContain("6/8 areas assessed");
-    expect(areaGradeText(html, "Discovery")).toBe("pass");
-    expect(areaGradeText(html, "TLS")).toBe("warn");
-    expect(areaGradeText(html, "Token")).toBe("warn");
+    expect(areaGradeText(html, "Server discovery")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe("warn");
+    expect(areaGradeText(html, "Access tokens")).toBe("warn");
   });
 
   test("renders the TLS area grade as exact pill text", () => {
     const html = render(<AreaGrid areas={[{ area: "tls", grade: "pass" }]} />);
-    expect(areaGradeText(html, "TLS")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe("pass");
   });
 
   test("explicit grade wins over conflicting evidence counts", () => {
@@ -241,7 +241,7 @@ describe("AreaGrid", () => {
         areas={[{ area: "tls", grade: "pass", pass: 0, warn: 0, fail: 5 }]}
       />,
     );
-    expect(areaGradeText(html, "TLS")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe("pass");
   });
 
   test("renders explicit pass, fail, and warn grade labels", () => {
@@ -254,11 +254,11 @@ describe("AreaGrid", () => {
         ]}
       />,
     );
-    expect(areaGradeText(html, "Discovery")).toBe("pass");
-    expect(areaGradeText(html, "TLS")).toBe("fail");
-    expect(areaGradeText(html, "JWKS")).toBe("warn");
-    expect(areaGradeText(html, "HTTPSig")).toBe("unassessed");
-    expect(areaGradeText(html, "Sharing")).toBe("unassessed");
+    expect(areaGradeText(html, "Server discovery")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe("fail");
+    expect(areaGradeText(html, "Signing keys")).toBe("warn");
+    expect(areaGradeText(html, "Request signing")).toBe("unassessed");
+    expect(areaGradeText(html, "Share exchange")).toBe("unassessed");
   });
 
   test("renders zero evidence counts and the missing-count fallback", () => {
@@ -279,11 +279,11 @@ describe("AreaGrid", () => {
         ]}
       />,
     );
-    expect(html).toContain("Discovery");
-    expect(html).toContain("Capability");
+    expect(html).toContain("Server discovery");
+    expect(html).toContain("Capabilities");
     expect(html).not.toContain("Mystery");
     expect(html).toContain(`1/${VALIDATOR_AREA_IDS.length} areas assessed`);
-    expect(areaGradeText(html, "Discovery")).toBe("fail");
+    expect(areaGradeText(html, "Server discovery")).toBe("fail");
     expect(pillLabels(html).includes("pass")).toBe(false);
   });
 
@@ -302,9 +302,9 @@ describe("AreaGrid", () => {
       />,
     );
     expect(html).toContain("Plain discovery copy");
-    expect(areaGradeText(html, "Discovery")).toBe("Custom pass pill");
-    expect(html).toContain("Discovery");
-    expect(areaRateText(html, "Discovery")).toBe("-");
+    expect(areaGradeText(html, "Server discovery")).toBe("Custom pass pill");
+    expect(html).toContain("Server discovery");
+    expect(areaRateText(html, "Server discovery")).toBe("-");
     expect(html).toContain("0 evidence items");
   });
 
@@ -333,7 +333,7 @@ describe("AreaGrid", () => {
         areas={[{ area: "jwks", grade: null, pillLabel: AREA_RESULT_PILL.notTested }]}
       />,
     );
-    expect(areaGradeText(html, "JWKS")).toBe("Not tested");
+    expect(areaGradeText(html, "Signing keys")).toBe("Not tested");
   });
 
   test("missing row can render Not reported through the adapter", () => {
@@ -346,18 +346,18 @@ describe("AreaGrid", () => {
       areas: [{ area: "discovery", grade: "pass", evidenceCount: 0 }],
     });
     const html = render(<AreaGrid areas={areaGridEntriesFromScore(parsed)} />);
-    expect(areaGradeText(html, "Discovery")).toBe("pass");
-    expect(areaGradeText(html, "TLS")).toBe(AREA_RESULT_PILL.notReported);
-    expect(areaGradeText(html, "Capability")).toBe(AREA_RESULT_PILL.notReported);
+    expect(areaGradeText(html, "Server discovery")).toBe("pass");
+    expect(areaGradeText(html, "Secure connection")).toBe(AREA_RESULT_PILL.notReported);
+    expect(areaGradeText(html, "Capabilities")).toBe(AREA_RESULT_PILL.notReported);
     for (const title of [
-      "Discovery",
-      "TLS",
-      "JWKS",
-      "HTTPSig",
-      "Sharing",
-      "Notification",
-      "Token",
-      "Capability",
+      "Server discovery",
+      "Secure connection",
+      "Signing keys",
+      "Request signing",
+      "Share exchange",
+      "Notifications",
+      "Access tokens",
+      "Capabilities",
     ]) {
       expect(html).toContain(`>${title}</h3>`);
     }
@@ -373,10 +373,10 @@ describe("AreaGrid", () => {
         ]}
       />,
     );
-    expect(areaRateText(html, "TLS")).toBe("75%");
-    expect(areaRateText(html, "JWKS")).toBe("50%");
-    expect(areaGradeText(html, "TLS")).toBe("warn");
-    expect(areaGradeText(html, "JWKS")).toBe("unassessed");
+    expect(areaRateText(html, "Secure connection")).toBe("75%");
+    expect(areaRateText(html, "Signing keys")).toBe("50%");
+    expect(areaGradeText(html, "Secure connection")).toBe("warn");
+    expect(areaGradeText(html, "Signing keys")).toBe("unassessed");
     expect(html).toContain("pass rate");
     expect(html).not.toContain("Plain discovery copy");
     expect(html).not.toContain("Not tested");
@@ -397,14 +397,14 @@ describe("AreaGrid", () => {
         ]}
       />,
     );
-    expect(html).toContain("Discovery");
-    expect(html).toContain("TLS");
-    expect(html).toContain("JWKS");
-    expect(html).toContain("HTTPSig");
-    expect(html).toContain("Sharing");
-    expect(html).toContain("Notification");
-    expect(html).toContain("Token");
-    expect(html).toContain("Capability");
+    expect(html).toContain("Server discovery");
+    expect(html).toContain("Secure connection");
+    expect(html).toContain("Signing keys");
+    expect(html).toContain("Request signing");
+    expect(html).toContain("Share exchange");
+    expect(html).toContain("Notifications");
+    expect(html).toContain("Access tokens");
+    expect(html).toContain("Capabilities");
     expect(html).toContain(`0/${VALIDATOR_AREA_IDS.length} areas assessed`);
   });
 });

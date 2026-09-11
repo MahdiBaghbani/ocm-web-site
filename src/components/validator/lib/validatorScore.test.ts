@@ -735,7 +735,7 @@ describe("area adapter", () => {
     });
     expect(entries[0]?.description).toBe("Plain discovery copy");
     expect(entries[0]?.pillLabel).toBe("Custom pass pill");
-    expect(entries[0]?.label).toBe("Discovery");
+    expect(entries[0]?.label).toBe("Server discovery");
   });
 
   test("present null grade is Not tested and absent or malformed is Not reported", () => {

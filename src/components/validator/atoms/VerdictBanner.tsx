@@ -45,7 +45,7 @@ const GLYPH: Record<VerdictKind, string> = {
   pass: "v",
   fail: "x",
   warn: "!",
-  running: "i",
+  running: "...",
   interrupted: "i",
   inconclusive: "i",
 };

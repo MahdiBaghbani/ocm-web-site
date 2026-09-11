@@ -140,8 +140,9 @@ describe("ResultsShell hydration", () => {
   test("SSR with host and id renders identity without reading window location", () => {
     const html = render(<ResultsShell host="Peer.Example" id={` ${SESSION_ID} `} />);
     expect(html).toContain("Result for peer.example");
+    expect(html).toContain("Session");
     expect(html).toContain(SESSION_ID);
-    expect(html).toContain("Back to Test");
+    expect(html).not.toContain("Back to Test");
     expect(html).toContain("Copy session ID");
     expect(html).toContain("Loading session...");
     expect(html).not.toContain("Missing host or session id");
@@ -742,7 +743,7 @@ describe("ResultsShell session change reset", () => {
       expect(container.textContent).toContain(CACHED_SESSION_JSON_NOTE);
       expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
       expect(container.textContent).toContain(cacheMarker);
-      expect(container.textContent).toContain("Check capabilities");
+      expect(container.textContent).not.toContain("Continue or finish");
 
       await act(() => {
         root.render(<ResultsShell host="peer.example" id={sessionB} />);
@@ -754,7 +755,7 @@ describe("ResultsShell session change reset", () => {
       expect(container.textContent).not.toContain(CACHED_SESSION_JSON_NOTE);
       expect(container.textContent).not.toContain(EVIDENCE_NOT_SAVED);
       expect(container.textContent).not.toContain(cacheMarker);
-      expect(container.textContent).not.toContain("Check capabilities");
+      expect(container.textContent).not.toContain("Continue or finish");
       expect(container.textContent).not.toContain("This scan was not saved");
       expect(container.textContent).not.toContain("Last session JSON");
 
@@ -771,6 +772,220 @@ describe("ResultsShell session change reset", () => {
       await act(() => { root.unmount(); });
     } finally {
       globalThis.fetch = previousFetch;
+      restore();
+    }
+  });
+});
+
+function walk(node: ShimNode, visit: (current: ShimNode) => void): void {
+  visit(node);
+  for (const child of node.childNodes) {
+    walk(child, visit);
+  }
+}
+
+function nodesByTag(root: ShimNode, tagName: string): ShimNode[] {
+  const upper = tagName.toUpperCase();
+  const found: ShimNode[] = [];
+  walk(root, (node) => {
+    if (node.tagName === upper) {
+      found.push(node);
+    }
+  });
+  return found;
+}
+
+function nodesByRole(root: ShimNode, role: string): ShimNode[] {
+  const found: ShimNode[] = [];
+  walk(root, (node) => {
+    if (node.getAttribute("role") === role) {
+      found.push(node);
+    }
+  });
+  return found;
+}
+
+function findByExactText(root: ShimNode, tagName: string, text: string): ShimNode {
+  const upper = tagName.toUpperCase();
+  let found: ShimNode | null = null;
+  walk(root, (node) => {
+    if (found === null && node.tagName === upper && node.textContent === text) {
+      found = node;
+    }
+  });
+  if (found === null) {
+    throw new Error(`missing <${tagName}> with text ${JSON.stringify(text)}`);
+  }
+  return found;
+}
+
+function reactClick(node: ShimNode): void {
+  const key = Object.getOwnPropertyNames(node).find((name) => name.startsWith("__reactProps"));
+  if (key !== undefined) {
+    const props = (node as unknown as Record<string, { onClick?: (event: ShimEvent) => void }>)[key];
+    if (typeof props.onClick === "function") {
+      props.onClick(new ShimEvent("click"));
+      return;
+    }
+  }
+  node.dispatchEvent(new ShimEvent("click"));
+}
+
+function installPermanentReportFetch(): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return jsonResponse(200, { state: "terminal_pass", ts: 1, optInActive: false });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(200, permanentReport(specification(() => "pass")));
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+function installInterruptedReportFetch(): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return jsonResponse(200, { state: "interrupted", ts: 1, optInActive: false });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(200, permanentReport(specification(() => "pass", null)));
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+function installRejectedClipboard(): () => void {
+  const writeText = (): Promise<void> => Promise.reject(new Error("clipboard rejected"));
+  const navigatorHost = globalThis.navigator as { clipboard?: { writeText: (value: string) => Promise<void> } };
+  const previous = navigatorHost.clipboard;
+  navigatorHost.clipboard = { writeText };
+  return () => {
+    if (previous === undefined) {
+      delete navigatorHost.clipboard;
+    } else {
+      navigatorHost.clipboard = previous;
+    }
+  };
+}
+
+describe("ResultsShell raw JSON disclosure and copy notice", () => {
+  test("Raw JSON uses details/summary and defaults closed", async () => {
+    const restoreFetch = installPermanentReportFetch();
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, "Raw report JSON");
+
+      const details = nodesByTag(container, "details");
+      const summaries = nodesByTag(container, "summary");
+      expect(details.length).toBe(1);
+      expect(summaries.length).toBe(1);
+      expect(details[0]?.getAttribute("open")).toBeNull();
+      expect(summaries[0]?.textContent).toContain("Raw report JSON");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("copy rejection never announces success", async () => {
+    const COPY_FAILURE =
+      "Could not copy the report link. Open the report and copy its address instead.";
+    const restoreFetch = installPermanentReportFetch();
+    const restoreClipboard = installRejectedClipboard();
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, "Copy public report link");
+
+      const copyButton = findByExactText(container, "button", "Copy public report link");
+      await act(() => {
+        reactClick(copyButton);
+      });
+      await waitForText(container, COPY_FAILURE);
+
+      const alerts = nodesByRole(container, "alert");
+      expect(alerts.some((node) => node.textContent === COPY_FAILURE)).toBe(true);
+      const copySuccessNotices = nodesByRole(container, "status").filter((node) => {
+        return node.tagName === "P" && node.textContent === "Copied";
+      });
+      expect(copySuccessNotices).toEqual([]);
+      expect(alerts.some((node) => node.tagName === "P" && node.textContent === "Copied")).toBe(false);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreClipboard();
+      restoreFetch();
+      restore();
+    }
+  });
+});
+
+describe("ResultsShell interrupted ready recovery", () => {
+  test("ready interrupted results offer Run a new check without public actions", async () => {
+    const restoreFetch = installInterruptedReportFetch();
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.scanInterrupted);
+      expect(container.textContent).toContain("Run a new check");
+      expect(container.textContent).not.toContain("This scan was not saved");
+      expect(container.textContent).not.toContain("Open public report");
+      expect(container.textContent).not.toContain("Copy public report link");
+      const recovery = findByExactText(container, "a", "Run a new check");
+      expect(recovery.getAttribute("href")).toBe("/validator/");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
       restore();
     }
   });

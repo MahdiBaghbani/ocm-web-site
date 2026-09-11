@@ -33,7 +33,7 @@ const startPublicWindowSeconds = 60;
   </p>
 
   <details class="rounded-xl border border-amber-900/40 bg-amber-950/30 p-3">
-    <summary class="cursor-pointer font-medium text-amber-50">
+    <summary class="flex min-h-11 cursor-pointer items-center font-medium text-amber-50">
       Service details
     </summary>
 
@@ -47,11 +47,16 @@ const startPublicWindowSeconds = 60;
       </li>
       <li>
         Outbound validation requests do not carry browser cookies or user
-        credentials, and redirects are re-checked before they are followed.
+        credentials.
+      </li>
+      <li>
+        Redirects are checked again before the validator follows them.
       </li>
       <li>Active validation may require interactive federation steps.</li>
       <li>Aggregate statistics apply the validator privacy threshold.</li>
-      <li>Saved report availability follows the server retention policy.</li>
+      <li>
+        Saved report availability follows the server retention policy.
+      </li>
       <li>
         Operator contact:
         {contactLink?.ok === true && (

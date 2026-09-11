@@ -1,5 +1,6 @@
 ---
 import { pagePath } from "../../lib/sitePages";
+import { subnavAriaCurrent } from "./lib/validatorSubnav";
 
 interface Props {
   active: "test" | "statistics";
@@ -21,7 +22,7 @@ const inactiveLinkClass = `${sharedLinkClass} border-transparent font-medium tex
   <a
     href={testHref}
     class={active === "test" ? activeLinkClass : inactiveLinkClass}
-    aria-current={active === "test" ? "page" : undefined}
+    aria-current={subnavAriaCurrent(active, "test")}
   >
     Test
   </a>
@@ -29,7 +30,7 @@ const inactiveLinkClass = `${sharedLinkClass} border-transparent font-medium tex
     <a
       href={statisticsHref}
       class={active === "statistics" ? activeLinkClass : inactiveLinkClass}
-      aria-current={active === "statistics" ? "page" : undefined}
+      aria-current={subnavAriaCurrent(active, "statistics")}
     >
       Statistics
     </a>

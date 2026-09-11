@@ -174,6 +174,24 @@ function sessionFromLocation(host?: string, id?: string): ValidatorUrlState | nu
   return parsed.ok ? parsed.state : null;
 }
 
+function sessionLinkErrorMessage(): string {
+  if (typeof window === "undefined") {
+    return "This result link is incomplete.";
+  }
+  const parsed = parseValidatorUrlState(window.location.href);
+  if (parsed.ok) {
+    return "This result link is incomplete.";
+  }
+  if (
+    parsed.reason === "invalid_host" ||
+    parsed.reason === "invalid_id" ||
+    parsed.reason === "invalid_url"
+  ) {
+    return "This result link has an invalid session ID.";
+  }
+  return "This result link is incomplete.";
+}
+
 function asGrade(value: unknown): GradeKind | null {
   return value === "pass" || value === "fail" || value === "warn" ? value : null;
 }
@@ -605,14 +623,11 @@ export default function ResultsShell({
     if (!mounted) {
       return <p className="text-sm text-zinc-400">Loading session...</p>;
     }
-    const invalid = host !== undefined || id !== undefined;
     return (
       <div className="space-y-4">
         <BackToTest />
         <p className="text-sm text-rose-200" role="alert">
-          {invalid
-            ? "This result link has an invalid session ID."
-            : "This result link is incomplete."}
+          {sessionLinkErrorMessage()}
         </p>
       </div>
     );
@@ -620,16 +635,33 @@ export default function ResultsShell({
 
   const totals = areaTotals(projection.score.areas);
   const statusText =
-    projection.status === "ready"
-      ? projection.bannerTitle
-      : view === null
+    projection.status === "live" || projection.status === "loading_report"
+      ? view === null
         ? "Loading session..."
-        : progressAnnouncement(view);
+        : progressAnnouncement(view)
+      : null;
+  const rawJsonDisclosure =
+    projection.sourceReport !== null ? (
+      <details className="rounded-2xl border border-zinc-800 bg-zinc-900/20">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center px-5 py-3 text-sm font-semibold text-zinc-100">
+          {projection.rawJsonSummary}
+        </summary>
+        <div className="space-y-3 border-t border-zinc-800 px-5 py-4">
+          {projection.rawJsonNote !== null ? (
+            <p className="text-sm text-zinc-400">{projection.rawJsonNote}</p>
+          ) : null}
+          <RawJsonPanel
+            value={projection.sourceReport}
+            title={projection.rawJsonTitle}
+            downloadName={`report-${session.id}.json`}
+          />
+        </div>
+      </details>
+    ) : null;
 
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <BackToTest />
         <div>
           <p className="text-sm font-semibold text-zinc-100">
             Result for {session.host}
@@ -642,9 +674,19 @@ export default function ResultsShell({
           </button>
         </div>
       </div>
-      <p role="status" aria-live="polite" aria-atomic="true" className="text-sm text-zinc-400">
-        {statusText}
-      </p>
+      {projection.bannerVerdict !== null &&
+      (projection.status === "live" || projection.status === "ready") ? (
+        <VerdictBanner
+          verdict={projection.bannerVerdict}
+          title={projection.bannerTitle}
+          message={projection.bannerMessage}
+        />
+      ) : null}
+      {statusText !== null ? (
+        <p role="status" aria-live="polite" aria-atomic="true" className="text-sm text-zinc-400">
+          {statusText}
+        </p>
+      ) : null}
       {copyNotice !== null ? (
         <p
           className={`text-sm ${copyNotice.ok ? "text-zinc-300" : "text-rose-200"}`}
@@ -666,7 +708,7 @@ export default function ResultsShell({
       ) : null}
       {view === null ? (
         <p className="text-sm text-zinc-400">Loading session...</p>
-      ) : (
+      ) : projection.status === "live" ? (
         <div className="space-y-3">
           {USER_STEPS.map((step) => {
             const status = view.statuses[step];
@@ -683,7 +725,7 @@ export default function ResultsShell({
             );
           })}
         </div>
-      )}
+      ) : null}
       {projection.status === "loading_report" ? (
         <p className="text-sm text-zinc-400">Loading report...</p>
       ) : null}
@@ -731,14 +773,6 @@ export default function ResultsShell({
           </div>
         </div>
       ) : null}
-      {projection.bannerVerdict !== null &&
-      (projection.status === "live" || projection.status === "ready") ? (
-        <VerdictBanner
-          verdict={projection.bannerVerdict}
-          title={projection.bannerTitle}
-          message={projection.bannerMessage}
-        />
-      ) : null}
       {projection.showAreas ? (
         <div className="space-y-4">
           <p className="text-sm text-zinc-300">
@@ -759,7 +793,9 @@ export default function ResultsShell({
           {projection.visibility === "permanent" ? (
             <p className="text-sm text-zinc-400">The validator retention policy applies.</p>
           ) : null}
-          {projection.showPublicActions && projection.reportUrl !== null ? (
+          {projection.showPublicActions &&
+          projection.reportUrl !== null &&
+          projection.bannerVerdict !== "interrupted" ? (
             <div className="flex flex-col gap-2 sm:flex-row">
               <a
                 href={projection.reportUrl}
@@ -782,6 +818,9 @@ export default function ResultsShell({
           ) : null}
         </div>
       ) : null}
+      {projection.bannerVerdict === "interrupted" ? (
+        <div className="flex flex-wrap gap-2"><RunNewCheck /></div>
+      ) : null}
       {projection.status === "ready" || projection.status === "live" ? (
         <div className="space-y-4">
           {projection.evidenceMode === "disclosure" ? (
@@ -803,25 +842,10 @@ export default function ResultsShell({
               <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EXPIRED}</p>
             </div>
           ) : null}
-          {projection.sourceReport !== null ? (
-            <details className="rounded-2xl border border-zinc-800 bg-zinc-900/20">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center px-5 py-3 text-sm font-semibold text-zinc-100">
-                {projection.rawJsonSummary}
-              </summary>
-              <div className="space-y-3 border-t border-zinc-800 px-5 py-4">
-                {projection.rawJsonNote !== null ? (
-                  <p className="text-sm text-zinc-400">{projection.rawJsonNote}</p>
-                ) : null}
-                <RawJsonPanel
-                  value={projection.sourceReport}
-                  title={projection.rawJsonTitle}
-                  downloadName={`report-${session.id}.json`}
-                />
-              </div>
-            </details>
-          ) : null}
+          {rawJsonDisclosure}
         </div>
       ) : null}
+      {projection.status === "malformed" ? rawJsonDisclosure : null}
     </div>
   );
 }

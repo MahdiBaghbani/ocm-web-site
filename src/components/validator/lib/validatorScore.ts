@@ -7,7 +7,6 @@ import { isRecord } from "./validatorShared";
 import { isTerminalState, type TerminalState } from "./stateMachine";
 
 export type SpecificationGrade = "pass" | "warn" | "fail";
-
 export interface SpecificationAreaScore {
   area: string;
   grade: SpecificationGrade | null;
@@ -22,7 +21,6 @@ export interface SpecificationAreaScore {
   requiredEvidenceCount: number;
   optionalEvidenceCount: number;
 }
-
 export interface SpecificationScore {
   grade: SpecificationGrade | null;
   state: string;
@@ -31,12 +29,10 @@ export interface SpecificationScore {
   totalAreas: number;
   areas: SpecificationAreaScore[];
 }
-
 export type ParsedSpecificationScore =
   | { status: "complete"; score: SpecificationScore }
   | { status: "partial"; score: SpecificationScore; invalidAreaRows: number[] }
   | { status: "unusable" };
-
 export const CANONICAL_AREA_IDS = [
   "discovery",
   "tls",
@@ -47,22 +43,18 @@ export const CANONICAL_AREA_IDS = [
   "token",
   "capability",
 ] as const;
-
 export type CanonicalAreaId = (typeof CANONICAL_AREA_IDS)[number];
-
 export const CANONICAL_AREA_LABELS = {
-  discovery: "Discovery",
-  tls: "TLS",
-  jwks: "JWKS",
-  httpsig: "HTTPSig",
-  sharing: "Sharing",
-  notification: "Notification",
-  token: "Token",
-  capability: "Capability",
+  discovery: "Server discovery",
+  tls: "Secure connection",
+  jwks: "Signing keys",
+  httpsig: "Request signing",
+  sharing: "Share exchange",
+  notification: "Notifications",
+  token: "Access tokens",
+  capability: "Capabilities",
 } as const satisfies Record<CanonicalAreaId, string>;
-
 export const CANONICAL_AREA_TOTAL = CANONICAL_AREA_IDS.length;
-
 export const RESULT_HEADLINE = {
   compatible: "Compatible",
   compatibleWithWarnings: "Compatible with warnings",
@@ -71,12 +63,10 @@ export const RESULT_HEADLINE = {
   noCompatibilityResult: "No compatibility result",
   resultUnavailable: "Result unavailable",
 } as const;
-
 export const AREA_RESULT_PILL = {
   notTested: "Not tested",
   notReported: "Not reported",
 } as const;
-
 export type ValidatorScoreOutcomeKind =
   | "compatible"
   | "compatible_with_warnings"
@@ -84,7 +74,6 @@ export type ValidatorScoreOutcomeKind =
   | "scan_interrupted"
   | "inconclusive"
   | "result_unavailable";
-
 export interface SpecificationAreaGridEntry {
   area: CanonicalAreaId;
   label: string;
@@ -93,7 +82,6 @@ export interface SpecificationAreaGridEntry {
   description?: string;
   pillLabel?: string;
 }
-
 export interface ValidatorScoreProjection {
   outcome: ValidatorScoreOutcomeKind;
   headline: string;
@@ -107,7 +95,6 @@ export interface ValidatorScoreProjection {
   failModeLabel?: string;
   areas: SpecificationAreaGridEntry[];
 }
-
 export interface ProjectValidatorScoreInput {
   pollState?: string | null;
   specification?: unknown;
@@ -118,7 +105,6 @@ export interface ProjectValidatorScoreInput {
 }
 
 const CANONICAL_AREA_SET: ReadonlySet<string> = new Set(CANONICAL_AREA_IDS);
-
 const TEST_COUNT_KEYS = [
   "testRunCount",
   "distinctTestCount",
@@ -128,7 +114,6 @@ const TEST_COUNT_KEYS = [
   "failedTestCount",
   "passWithWarningCount",
 ] as const;
-
 const EVIDENCE_COUNT_KEYS = [
   "evidenceCount",
   "requiredEvidenceCount",
@@ -138,7 +123,6 @@ const EVIDENCE_COUNT_KEYS = [
 export function isCanonicalAreaId(value: string): value is CanonicalAreaId {
   return CANONICAL_AREA_SET.has(value);
 }
-
 export function isUsableSpecificationScore(
   parsed: ParsedSpecificationScore,
 ): parsed is Exclude<ParsedSpecificationScore, { status: "unusable" }> {
@@ -158,14 +142,12 @@ export function specificationFromReport(report: unknown): unknown {
   }
   return undefined;
 }
-
 function parseCount(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
     return null;
   }
   return value >= 0 ? value : null;
 }
-
 function parseGradeField(
   row: Record<string, unknown>,
 ): { ok: true; grade: SpecificationGrade | null } | { ok: false } {
@@ -181,7 +163,6 @@ function parseGradeField(
   }
   return { ok: false };
 }
-
 function parseCoreCountField(
   row: Record<string, unknown>,
   key: string,
@@ -194,7 +175,6 @@ function parseCoreCountField(
   const count = parseCount(row[key]);
   return count === null ? null : { count, partial: false };
 }
-
 function parseEvidenceCountField(
   row: Record<string, unknown>,
   key: string,
@@ -205,7 +185,6 @@ function parseEvidenceCountField(
   const count = parseCount(row[key]);
   return count === null ? { count: 0, partial: true } : { count, partial: false };
 }
-
 function parseAreaRow(
   value: unknown,
 ):
@@ -306,10 +285,8 @@ export function foldOverallSpecificationGrade(
 ): SpecificationGrade | null {
   if (state === "terminal_fail") return "fail";
   if (state !== "terminal_pass") return null;
-
   let assessed = false;
   let warning = false;
-
   for (const area of areas) {
     if (area.grade === "fail") return "fail";
     if (area.grade === "warn") {
@@ -319,7 +296,6 @@ export function foldOverallSpecificationGrade(
       assessed = true;
     }
   }
-
   if (!assessed) return null;
   return warning ? "warn" : "pass";
 }

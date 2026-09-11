@@ -31,6 +31,10 @@ export const ENTRY_LOADING_OPTION = "Loading option...";
 export const ENTRY_STARTING = "Starting check...";
 export const ENTRY_MANIFEST_UNAVAILABLE =
   "Extra scan options are unavailable. You can still run a basic check.";
+export const ENTRY_DOMAIN_HELPER =
+  "Enter a domain such as cloud.example.com. A full http or https URL also works.";
+export const ENTRY_ACTIVE_UNAVAILABLE =
+  "Active validation is not available on this validator.";
 
 export interface ValidatorShellProps {
   resultsHref?: string;
@@ -53,6 +57,7 @@ export interface ValidatorEntryFormProps {
   hostError: string;
   formError: string;
   previewHost: string | null;
+  onTargetBlur?: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   inputRef?: React.Ref<HTMLInputElement>;
 }
@@ -149,6 +154,7 @@ export function ValidatorEntryForm({
   hostError,
   formError,
   previewHost,
+  onTargetBlur,
   onSubmit,
   inputRef,
 }: ValidatorEntryFormProps): React.ReactElement {
@@ -158,7 +164,11 @@ export function ValidatorEntryForm({
     : configReady
       ? ENTRY_SUBMIT_LABEL
       : ENTRY_LOADING_VALIDATOR;
-  const activeStatus = manifestLoading ? ENTRY_LOADING_OPTION : undefined;
+  const activeStatus = manifestLoading
+    ? ENTRY_LOADING_OPTION
+    : !manifestFailed && !activeAvailable
+      ? ENTRY_ACTIVE_UNAVAILABLE
+      : undefined;
 
   return (
     <form
@@ -169,15 +179,18 @@ export function ValidatorEntryForm({
         <h2 className="text-lg font-semibold text-zinc-100">{ENTRY_HEADING}</h2>
         <p className="text-sm text-zinc-400">{ENTRY_INSTRUCTION}</p>
       </div>
-      <DomainField
-        ref={inputRef}
-        value={target}
-        placeholder="peer.example.com"
-        disabled={submitting}
-        error={hostError === "" ? undefined : hostError}
-        previewId={previewHost === null ? undefined : HOST_PREVIEW_ID}
-        onChange={onTargetChange}
-      />
+      <div onBlur={onTargetBlur}>
+        <DomainField
+          ref={inputRef}
+          value={target}
+          placeholder="peer.example.com"
+          disabled={submitting}
+          error={hostError === "" ? undefined : hostError}
+          helperText={ENTRY_DOMAIN_HELPER}
+          previewId={previewHost === null ? undefined : HOST_PREVIEW_ID}
+          onChange={onTargetChange}
+        />
+      </div>
       {previewHost !== null ? (
         <p id={HOST_PREVIEW_ID} className="text-sm text-zinc-400">
           Server to check: {previewHost}
@@ -188,7 +201,7 @@ export function ValidatorEntryForm({
         <OptInRow
           id="validator-opt-in-permanent"
           label="Save a public report"
-          hint="Anyone with the link can view it. The retention policy applies."
+          hint="Saves the result after this session so anyone with the link can view it. The validator retention policy applies."
           checked={optInPermanent}
           disabled={submitting}
           onChange={onOptInPermanentChange}
@@ -196,7 +209,7 @@ export function ValidatorEntryForm({
         <OptInRow
           id="validator-opt-in-active"
           label="Run active validation"
-          hint="Tests live sharing steps and may ask you to complete actions."
+          hint="Tests live sharing steps and may ask you to complete actions during the scan. Off runs passive checks only."
           checked={optInActive}
           disabled={activeDisabled}
           statusText={activeStatus}
@@ -205,7 +218,7 @@ export function ValidatorEntryForm({
         <OptInRow
           id="validator-opt-in-stats"
           label="Contribute to public statistics"
-          hint="Adds aggregate data after privacy thresholds. No public server report."
+          hint="Adds aggregate data after privacy thresholds are met. It does not create a public report for this server."
           checked={optInStats}
           disabled={submitting}
           onChange={onOptInStatsChange}
@@ -223,7 +236,7 @@ export function ValidatorEntryForm({
         <button
           type="submit"
           disabled={submitting || !configReady}
-          className="min-h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+          className="w-full min-h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
         >
           {submitLabel}
         </button>
@@ -245,10 +258,9 @@ export default function ValidatorShell({
   const [hostError, setHostError] = useState("");
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [previewHost, setPreviewHost] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const canUseActive = activeOptInAvailable(manifest);
-  const interpreted = interpretHostInput(target);
-  const previewHost = interpreted.ok ? interpreted.host : null;
   const manifestLoading = config !== null && manifest === null && !manifestFailed;
 
   useEffect(() => {
@@ -338,6 +350,10 @@ export default function ValidatorShell({
       formError={formError}
       previewHost={previewHost}
       inputRef={inputRef}
+      onTargetBlur={() => {
+        const interpreted = interpretHostInput(target);
+        setPreviewHost(interpreted.ok ? interpreted.host : null);
+      }}
       onSubmit={(event) => {
         void handleSubmit(event);
       }}

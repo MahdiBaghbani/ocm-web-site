@@ -51,10 +51,10 @@ describe("stateMachine contract tables", () => {
     ]);
     expect(USER_STEP_LABELS).toEqual({
       probe: "Check server",
-      queue_or_rest: "Check capabilities",
-      invite: "Invite",
-      reverse: "Reverse",
-      share: "Share",
+      queue_or_rest: "Continue or finish",
+      invite: "Create invitation",
+      reverse: "Accept return invitation",
+      share: "Test sharing",
       result: "Prepare result",
     });
   });
