@@ -128,6 +128,26 @@ describe("ValidatorShell entry form", () => {
     expect(html).toContain("Starting check...");
     expect(html).not.toContain("Loading validator...");
   });
+
+  test("always mounts the reserved preview node and wires aria-describedby when empty", () => {
+    const html = render(<ValidatorShell />);
+    expect(html).toContain('id="validator-host-preview"');
+    expect(html).toContain('aria-describedby="validator-domain-help validator-host-preview"');
+    expect(html).not.toContain("Server to check:");
+  });
+
+  test("reserved preview node stays empty when there is no host", () => {
+    const html = render(<ValidatorEntryForm {...readyForm} />);
+    expect(html).toContain('id="validator-host-preview"');
+    expect(html).not.toContain("Server to check:");
+  });
+
+  test("reserved preview node renders the host when populated", () => {
+    const html = render(<ValidatorEntryForm {...readyForm} previewHost="peer.example.com" />);
+    expect(html).toContain('id="validator-host-preview"');
+    expect(html).toContain('aria-describedby="validator-domain-help validator-host-preview"');
+    expect(html).toContain("Server to check: peer.example.com");
+  });
 });
 
 const ELEMENT_NODE = 1;
@@ -689,6 +709,87 @@ describe("ValidatorShell start rejection", () => {
       expect(submit.disabled).toBe(false);
       expect(container.textContent).toContain("Check this server");
       expect(container.textContent).not.toContain("Starting check...");
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      globalThis.fetch = previousFetch;
+      restore();
+    }
+  });
+});
+
+describe("ValidatorShell reserved preview", () => {
+  test("blur populates the reserved node and immediate submit still starts the scan", async () => {
+    const previousFetch = globalThis.fetch;
+    let startCalled = false;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestUrl(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+        });
+      }
+      if (url.includes("/api/manifest")) {
+        return jsonResponse(404, { error: "missing", message: "missing" });
+      }
+      if (method === "POST" && url.includes("/start")) {
+        startCalled = true;
+        return jsonResponse(200, { id: "scan-1", optInStats: false, optInPermanent: false });
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+
+    const { document: doc, restore } = installDomShim();
+    let assigned = "";
+    if (doc.defaultView !== null) {
+      doc.defaultView.location.assign = (href: string): void => {
+        assigned = href;
+      };
+    }
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ValidatorShell />);
+      });
+      await waitForText(container, "Check this server");
+
+      const reservedBefore = findById(container, "validator-host-preview");
+      expect(reservedBefore.textContent).toBe("");
+
+      const host = findById(container, "validator-domain");
+      await act(() => {
+        driveText(host, "peer.example");
+      });
+      await act(() => {
+        host.dispatchEvent(new ShimEvent("focusout"));
+      });
+
+      const reservedAfter = findById(container, "validator-host-preview");
+      expect(reservedAfter.textContent).toContain("Server to check: peer.example");
+
+      const form = findByTag(container, "form");
+      await act(() => {
+        form.dispatchEvent(new ShimEvent("submit"));
+      });
+      const deadline = Date.now() + 2000;
+      while (!startCalled && Date.now() < deadline) {
+        await act(async () => {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 5);
+          });
+        });
+      }
+      expect(startCalled).toBe(true);
+      expect(assigned).toContain("/validator/results");
       await act(() => {
         root.unmount();
       });
