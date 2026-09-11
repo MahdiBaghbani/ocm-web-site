@@ -309,9 +309,7 @@ export default function ValidatorShell({
     }, requestDeps(config));
     if (!result.ok) {
       setSubmitting(false);
-      if (result.message.trim() !== "") {
-        setFormError(result.message);
-      }
+      setFormError(result.message.trim() !== "" ? result.message : "Could not start the scan.");
       return;
     }
     const serialized = serializeValidatorUrlState(

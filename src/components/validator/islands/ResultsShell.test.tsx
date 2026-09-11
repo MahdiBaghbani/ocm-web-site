@@ -6,6 +6,7 @@ import ResultsShell, {
   AREA_DESCRIPTIONS,
   CACHED_SESSION_JSON_NOTE,
   EVIDENCE_NOT_SAVED,
+  TEST_HREF,
   VISIBILITY_NOTICE,
   areaTotals,
   bannerBody,
@@ -983,6 +984,61 @@ describe("ResultsShell interrupted ready recovery", () => {
       expect(container.textContent).not.toContain("Copy public report link");
       const recovery = findByExactText(container, "a", "Run a new check");
       expect(recovery.getAttribute("href")).toBe("/validator/");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+});
+
+describe("ResultsShell testHref", () => {
+  test("defaults recovery links to TEST_HREF and honors a custom testHref", async () => {
+    const customHref = "/ocm/validator/";
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+
+      await act(() => {
+        root.render(<ResultsShell />);
+      });
+      await waitForText(container, "Back to Test");
+      const defaultBack = findByExactText(container, "a", "Back to Test");
+      expect(defaultBack.getAttribute("href")).toBe(TEST_HREF);
+
+      await act(() => {
+        root.render(<ResultsShell testHref={customHref} />);
+      });
+      await waitForText(container, "Back to Test");
+      const customBack = findByExactText(container, "a", "Back to Test");
+      expect(customBack.getAttribute("href")).toBe(customHref);
+      await act(() => { root.unmount(); });
+    } finally {
+      restore();
+    }
+  });
+
+  test("uses a custom testHref on Run a new check", async () => {
+    const customHref = "/ocm/validator/";
+    const restoreFetch = installInterruptedReportFetch();
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(
+          <ResultsShell host="peer.example" id={SESSION_ID} testHref={customHref} />,
+        );
+      });
+      await waitForText(container, "Run a new check");
+      const recovery = findByExactText(container, "a", "Run a new check");
+      expect(recovery.getAttribute("href")).toBe(customHref);
+      expect(recovery.getAttribute("href")).not.toBe(TEST_HREF);
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();

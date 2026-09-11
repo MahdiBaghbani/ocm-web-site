@@ -636,4 +636,65 @@ describe("ValidatorShell start rejection", () => {
       restore();
     }
   });
+
+  test("submit surfaces a fallback when the start API returns an empty message", async () => {
+    const fallbackMessage = "Could not start the scan.";
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestUrl(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+        });
+      }
+      if (url.includes("/api/manifest")) {
+        return jsonResponse(404, { error: "missing", message: "missing" });
+      }
+      if (method === "POST" && url.includes("/start")) {
+        return jsonResponse(503, { error: "start_failed", message: "" });
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ValidatorShell />);
+      });
+      await waitForText(container, "Check this server");
+
+      const host = findById(container, "validator-domain");
+      await act(() => {
+        driveText(host, "peer.example");
+      });
+
+      const form = findByTag(container, "form");
+      await act(() => {
+        form.dispatchEvent(new ShimEvent("submit"));
+      });
+      await waitForText(container, fallbackMessage);
+
+      const alert = findAlert(container);
+      expect(alert.textContent).toContain(fallbackMessage);
+      const submit = findSubmit(container);
+      expect(submit.disabled).toBe(false);
+      expect(container.textContent).toContain("Check this server");
+      expect(container.textContent).not.toContain("Starting check...");
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      globalThis.fetch = previousFetch;
+      restore();
+    }
+  });
 });

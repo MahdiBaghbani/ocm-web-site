@@ -114,7 +114,7 @@ export default function VerdictBanner({
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
           <span
-            className={`mt-0.5 w-3 shrink-0 font-mono text-sm ${text}`}
+            className={`mt-0.5 w-6 shrink-0 font-mono text-sm ${text}`}
             aria-hidden="true"
           >
             {GLYPH[verdict]}

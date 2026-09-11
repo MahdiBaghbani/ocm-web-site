@@ -156,6 +156,16 @@ describe("VerdictBanner", () => {
     expect(countAttr(html, "Compatible")).toBe(1);
     expect(firstPillLabel(html)).toBe("pass");
   });
+
+  test("running glyph stays ASCII ellipsis in a wider icon span", () => {
+    const running = render(<VerdictBanner verdict="running" />);
+    const pass = render(<VerdictBanner verdict="pass" />);
+    expect(running).toContain("...");
+    expect(running).toContain("w-6");
+    expect(running).not.toContain("w-3");
+    expect(pass).toContain(">v<");
+    expect(pass).toContain("w-6");
+  });
 });
 describe("StepRow", () => {
   test("renders pending, current, and complete statuses", () => {

@@ -53,6 +53,7 @@ import {
 export interface ResultsShellProps {
   host?: string;
   id?: string;
+  testHref?: string;
 }
 
 export const TEST_HREF = "/validator/";
@@ -455,17 +456,17 @@ export function projectResultsPage(input: {
   };
 }
 
-function BackToTest(): React.ReactElement {
+function BackToTest({ href }: { href: string }): React.ReactElement {
   return (
-    <a href={TEST_HREF} className={`${ACTION_BTN} text-zinc-200`}>
+    <a href={href} className={`${ACTION_BTN} text-zinc-200`}>
       Back to Test
     </a>
   );
 }
 
-function RunNewCheck(): React.ReactElement {
+function RunNewCheck({ href }: { href: string }): React.ReactElement {
   return (
-    <a href={TEST_HREF} className={ACTION_BTN}>
+    <a href={href} className={ACTION_BTN}>
       Run a new check
     </a>
   );
@@ -502,6 +503,7 @@ async function copyText(value: string): Promise<boolean> {
 export default function ResultsShell({
   host,
   id,
+  testHref = TEST_HREF,
 }: ResultsShellProps): React.ReactElement {
   const [session, setSession] = useState<ValidatorUrlState | null>(() =>
     sessionFromProps(host, id),
@@ -625,7 +627,7 @@ export default function ResultsShell({
     }
     return (
       <div className="space-y-4">
-        <BackToTest />
+        <BackToTest href={testHref} />
         <p className="text-sm text-rose-200" role="alert">
           {sessionLinkErrorMessage()}
         </p>
@@ -702,7 +704,7 @@ export default function ResultsShell({
           </p>
           <div className="flex flex-wrap gap-2">
             <ReloadButton label="Try again" />
-            <RunNewCheck />
+            <RunNewCheck href={testHref} />
           </div>
         </div>
       ) : null}
@@ -736,7 +738,7 @@ export default function ResultsShell({
             The session finished without a saved public report, and result details
             are not available from this link.
           </p>
-          <RunNewCheck />
+          <RunNewCheck href={testHref} />
         </div>
       ) : null}
       {projection.status === "malformed" ? (
@@ -748,7 +750,7 @@ export default function ResultsShell({
           </p>
           <div className="flex flex-wrap gap-2">
             <ReloadButton label="Try loading again" />
-            <RunNewCheck />
+            <RunNewCheck href={testHref} />
           </div>
         </div>
       ) : null}
@@ -756,7 +758,7 @@ export default function ResultsShell({
         <div className="space-y-3">
           <p className="text-sm text-zinc-300">{VISIBILITY_NOTICE.expired}</p>
           <p className="text-sm text-zinc-400">{EVIDENCE_EXPIRED}</p>
-          <RunNewCheck />
+          <RunNewCheck href={testHref} />
         </div>
       ) : null}
       {projection.status === "report_error" ? (
@@ -769,7 +771,7 @@ export default function ResultsShell({
           </p>
           <div className="flex flex-wrap gap-2">
             <ReloadButton label="Try loading again" />
-            <RunNewCheck />
+            <RunNewCheck href={testHref} />
           </div>
         </div>
       ) : null}
@@ -819,7 +821,7 @@ export default function ResultsShell({
         </div>
       ) : null}
       {projection.bannerVerdict === "interrupted" ? (
-        <div className="flex flex-wrap gap-2"><RunNewCheck /></div>
+        <div className="flex flex-wrap gap-2"><RunNewCheck href={testHref} /></div>
       ) : null}
       {projection.status === "ready" || projection.status === "live" ? (
         <div className="space-y-4">
