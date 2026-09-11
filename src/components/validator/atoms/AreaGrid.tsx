@@ -1,5 +1,6 @@
 /**
- * Canonical compatibility areas as zinc tiles with grade pills and pass rates.
+ * Canonical compatibility areas as zinc tiles.
+ * Statistics keep pass-rate SummaryCards; results uses a separate article card.
  */
 import React from "react";
 import SummaryCard from "../../observatory/ui/SummaryCard";
@@ -32,6 +33,8 @@ export interface AreaGridEntry {
 
 export interface AreaGridProps {
   areas?: readonly AreaGridEntry[];
+  variant?: "statistics" | "results";
+  onAreaClick?: (areaId: ValidatorAreaId) => void;
 }
 
 function countOf(value: number | undefined): number {
@@ -96,6 +99,14 @@ function areaLabel(entry: ResolvedAreaEntry): string {
   return VALIDATOR_AREA_LABELS[entry.area];
 }
 
+function areaPill(entry: ResolvedAreaEntry): React.ReactElement {
+  const grade = foldGrade(entry);
+  if (entry.pillLabel !== undefined) {
+    return <Pill kind={pillKindFor(grade)} label={entry.pillLabel} />;
+  }
+  return <Pill kind={pillKindFor(grade)} />;
+}
+
 function formatRate(rate: number): string {
   return `${Math.round(rate * 100)}%`;
 }
@@ -132,8 +143,7 @@ function evidenceCaption(count: number | undefined): string {
   return evidenceCountLabel(count);
 }
 
-export default function AreaGrid({ areas }: AreaGridProps): React.ReactElement {
-  const entries = resolveEntries(areas);
+function renderStatisticsGrid(entries: ResolvedAreaEntry[]): React.ReactElement {
   let assessed = 0;
   for (const entry of entries) {
     if (foldGrade(entry) !== null || passRateOf(entry) !== null) {
@@ -145,20 +155,13 @@ export default function AreaGrid({ areas }: AreaGridProps): React.ReactElement {
     <div className="space-y-3">
       <div className="grid gap-4 md:grid-cols-2">
         {entries.map((entry) => {
-          const grade = foldGrade(entry);
           const rate = passRateOf(entry);
           const rateLabel = rate === null ? "-" : formatRate(rate);
-          const pill =
-            entry.pillLabel !== undefined ? (
-              <Pill kind={pillKindFor(grade)} label={entry.pillLabel} />
-            ) : (
-              <Pill kind={pillKindFor(grade)} />
-            );
           return (
             <SummaryCard
               key={entry.area}
               title={areaLabel(entry)}
-              badge={pill}
+              badge={areaPill(entry)}
               padding="sm"
             >
               {entry.description !== undefined && entry.description !== "" ? (
@@ -177,4 +180,59 @@ export default function AreaGrid({ areas }: AreaGridProps): React.ReactElement {
       </p>
     </div>
   );
+}
+
+function renderResultsGrid(
+  entries: ResolvedAreaEntry[],
+  onAreaClick: ((areaId: ValidatorAreaId) => void) | undefined,
+): React.ReactElement {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {entries.map((entry) => {
+        const evidenceCount = countOf(entry.evidenceCount);
+        const label = areaLabel(entry);
+        const selectArea = onAreaClick;
+        return (
+          <article
+            key={entry.area}
+            data-area-card={entry.area}
+            className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-900/30 p-3"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-zinc-100">{label}</h3>
+              {areaPill(entry)}
+            </div>
+            {entry.description !== undefined && entry.description !== "" ? (
+              <p className="mb-2 text-sm font-medium text-zinc-200">{entry.description}</p>
+            ) : null}
+            <div className="mt-1 text-xs text-zinc-400">
+              {evidenceCountLabel(evidenceCount)}
+            </div>
+            {selectArea !== undefined && evidenceCount > 0 ? (
+              <button
+                type="button"
+                className="mt-3 w-full min-h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+                aria-label={`View details for ${label}`}
+                onClick={() => selectArea(entry.area)}
+              >
+                View details
+              </button>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function AreaGrid({
+  areas,
+  variant = "statistics",
+  onAreaClick,
+}: AreaGridProps): React.ReactElement {
+  const entries = resolveEntries(areas);
+  if (variant === "results") {
+    return renderResultsGrid(entries, onAreaClick);
+  }
+  return renderStatisticsGrid(entries);
 }
