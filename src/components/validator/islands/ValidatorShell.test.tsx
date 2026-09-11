@@ -83,6 +83,13 @@ describe("ValidatorShell entry form", () => {
     expect(html).toContain("min-h-11");
   });
 
+  test("renders the manifest k in the stats opt-in hint", () => {
+    const html = render(<ValidatorEntryForm {...readyForm} kAnonymityUniqueHosts={7} />);
+    expect(html).toContain("Contribute to public statistics");
+    expect(html).toContain("at least 7 unique hosts");
+    expect(html).not.toContain("enough unique hosts");
+  });
+
   test("keeps an unavailable active row visible and disabled", () => {
     const html = render(
       <ValidatorEntryForm

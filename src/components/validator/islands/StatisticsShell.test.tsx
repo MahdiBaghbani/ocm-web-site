@@ -36,6 +36,9 @@ describe("StatisticsShell selector", () => {
     expect(optionValues(html)).toEqual(STATISTICS_TIMEFRAME_DAYS.map(String));
     expect(html).toContain('id="validator-stats-days"');
     expect(html).toContain("Loading statistics...");
+    expect(html).not.toContain("Why are these zero?");
+    expect(html).not.toContain("enough unique hosts");
+    expect(html).not.toContain("No platform counts.");
   });
 
   test("SSR honors a numeric initialDays token", () => {
