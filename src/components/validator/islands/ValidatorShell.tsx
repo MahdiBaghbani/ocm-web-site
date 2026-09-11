@@ -18,6 +18,7 @@ import {
 import { OPT_IN_MANIFEST_PATH } from "../lib/stateMachine";
 import { interpretHostInput, serializeValidatorUrlState } from "../lib/urlState";
 import { isRecord } from "../lib/validatorShared";
+import { statisticsOptInHint } from "../lib/validatorStatistics";
 
 const DEFAULT_RESULTS_HREF = "/validator/results";
 const HOST_PREVIEW_ID = "validator-host-preview";
@@ -57,6 +58,7 @@ export interface ValidatorEntryFormProps {
   hostError: string;
   formError: string;
   previewHost: string | null;
+  kAnonymityUniqueHosts?: number;
   onTargetBlur?: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   inputRef?: React.Ref<HTMLInputElement>;
@@ -154,6 +156,7 @@ export function ValidatorEntryForm({
   hostError,
   formError,
   previewHost,
+  kAnonymityUniqueHosts,
   onTargetBlur,
   onSubmit,
   inputRef,
@@ -221,7 +224,7 @@ export function ValidatorEntryForm({
         <OptInRow
           id="validator-opt-in-stats"
           label="Contribute to public statistics"
-          hint="Adds aggregate data after privacy thresholds are met. It does not create a public report for this server."
+          hint={statisticsOptInHint(kAnonymityUniqueHosts)}
           checked={optInStats}
           disabled={submitting}
           onChange={onOptInStatsChange}
@@ -350,6 +353,7 @@ export default function ValidatorShell({
       hostError={hostError}
       formError={formError}
       previewHost={previewHost}
+      kAnonymityUniqueHosts={manifest?.statistics.kAnonymityUniqueHosts}
       inputRef={inputRef}
       onTargetBlur={() => {
         const interpreted = interpretHostInput(target);

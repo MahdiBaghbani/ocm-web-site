@@ -66,7 +66,7 @@ describe("ValidatorShell entry form", () => {
       "Tests live sharing steps and may ask you to complete actions during the scan. Off runs passive checks only.",
     );
     expect(html).toContain("Contribute to public statistics");
-    expect(html).toContain("Adds aggregate data after privacy thresholds are met. It does not create a public report for this server.");
+    expect(html).toContain("Adds aggregate data after enough unique hosts are in the public window. It does not create a public report for this server.");
     expect(html).toContain("<fieldset");
     expect(html).toContain("<legend");
     expect(html).toContain("Optional settings");
