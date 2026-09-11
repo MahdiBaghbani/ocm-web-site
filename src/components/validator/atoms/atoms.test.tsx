@@ -33,7 +33,7 @@ function countChipsInFileViewerPanel(html: string): number {
 
 function pillLabels(html: string): string[] {
   const pillLabelRe =
-    /<span class="h-2 w-2 shrink-0 rounded-full [^"]*" aria-hidden="true"><\/span>([^<]*)<\/span>/g;
+    /data-pill-kind="[^"]*"[^>]*><span[^>]*aria-hidden="true"><\/span>([^<]*)<\/span>/g;
   return [...html.matchAll(pillLabelRe)].map((match) => match[1]);
 }
 
@@ -202,9 +202,13 @@ describe("Pill", () => {
       notrun: "not-run",
     } as const;
     for (const kind of PILL_KINDS) {
-      expect(firstPillLabel(render(<Pill kind={kind} />))).toBe(expected[kind]);
+      const html = render(<Pill kind={kind} />);
+      expect(html).toContain(`data-pill-kind="${kind}"`);
+      expect(firstPillLabel(html)).toBe(expected[kind]);
     }
-    expect(firstPillLabel(render(<Pill kind="unassessed" label="idle" />))).toBe("idle");
+    const custom = render(<Pill kind="unassessed" label="idle" />);
+    expect(custom).toContain('data-pill-kind="unassessed"');
+    expect(firstPillLabel(custom)).toBe("idle");
   });
 });
 describe("AreaGrid", () => {
