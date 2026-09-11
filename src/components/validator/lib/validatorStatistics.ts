@@ -299,6 +299,8 @@ function statisticsThresholdPhrase(k: number | undefined): string {
     : `enough unique hosts`;
 }
 
+export const STATISTICS_WHY_LABEL = "Why are these zero?";
+
 /** Short footnote copy for the statistics window. Uses the raw manifest k. */
 export function statisticsShortFootnote(k: number | undefined): string {
   return typeof k === "number" && Number.isFinite(k) && k > 0
