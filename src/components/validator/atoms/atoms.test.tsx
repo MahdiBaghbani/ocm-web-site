@@ -1,5 +1,13 @@
 import React, { act } from "react";
 import { describe, expect, test } from "bun:test";
+import {
+  CircleCheck,
+  CircleStop,
+  CircleX,
+  Info,
+  LoaderCircle,
+  TriangleAlert,
+} from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
@@ -13,7 +21,16 @@ import DomainField from "./DomainField";
 import Pill, { PILL_KINDS } from "./Pill";
 import RawJsonPanel from "./RawJsonPanel";
 import StepRow from "./StepRow";
-import VerdictBanner, { verdictKindFromScore } from "./VerdictBanner";
+import VerdictBanner, { VERDICT_KINDS, verdictKindFromScore } from "./VerdictBanner";
+
+const VERDICT_LUCIDE_ICONS = {
+  pass: CircleCheck,
+  fail: CircleX,
+  warn: TriangleAlert,
+  running: LoaderCircle,
+  interrupted: CircleStop,
+  inconclusive: Info,
+} as const;
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);
@@ -40,6 +57,22 @@ function pillLabels(html: string): string[] {
 function firstPillLabel(html: string): string | null {
   const labels = pillLabels(html);
   return labels.length === 0 ? null : labels[0];
+}
+
+function iconSlotMarkup(html: string): string {
+  const match = /data-icon="[^"]+"[^>]*>([\s\S]*?)<\/span>/.exec(html);
+  if (match === null) {
+    throw new Error("missing data-icon slot");
+  }
+  return match[1];
+}
+
+function svgInnerMarkup(html: string): string {
+  const match = /<svg[^>]*>([\s\S]*?)<\/svg>/.exec(html);
+  if (match === null) {
+    throw new Error("missing svg");
+  }
+  return match[1];
 }
 
 function areaCardHtml(html: string, title: string): string {
@@ -342,10 +375,12 @@ describe("VerdictBanner", () => {
     expect(verdictKindFromScore({ grade: "fail", state: "passive_running" })).toBe("fail");
   });
 
-  test("renders inconclusive as neutral gray with an ASCII i glyph, not green", () => {
+  test("renders inconclusive as neutral gray with an Info icon, not green", () => {
     const html = render(<VerdictBanner verdict="inconclusive" />);
     expect(html).toContain("No compatibility result");
-    expect(html).toContain(">i<");
+    expect(html).toContain('data-icon="inconclusive"');
+    expect(html).toContain("<svg");
+    expect(html).not.toContain(">i<");
     expect(html).toContain("border-zinc-800");
     expect(html).toContain("bg-zinc-900/20");
     expect(html).not.toContain("emerald");
@@ -353,13 +388,26 @@ describe("VerdictBanner", () => {
     expect(firstPillLabel(html)).toBe("unassessed");
   });
 
-  test("uses only ASCII glyphs and copy", () => {
-    const kinds = ["pass", "fail", "warn", "running", "interrupted", "inconclusive"] as const;
-    for (const kind of kinds) {
+  test("renders a lucide icon for each verdict kind", () => {
+    const refInners = VERDICT_KINDS.map((kind) => {
+      const Icon = VERDICT_LUCIDE_ICONS[kind];
+      return svgInnerMarkup(render(<Icon size={20} />));
+    });
+    expect(new Set(refInners).size).toBe(VERDICT_KINDS.length);
+    for (const kind of VERDICT_KINDS) {
+      const Icon = VERDICT_LUCIDE_ICONS[kind];
+      const refInner = svgInnerMarkup(render(<Icon size={20} />));
       const html = render(<VerdictBanner verdict={kind} />);
-      expect(hasNonAscii(html)).toBe(false);
+      expect(html).toContain(`data-icon="${kind}"`);
+      expect(html).toContain("<svg");
+      expect(html).toContain(refInner);
+      expect(svgInnerMarkup(html)).toBe(refInner);
+      expect(html).not.toContain(">v<");
+      expect(html).not.toContain(">x<");
+      expect(html).not.toContain(">!<");
+      expect(html).not.toContain("...");
+      expect(html).not.toContain(">i<");
     }
-    expect(verdictKindFromScore({ grade: "pass", state: "terminal_pass" })).toBe("pass");
   });
 
   test("shows heading once and pill as a status indicator", () => {
@@ -368,14 +416,27 @@ describe("VerdictBanner", () => {
     expect(firstPillLabel(html)).toBe("pass");
   });
 
-  test("running glyph stays ASCII ellipsis in a wider icon span", () => {
+  test("running verdict renders a LoaderCircle icon", () => {
+    const refInner = svgInnerMarkup(render(<LoaderCircle size={20} />));
     const running = render(<VerdictBanner verdict="running" />);
-    const pass = render(<VerdictBanner verdict="pass" />);
-    expect(running).toContain("...");
-    expect(running).toContain("w-6");
-    expect(running).not.toContain("w-3");
-    expect(pass).toContain(">v<");
-    expect(pass).toContain("w-6");
+    expect(running).toContain('data-icon="running"');
+    expect(running).toContain("<svg");
+    expect(running).toContain(refInner);
+    expect(svgInnerMarkup(running)).toBe(refInner);
+    expect(running).not.toContain("...");
+    expect(running).not.toContain(">v<");
+  });
+
+  test("interrupted CircleStop and inconclusive Info render distinct icons", () => {
+    const interrupted = render(<VerdictBanner verdict="interrupted" />);
+    const inconclusive = render(<VerdictBanner verdict="inconclusive" />);
+    expect(interrupted).toContain('data-icon="interrupted"');
+    expect(inconclusive).toContain('data-icon="inconclusive"');
+    expect(interrupted).toContain("<svg");
+    expect(inconclusive).toContain("<svg");
+    expect(iconSlotMarkup(interrupted)).not.toBe(iconSlotMarkup(inconclusive));
+    expect(interrupted).not.toContain(">i<");
+    expect(inconclusive).not.toContain(">i<");
   });
 });
 describe("StepRow", () => {
