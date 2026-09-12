@@ -9,6 +9,7 @@ import {
   CANONICAL_AREA_LABELS,
   type CanonicalAreaId,
 } from "../lib/validatorScore";
+import { reasonCopyFor } from "../lib/validatorReasons";
 import Pill, { type GradeKind, type PillKind } from "./Pill";
 
 export const VALIDATOR_AREA_IDS = CANONICAL_AREA_IDS;
@@ -29,6 +30,8 @@ export interface AreaGridEntry {
   evidenceCount?: number;
   description?: string;
   pillLabel?: string;
+  /** Primary reason slug for the area; drives warn/fail card reason copy. */
+  reasonCode?: string;
 }
 
 export interface AreaGridProps {
@@ -192,6 +195,19 @@ function renderResultsGrid(
         const evidenceCount = countOf(entry.evidenceCount);
         const label = areaLabel(entry);
         const selectArea = onAreaClick;
+        const grade = foldGrade(entry);
+        // Warn and fail cards surface the primary resolved reason, but only
+        // when the entry carries a real reason code. Trim first so a
+        // whitespace-only code is treated as absent, and suppress the whole
+        // reason block rather than showing the missing-slug fallback.
+        const trimmedReasonCode =
+          entry.reasonCode !== undefined ? entry.reasonCode.trim() : undefined;
+        const hasReasonCode =
+          trimmedReasonCode !== undefined && trimmedReasonCode !== "";
+        const reason =
+          (grade === "warn" || grade === "fail") && hasReasonCode
+            ? reasonCopyFor({ reasonCode: trimmedReasonCode, grade, affectsGrade: true })
+            : null;
         return (
           <article
             key={entry.area}
@@ -204,6 +220,15 @@ function renderResultsGrid(
             </div>
             {entry.description !== undefined && entry.description !== "" ? (
               <p className="mb-2 text-sm font-medium text-zinc-200">{entry.description}</p>
+            ) : null}
+            {reason !== null ? (
+              <div className="mb-2 space-y-1" data-area-reason={entry.area}>
+                <p className="text-sm font-semibold text-zinc-100">{reason.title}</p>
+                <p className="text-xs text-zinc-400">{reason.why}</p>
+                {reason.remedy !== undefined && reason.remedy !== "" ? (
+                  <p className="text-xs text-zinc-400">{reason.remedy}</p>
+                ) : null}
+              </div>
             ) : null}
             <div className="mt-1 text-xs text-zinc-400">
               {evidenceCountLabel(evidenceCount)}

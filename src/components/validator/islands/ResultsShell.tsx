@@ -41,6 +41,7 @@ import {
 } from "../lib/urlState";
 import { isRecord } from "../lib/validatorShared";
 import {
+  isCanonicalAreaId,
   isUsableSpecificationScore,
   projectValidatorScore,
   specificationFromReport,
@@ -232,6 +233,27 @@ function evidenceItems(value: unknown): EvidenceItem[] {
   return items;
 }
 
+// Primary reason slug per canonical area. scoreArea wins over area, matching
+// AreaModal; the first evidence row with a non-empty reason code represents the
+// area, so warn and fail cards can explain the outcome.
+export function primaryReasonCodesByArea(
+  items: readonly EvidenceItem[],
+): Partial<Record<CanonicalAreaId, string>> {
+  const byArea: Partial<Record<CanonicalAreaId, string>> = {};
+  for (const item of items) {
+    const areaId = item.scoreArea ?? item.area;
+    if (areaId === undefined || !isCanonicalAreaId(areaId) || byArea[areaId] !== undefined) {
+      continue;
+    }
+    const code = typeof item.reasonCode === "string" ? item.reasonCode.trim() : "";
+    if (code === "") {
+      continue;
+    }
+    byArea[areaId] = code;
+  }
+  return byArea;
+}
+
 function visibleIndex(statuses: MachineView["statuses"], step: UserStep): number {
   let index = 0;
   for (const item of USER_STEPS) {
@@ -302,10 +324,10 @@ export function bannerBody(score: ValidatorScoreProjection): string {
   if (score.showFailModeLabel) {
     const label = score.failModeLabel;
     if (label !== undefined && label.trim() !== "") {
-      return `${label} Assessed ${score.coverageLabel} areas.`;
+      return label;
     }
   }
-  return `${DEFAULT_BANNER_BODY[score.outcome]} Assessed ${score.coverageLabel} areas.`;
+  return DEFAULT_BANNER_BODY[score.outcome];
 }
 
 export function progressAnnouncement(view: MachineView): string {
@@ -369,12 +391,14 @@ export function projectResultsPage(input: {
       : sourceReport !== null
         ? "cached_session"
         : "none";
+  const evidence = evidenceItems(sourceReport?.evidence);
   const score = projectValidatorScore({
     pollState: pollState === "" ? null : pollState,
     specification: specificationInputFromReport(sourceReport),
     reportOk: input.terminalReport !== null,
     failModeLabel: input.poll?.failModeLabel,
     descriptions: AREA_DESCRIPTIONS,
+    reasonCodes: primaryReasonCodesByArea(evidence),
   });
   const usable = isUsableSpecificationScore(score.parsed);
 
@@ -419,7 +443,6 @@ export function projectResultsPage(input: {
   }
 
   const showAreas = status === "ready" && usable;
-  const evidence = evidenceItems(sourceReport?.evidence);
   const live = status === "live";
   const bannerVerdict: VerdictKind | null = live
     ? "running"

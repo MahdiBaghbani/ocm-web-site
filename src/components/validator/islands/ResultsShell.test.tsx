@@ -376,6 +376,9 @@ describe("projectResultsPage private terminal completion", () => {
     expect(interrupted.bannerMessage).toContain("operator stopped");
     expect(pass.bannerMessage).not.toContain("should not appear");
     expect(pass.score.showFailModeLabel).toBe(false);
+    expect(failResult.bannerMessage).not.toContain("Assessed");
+    expect(interrupted.bannerMessage).not.toContain("Assessed");
+    expect(pass.bannerMessage).not.toContain("Assessed");
   });
 
   test("keeps poll state authoritative over cached score.state", () => {
@@ -436,6 +439,40 @@ describe("result area presentation helpers", () => {
     expect(totals.rest).toBe(0);
   });
 
+  test("result cards carry the primary reason code derived from evidence", () => {
+    const result = project({
+      lastLiveReport: liveReport(
+        specification((id) => (id === "tls" ? "warn" : "pass"), "warn"),
+        {
+          evidence: [
+            {
+              area: "tls",
+              scoreArea: "tls",
+              reasonCode: "jwks_unadvertised",
+              grade: "warn",
+              affectsGrade: true,
+            },
+            {
+              area: "discovery",
+              scoreArea: "discovery",
+              reasonCode: "discovery_probed",
+              grade: "pass",
+            },
+          ],
+        },
+      ),
+      reportFailure: fail("http", "report is not public", {
+        status: 404,
+        error: "report_not_public",
+      }),
+    });
+    const areas = resultAreaEntries(result.score.areas);
+    const byId = Object.fromEntries(areas.map((entry) => [entry.area, entry]));
+    expect(byId.tls?.reasonCode).toBe("jwks_unadvertised");
+    expect(byId.discovery?.reasonCode).toBe("discovery_probed");
+    expect(byId.jwks?.reasonCode).toBeUndefined();
+  });
+
   test("reads specification from report.score when the nested path is absent", () => {
     const spec = specification(() => "pass");
     expect(specificationInputFromReport({
@@ -453,6 +490,7 @@ describe("result area presentation helpers", () => {
       terminalReport: permanentReport(specification(() => "fail", "fail")),
     });
     expect(bannerBody(result.score)).toContain("peer closed");
+    expect(bannerBody(result.score)).not.toContain("Assessed");
     expect(result.score.showFailModeLabel).toBe(true);
   });
 });

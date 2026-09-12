@@ -81,6 +81,9 @@ export interface SpecificationAreaGridEntry {
   evidenceCount: number;
   description?: string;
   pillLabel?: string;
+  // Primary reason slug for the area, derived from its evidence. Optional so
+  // existing callers that do not compute it stay backward-compatible.
+  reasonCode?: string;
 }
 export interface ValidatorScoreProjection {
   outcome: ValidatorScoreOutcomeKind;
@@ -102,6 +105,7 @@ export interface ProjectValidatorScoreInput {
   failModeLabel?: string;
   descriptions?: Partial<Record<CanonicalAreaId, string>>;
   pillLabels?: Partial<Record<CanonicalAreaId, string>>;
+  reasonCodes?: Partial<Record<CanonicalAreaId, string>>;
 }
 
 const CANONICAL_AREA_SET: ReadonlySet<string> = new Set(CANONICAL_AREA_IDS);
@@ -426,6 +430,7 @@ export function areaGridEntriesFromScore(
   options: {
     descriptions?: Partial<Record<CanonicalAreaId, string>>;
     pillLabels?: Partial<Record<CanonicalAreaId, string>>;
+    reasonCodes?: Partial<Record<CanonicalAreaId, string>>;
   } = {},
 ): SpecificationAreaGridEntry[] {
   const byId: Map<CanonicalAreaId, SpecificationAreaScore> = isUsableSpecificationScore(parsed)
@@ -437,6 +442,7 @@ export function areaGridEntriesFromScore(
     const reported = row !== undefined;
     const customPill = options.pillLabels?.[id];
     const description = options.descriptions?.[id];
+    const reasonCode = options.reasonCodes?.[id];
     const pillLabel =
       customPill !== undefined
         ? customPill
@@ -456,6 +462,9 @@ export function areaGridEntriesFromScore(
     }
     if (pillLabel !== undefined) {
       entry.pillLabel = pillLabel;
+    }
+    if (reasonCode !== undefined && reasonCode !== "") {
+      entry.reasonCode = reasonCode;
     }
     return entry;
   });
@@ -490,6 +499,7 @@ export function projectValidatorScore(
     areas: areaGridEntriesFromScore(parsed, {
       descriptions: input.descriptions,
       pillLabels: input.pillLabels,
+      reasonCodes: input.reasonCodes,
     }),
   };
   if (showFailModeLabel && input.failModeLabel !== undefined) {

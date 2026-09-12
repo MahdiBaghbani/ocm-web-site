@@ -553,6 +553,90 @@ describe("AreaGrid", () => {
     expect(html).not.toContain("pass rate");
   });
 
+  test("warn and fail result cards show the primary resolved reason", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        areas={[
+          {
+            area: "jwks",
+            grade: "warn",
+            reasonCode: "jwks_unadvertised",
+            pillLabel: "Needs attention",
+          },
+          {
+            area: "httpsig",
+            grade: "fail",
+            reasonCode: "httpsig_probed",
+            pillLabel: "Fail",
+          },
+          {
+            area: "discovery",
+            grade: "pass",
+            reasonCode: "discovery_probed",
+            pillLabel: "Pass",
+          },
+        ]}
+      />,
+    );
+    const jwks = areaResultCardHtml(html, "jwks");
+    expect(jwks).toContain("Signing keys not advertised");
+    expect(jwks).toContain("did not publish a jwksUri");
+    const httpsig = areaResultCardHtml(html, "httpsig");
+    expect(httpsig).toContain("HTTP signature probe");
+    expect(httpsig).toContain("two signed GET requests");
+    const discovery = areaResultCardHtml(html, "discovery");
+    expect(discovery).not.toContain("Discovery endpoint checked");
+    expect(html).not.toContain("text-lg font-semibold text-zinc-100");
+    expect(html).not.toContain("pass rate");
+    expect(html).not.toContain("areas assessed");
+    expect(hasNonAscii(html)).toBe(false);
+  });
+
+  test("warn card without a reason code still keeps stable h3 selectors", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        areas={[{ area: "tls", grade: "warn", pillLabel: "Needs attention" }]}
+      />,
+    );
+    const card = areaResultCardHtml(html, "tls");
+    expect(card).toContain(">Secure connection</h3>");
+    expect(areaGradeText(html, "Secure connection")).toBe("Needs attention");
+    expect(html).not.toContain("pass rate");
+    expect(html).not.toContain("text-lg font-semibold text-zinc-100");
+  });
+
+  test("warn card without a reason code suppresses the missing-slug fallback", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        areas={[{ area: "tls", grade: "warn", pillLabel: "Needs attention" }]}
+      />,
+    );
+    const card = areaResultCardHtml(html, "tls");
+    expect(card).toContain(">Secure connection</h3>");
+    expect(areaGradeText(html, "Secure connection")).toBe("Needs attention");
+    expect(card).not.toContain("Check note");
+    expect(card).not.toContain("This evidence item has no reason code");
+    expect(card).not.toContain('data-area-reason="tls"');
+  });
+
+  test("whitespace-only reason code suppresses the missing-slug fallback", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        areas={[{ area: "tls", grade: "fail", reasonCode: "  ", pillLabel: "Fail" }]}
+      />,
+    );
+    const card = areaResultCardHtml(html, "tls");
+    expect(card).toContain(">Secure connection</h3>");
+    expect(areaGradeText(html, "Secure connection")).toBe("Fail");
+    expect(card).not.toContain("Check note");
+    expect(card).not.toContain("This evidence item has no reason code");
+    expect(card).not.toContain('data-area-reason="tls"');
+  });
+
   test("null grade can render Not tested", () => {
     const html = render(
       <AreaGrid
