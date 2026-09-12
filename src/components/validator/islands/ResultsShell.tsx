@@ -28,6 +28,7 @@ import {
   type ValidatorFailure,
   type ValidatorFetchDeps,
 } from "../lib/validatorFetch";
+import type { ReasonSeverity } from "../lib/validatorReasons";
 import { runResultsPollLoop } from "../lib/resultsPoll";
 import {
   USER_STEPS,
@@ -254,6 +255,37 @@ export function primaryReasonCodesByArea(
   return byArea;
 }
 
+// Primary reason outcome per canonical area, selected exactly like
+// primaryReasonCodesByArea and AreaModal: scoreArea wins over area, and the
+// first row with a non-empty trimmed reason code represents the area. Carries
+// the grade, severity, and affectsGrade of that row so warn/fail cards can
+// resolve reason copy from the primary item rather than the aggregate grade.
+export function primaryReasonsByArea(
+  items: readonly EvidenceItem[],
+): Partial<
+  Record<CanonicalAreaId, { grade: ReasonSeverity | null; severity?: string; affectsGrade?: boolean }>
+> {
+  const byArea: Partial<
+    Record<CanonicalAreaId, { grade: ReasonSeverity | null; severity?: string; affectsGrade?: boolean }>
+  > = {};
+  for (const item of items) {
+    const areaId = item.scoreArea ?? item.area;
+    if (areaId === undefined || !isCanonicalAreaId(areaId) || byArea[areaId] !== undefined) {
+      continue;
+    }
+    const code = typeof item.reasonCode === "string" ? item.reasonCode.trim() : "";
+    if (code === "") {
+      continue;
+    }
+    byArea[areaId] = {
+      grade: item.grade ?? null,
+      severity: item.severity,
+      affectsGrade: item.affectsGrade,
+    };
+  }
+  return byArea;
+}
+
 function visibleIndex(statuses: MachineView["statuses"], step: UserStep): number {
   let index = 0;
   for (const item of USER_STEPS) {
@@ -399,6 +431,7 @@ export function projectResultsPage(input: {
     failModeLabel: input.poll?.failModeLabel,
     descriptions: AREA_DESCRIPTIONS,
     reasonCodes: primaryReasonCodesByArea(evidence),
+    primaryReasons: primaryReasonsByArea(evidence),
   });
   const usable = isUsableSpecificationScore(score.parsed);
 

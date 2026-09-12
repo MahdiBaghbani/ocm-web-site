@@ -10,11 +10,14 @@ import ResultsShell, {
   VISIBILITY_NOTICE,
   areaTotals,
   bannerBody,
+  primaryReasonCodesByArea,
+  primaryReasonsByArea,
   projectResultsPage,
   resultAreaEntries,
   specificationInputFromReport,
 } from "./ResultsShell";
 import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
+import type { EvidenceItem } from "../atoms/EvidenceDisclosure";
 import { resolveValidatorMachine } from "../lib/stateMachine";
 import type {
   ReportResponse,
@@ -490,6 +493,45 @@ describe("result area presentation helpers", () => {
     expect(bannerBody(result.score)).toContain("peer closed");
     expect(bannerBody(result.score)).not.toContain("Assessed");
     expect(result.score.showFailModeLabel).toBe(true);
+  });
+});
+
+describe("primary reason selection precedence", () => {
+  test("first reason-bearing item per area wins for codes and outcome", () => {
+    const items: EvidenceItem[] = [
+      { area: "discovery", scoreArea: "tls", reasonCode: "  ", grade: "pass" },
+      {
+        scoreArea: "tls",
+        reasonCode: "discovery_probed",
+        grade: "pass",
+        severity: "pass",
+        affectsGrade: false,
+      },
+      {
+        scoreArea: "tls",
+        reasonCode: "tls_probed",
+        grade: "warn",
+        severity: "warn",
+        affectsGrade: true,
+      },
+    ];
+    const codes = primaryReasonCodesByArea(items);
+    const reasons = primaryReasonsByArea(items);
+    expect(codes.tls).toBe("discovery_probed");
+    expect(reasons.tls).toEqual({ grade: "pass", severity: "pass", affectsGrade: false });
+  });
+
+  test("uses area when scoreArea is absent and skips non-canonical areas", () => {
+    const items: EvidenceItem[] = [
+      { area: "jwks", reasonCode: "jwks_unadvertised", grade: "warn", affectsGrade: true },
+      { area: "not-an-area", reasonCode: "discovery_probed", grade: "pass" },
+    ];
+    const codes = primaryReasonCodesByArea(items);
+    const reasons = primaryReasonsByArea(items);
+    expect(codes.jwks).toBe("jwks_unadvertised");
+    expect(reasons.jwks).toEqual({ grade: "warn", severity: undefined, affectsGrade: true });
+    expect(Object.hasOwn(codes, "discovery")).toBe(false);
+    expect(Object.hasOwn(reasons, "discovery")).toBe(false);
   });
 });
 
@@ -1095,6 +1137,16 @@ function findByExactText(root: ShimNode, tagName: string, text: string): ShimNod
   return found;
 }
 
+function firstByAttr(root: ShimNode, attr: string, value: string): ShimNode | null {
+  let found: ShimNode | null = null;
+  walk(root, (node) => {
+    if (found === null && node.getAttribute(attr) === value) {
+      found = node;
+    }
+  });
+  return found;
+}
+
 function reactClick(node: ShimNode): void {
   const key = Object.getOwnPropertyNames(node).find((name) => name.startsWith("__reactProps"));
   if (key !== undefined) {
@@ -1550,6 +1602,75 @@ describe("ResultsShell area detail modal", () => {
       expect(viewDetailsAriaLabels(container).length).toBeGreaterThan(0);
       expect(container.textContent).not.toContain("areas assessed");
       expect(container.textContent).not.toContain("pass rate");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("card and area modal show the same primary reason copy for a warn card with a pass primary item", async () => {
+    const remedy =
+      "Publish a 200 JSON document at /.well-known/ocm with enabled true and the required apiVersion, endPoint, and resourceTypes.";
+    const why =
+      "The validator sent an uncached GET to /.well-known/ocm and assessed the returned JSON discovery document.";
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification((id) => (id === "discovery" ? "warn" : "pass"), "warn"), {
+        evidence: [
+          {
+            area: "discovery",
+            scoreArea: "discovery",
+            reasonCode: "discovery_probed",
+            grade: "pass",
+            affectsGrade: true,
+          },
+          {
+            area: "discovery",
+            scoreArea: "discovery",
+            reasonCode: "tls_probed",
+            grade: "warn",
+            affectsGrade: true,
+          },
+        ],
+      }),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatibleWithWarnings);
+
+      // The aggregate discovery card is warn, but its primary evidence item is a
+      // pass discovery_probed row, so the card reason copy must resolve from the
+      // primary item (no remedy) and match AreaModal exactly.
+      const cardReason = firstByAttr(container, "data-area-reason", "discovery");
+      expect(cardReason).not.toBeNull();
+      if (cardReason === null) throw new Error("missing discovery card reason");
+      expect(cardReason.textContent).toContain("Discovery endpoint checked");
+      expect(cardReason.textContent).toContain(why);
+      expect(cardReason.textContent).not.toContain(remedy);
+
+      const trigger = nodesByTag(container, "button").find(
+        (node) => node.getAttribute("aria-label") === "View details for Server discovery",
+      );
+      expect(trigger).not.toBeUndefined();
+      if (trigger === undefined) throw new Error("missing discovery View details button");
+      await act(() => {
+        reactClick(trigger);
+      });
+      await waitForText(doc.body, "Raw JSON");
+
+      const summary = firstByAttr(doc.body, "data-area-panel", "summary");
+      expect(summary).not.toBeNull();
+      if (summary === null) throw new Error("missing area modal summary panel");
+      expect(summary.textContent).toContain("Discovery endpoint checked");
+      expect(summary.textContent).toContain(why);
+      expect(summary.textContent).not.toContain(remedy);
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();

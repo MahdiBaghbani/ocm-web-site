@@ -5,6 +5,7 @@
 
 import { isRecord } from "./validatorShared";
 import { isTerminalState, type TerminalState } from "./stateMachine";
+import type { ReasonSeverity } from "./validatorReasons";
 
 export type SpecificationGrade = "pass" | "warn" | "fail";
 export interface SpecificationAreaScore {
@@ -84,6 +85,12 @@ export interface SpecificationAreaGridEntry {
   // Primary reason slug for the area, derived from its evidence. Optional so
   // existing callers that do not compute it stay backward-compatible.
   reasonCode?: string;
+  // Outcome fields of the primary reason evidence item, mirroring the row
+  // AreaModal selects. Optional so callers that only supply a reason code stay
+  // backward-compatible and fall back to the aggregate grade.
+  primaryGrade?: ReasonSeverity | null;
+  primarySeverity?: string;
+  primaryAffectsGrade?: boolean;
 }
 export interface ValidatorScoreProjection {
   outcome: ValidatorScoreOutcomeKind;
@@ -106,6 +113,12 @@ export interface ProjectValidatorScoreInput {
   descriptions?: Partial<Record<CanonicalAreaId, string>>;
   pillLabels?: Partial<Record<CanonicalAreaId, string>>;
   reasonCodes?: Partial<Record<CanonicalAreaId, string>>;
+  primaryReasons?: Partial<
+    Record<
+      CanonicalAreaId,
+      { grade?: ReasonSeverity | null; severity?: string; affectsGrade?: boolean }
+    >
+  >;
 }
 
 const CANONICAL_AREA_SET: ReadonlySet<string> = new Set(CANONICAL_AREA_IDS);
@@ -431,6 +444,12 @@ export function areaGridEntriesFromScore(
     descriptions?: Partial<Record<CanonicalAreaId, string>>;
     pillLabels?: Partial<Record<CanonicalAreaId, string>>;
     reasonCodes?: Partial<Record<CanonicalAreaId, string>>;
+    primaryReasons?: Partial<
+      Record<
+        CanonicalAreaId,
+        { grade?: ReasonSeverity | null; severity?: string; affectsGrade?: boolean }
+      >
+    >;
   } = {},
 ): SpecificationAreaGridEntry[] {
   const byId: Map<CanonicalAreaId, SpecificationAreaScore> = isUsableSpecificationScore(parsed)
@@ -466,6 +485,18 @@ export function areaGridEntriesFromScore(
     if (reasonCode !== undefined && reasonCode !== "") {
       entry.reasonCode = reasonCode;
     }
+    const primaryReason = options.primaryReasons?.[id];
+    if (primaryReason !== undefined) {
+      if (primaryReason.grade !== undefined) {
+        entry.primaryGrade = primaryReason.grade;
+      }
+      if (primaryReason.severity !== undefined) {
+        entry.primarySeverity = primaryReason.severity;
+      }
+      if (primaryReason.affectsGrade !== undefined) {
+        entry.primaryAffectsGrade = primaryReason.affectsGrade;
+      }
+    }
     return entry;
   });
 }
@@ -500,6 +531,7 @@ export function projectValidatorScore(
       descriptions: input.descriptions,
       pillLabels: input.pillLabels,
       reasonCodes: input.reasonCodes,
+      primaryReasons: input.primaryReasons,
     }),
   };
   if (showFailModeLabel && input.failModeLabel !== undefined) {

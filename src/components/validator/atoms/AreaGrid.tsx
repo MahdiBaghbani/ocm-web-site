@@ -9,7 +9,7 @@ import {
   CANONICAL_AREA_LABELS,
   type CanonicalAreaId,
 } from "../lib/validatorScore";
-import { reasonCopyFor } from "../lib/validatorReasons";
+import { reasonCopyFor, type ReasonSeverity } from "../lib/validatorReasons";
 import Pill, { type GradeKind, type PillKind } from "./Pill";
 
 export const VALIDATOR_AREA_IDS = CANONICAL_AREA_IDS;
@@ -32,6 +32,10 @@ export interface AreaGridEntry {
   pillLabel?: string;
   /** Primary reason slug for the area; drives warn/fail card reason copy. */
   reasonCode?: string;
+  /** Outcome fields of the primary reason evidence item, matching AreaModal. */
+  primaryGrade?: ReasonSeverity | null;
+  primarySeverity?: string;
+  primaryAffectsGrade?: boolean;
 }
 
 export interface AreaGridProps {
@@ -206,7 +210,12 @@ function renderResultsGrid(
           trimmedReasonCode !== undefined && trimmedReasonCode !== "";
         const reason =
           (grade === "warn" || grade === "fail") && hasReasonCode
-            ? reasonCopyFor({ reasonCode: trimmedReasonCode, grade, affectsGrade: true })
+            ? reasonCopyFor({
+                reasonCode: trimmedReasonCode,
+                grade: entry.primaryGrade ?? grade,
+                severity: entry.primarySeverity,
+                affectsGrade: entry.primaryAffectsGrade ?? true,
+              })
             : null;
         return (
           <article

@@ -593,6 +593,48 @@ describe("AreaGrid", () => {
     expect(hasNonAscii(html)).toBe(false);
   });
 
+  test("primary reason outcome drives remedy visibility over the aggregate grade", () => {
+    const remedy =
+      "Publish a 200 JSON document at /.well-known/ocm with enabled true and the required apiVersion, endPoint, and resourceTypes.";
+    const primaryPass = render(
+      <AreaGrid
+        variant="results"
+        areas={[
+          {
+            area: "discovery",
+            grade: "warn",
+            reasonCode: "discovery_probed",
+            primaryGrade: "pass",
+            primaryAffectsGrade: false,
+            pillLabel: "Needs attention",
+          },
+        ]}
+      />,
+    );
+    const primaryCard = areaResultCardHtml(primaryPass, "discovery");
+    expect(primaryCard).toContain("Discovery endpoint checked");
+    expect(primaryCard).not.toContain(remedy);
+
+    const fallback = render(
+      <AreaGrid
+        variant="results"
+        areas={[
+          {
+            area: "discovery",
+            grade: "warn",
+            reasonCode: "discovery_probed",
+            pillLabel: "Needs attention",
+          },
+        ]}
+      />,
+    );
+    const fallbackCard = areaResultCardHtml(fallback, "discovery");
+    expect(fallbackCard).toContain("Discovery endpoint checked");
+    expect(fallbackCard).toContain(remedy);
+    expect(hasNonAscii(primaryPass)).toBe(false);
+    expect(hasNonAscii(fallback)).toBe(false);
+  });
+
   test("warn card without a reason code still keeps stable h3 selectors", () => {
     const html = render(
       <AreaGrid
