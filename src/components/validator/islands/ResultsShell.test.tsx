@@ -6,6 +6,7 @@ import ResultsShell, {
   AREA_DESCRIPTIONS,
   CACHED_SESSION_JSON_NOTE,
   COPY_SUCCESS_TEXT,
+  EVIDENCE_EMPTY_SNAPSHOT,
   EVIDENCE_NOT_SAVED,
   PAGE_LINK_NOT_SAVED_NOTICE,
   TEST_HREF,
@@ -576,6 +577,96 @@ describe("not-saved evidence copy", () => {
       "No saved evidence is available because this report was not public.",
     );
   });
+
+  test("uses the explicit empty session snapshot sentence", () => {
+    expect(EVIDENCE_EMPTY_SNAPSHOT).toBe(
+      "No evidence items were included in this session snapshot.",
+    );
+  });
+});
+
+const EVIDENCE_ITEM: EvidenceItem = {
+  area: "discovery",
+  reasonCode: "discovery_probed",
+  grade: "pass",
+};
+
+describe("evidenceMode discloses anonymous and terminal-session evidence", () => {
+  test("cached not_saved snapshot with items discloses instead of suppressing", () => {
+    const result = project({
+      lastLiveReport: liveReport(specification(() => "pass"), {
+        evidence: [EVIDENCE_ITEM],
+      }),
+      reportFailure: fail("http", "report is not public", {
+        status: 404,
+        error: "report_not_public",
+      }),
+    });
+    expect(result.visibility).toBe("not_saved");
+    expect(result.sourceKind).toBe("cached_session");
+    expect(result.evidence.length).toBe(1);
+    expect(result.evidenceMode).toBe("disclosure");
+  });
+
+  test("cached not_saved snapshot with no items stays not_saved mode", () => {
+    const result = project({
+      lastLiveReport: liveReport(specification(() => "pass")),
+      reportFailure: fail("http", "report is not public", {
+        status: 404,
+        error: "report_not_public",
+      }),
+    });
+    expect(result.visibility).toBe("not_saved");
+    expect(result.sourceKind).toBe("cached_session");
+    expect(result.evidence.length).toBe(0);
+    expect(result.evidenceMode).toBe("not_saved");
+  });
+
+  test("terminal session report with items discloses the evidence", () => {
+    const result = project({
+      terminalReport: liveReport(specification(() => "pass"), {
+        evidence: [EVIDENCE_ITEM],
+      }),
+    });
+    expect(result.visibility).toBe("session");
+    expect(result.sourceKind).toBe("terminal");
+    expect(result.evidence.length).toBe(1);
+    expect(result.evidenceMode).toBe("disclosure");
+  });
+
+  test("terminal session report with no items stays session mode", () => {
+    const result = project({
+      terminalReport: liveReport(specification(() => "pass"), { evidence: [] }),
+    });
+    expect(result.visibility).toBe("session");
+    expect(result.evidence.length).toBe(0);
+    expect(result.evidenceMode).toBe("session");
+  });
+
+  test("terminal unknown report with items discloses the evidence", () => {
+    const result = project({
+      terminalReport: liveReport(specification(() => "pass"), {
+        visibility: "unknown",
+        evidence: [EVIDENCE_ITEM],
+      }),
+    });
+    expect(result.visibility).toBe("unknown");
+    expect(result.sourceKind).toBe("terminal");
+    expect(result.evidence.length).toBe(1);
+    expect(result.evidenceMode).toBe("disclosure");
+  });
+
+  test("terminal unknown report with no items falls back to none", () => {
+    const result = project({
+      terminalReport: liveReport(specification(() => "pass"), {
+        visibility: "unknown",
+        evidence: [],
+      }),
+    });
+    expect(result.visibility).toBe("unknown");
+    expect(result.evidence.length).toBe(0);
+    expect(result.evidenceMode).toBe("none");
+  });
 });
 
 const ELEMENT_NODE = 1;
@@ -882,7 +973,12 @@ describe("ResultsShell session change reset", () => {
       await waitForText(container, RESULT_HEADLINE.compatible);
       expect(container.textContent).toContain(SESSION_ID);
       expect(container.textContent).toContain(CACHED_SESSION_JSON_NOTE);
-      expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
+      // Cached not_saved session with real evidence items now discloses the
+      // evidence instead of suppressing it, so the not-public evidence notice
+      // no longer stands in for the actual evidence.
+      expect(container.textContent).not.toContain(EVIDENCE_NOT_SAVED);
+      // The disclosed evidence surfaces the raw fixture reason slug directly.
+      expect(container.textContent).toContain(cacheMarker);
       expect(container.textContent).not.toContain("Continue or finish");
 
       const cachedTrigger = findByExactText(container, "button", "View full report JSON");
@@ -987,7 +1083,11 @@ describe("ResultsShell session change reset", () => {
       });
       await waitForText(container, RESULT_HEADLINE.compatible);
       expect(container.textContent).toContain(CACHED_SESSION_JSON_NOTE);
-      expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
+      // Cached not_saved session with real evidence items discloses the
+      // evidence, so the not-public evidence notice no longer appears and the
+      // raw fixture reason slug is surfaced directly.
+      expect(container.textContent).not.toContain(EVIDENCE_NOT_SAVED);
+      expect(container.textContent).toContain(cacheMarker);
 
       const cachedTrigger = findByExactText(container, "button", "View full report JSON");
       await act(() => {
@@ -1128,6 +1228,194 @@ describe("ResultsShell session change reset", () => {
       await act(() => { root.unmount(); });
     } finally {
       globalThis.fetch = previousFetch;
+      restore();
+    }
+  });
+});
+
+describe("ResultsShell evidence disclosure rendering", () => {
+  test("terminal session report with evidence discloses the evidence slug", async () => {
+    const slug = "session_terminal_evidence_slug";
+    const restoreFetch = installTerminalReportFetch(
+      liveReport(specification(() => "pass"), {
+        evidence: [{ area: "discovery", reasonCode: slug, grade: "pass" }],
+      }),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain(slug);
+      expect(container.textContent).not.toContain(EVIDENCE_NOT_SAVED);
+      expect(container.textContent).not.toContain(EVIDENCE_EMPTY_SNAPSHOT);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("terminal session report with no evidence shows the empty snapshot sentence", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      liveReport(specification(() => "pass"), { evidence: [] }),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain(EVIDENCE_EMPTY_SNAPSHOT);
+      expect(container.textContent).not.toContain(EVIDENCE_NOT_SAVED);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("terminal unknown report with evidence discloses the evidence slug", async () => {
+    const slug = "unknown_terminal_evidence_slug";
+    const restoreFetch = installTerminalReportFetch(
+      liveReport(specification(() => "pass"), {
+        visibility: "unknown",
+        evidence: [{ area: "discovery", reasonCode: slug, grade: "pass" }],
+      }),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain(slug);
+      expect(container.textContent).not.toContain(EVIDENCE_NOT_SAVED);
+      expect(container.textContent).not.toContain(EVIDENCE_EMPTY_SNAPSHOT);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("terminal unknown report with no evidence shows the empty snapshot sentence", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      liveReport(specification(() => "pass"), {
+        visibility: "unknown",
+        evidence: [],
+      }),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain(EVIDENCE_EMPTY_SNAPSHOT);
+      expect(container.textContent).not.toContain(EVIDENCE_NOT_SAVED);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("cached not-public snapshot with no evidence shows the empty snapshot sentence", async () => {
+    let deliveredRunning = false;
+    let lastPoll: "running" | "terminal" = "running";
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+          validator_api_origin: API_ORIGIN,
+        });
+      }
+      if (url.includes(`/api/session/${SESSION_ID}`)) {
+        if (!deliveredRunning) {
+          deliveredRunning = true;
+          lastPoll = "running";
+          return jsonResponse(200, {
+            state: "passive_running",
+            ts: 1,
+            optInActive: false,
+            nextInstruction: "wait_probe",
+          });
+        }
+        lastPoll = "terminal";
+        return jsonResponse(200, { state: "terminal_pass", ts: 2, optInActive: false });
+      }
+      if (url.includes(`/api/report/${SESSION_ID}`)) {
+        if (lastPoll === "running") {
+          return jsonResponse(200, liveReport(specification(() => "pass")));
+        }
+        return jsonResponse(404, { error: "report_not_public", message: "report is not public" });
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain(CACHED_SESSION_JSON_NOTE);
+      expect(container.textContent).toContain(EVIDENCE_EMPTY_SNAPSHOT);
+      expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
+      await act(() => { root.unmount(); });
+    } finally {
+      globalThis.fetch = previousFetch;
+      restore();
+    }
+  });
+
+  test("live polling with session visibility does not render the empty snapshot sentence", async () => {
+    const restoreFetch = installLiveSessionFetch();
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, "Scan in progress");
+      await waitForText(container, VISIBILITY_NOTICE.session);
+      const emptySnapshot = nodesByTag(container, "p").find(
+        (node) => node.textContent === EVIDENCE_EMPTY_SNAPSHOT,
+      ) ?? null;
+      expect(emptySnapshot).toBeNull();
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
       restore();
     }
   });

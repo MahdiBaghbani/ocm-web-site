@@ -87,6 +87,9 @@ export const CACHED_SESSION_JSON_NOTE =
 export const EVIDENCE_NOT_SAVED =
   "No saved evidence is available because this report was not public.";
 
+export const EVIDENCE_EMPTY_SNAPSHOT =
+  "No evidence items were included in this session snapshot.";
+
 export const EVIDENCE_EXPIRED =
   "Evidence cannot be loaded because the saved report is no longer available.";
 
@@ -140,7 +143,7 @@ export interface ResultsPageProjection {
   bannerVerdict: VerdictKind | null;
   bannerTitle: string;
   bannerMessage: string;
-  evidenceMode: "disclosure" | "not_saved" | "expired" | "session" | "unknown" | "none";
+  evidenceMode: "disclosure" | "not_saved" | "expired" | "session" | "none";
   evidence: EvidenceItem[];
   rawJsonNote: string | null;
   rawJsonTitle: string;
@@ -417,16 +420,24 @@ function evidenceModeFor(
   if (visibility === "permanent") {
     return "disclosure";
   }
-  if (visibility === "not_saved") {
-    return "not_saved";
-  }
   if (visibility === "expired") {
     return "expired";
+  }
+  if (
+    items.length > 0 &&
+    (visibility === "not_saved" ||
+      visibility === "session" ||
+      visibility === "unknown")
+  ) {
+    return "disclosure";
+  }
+  if (visibility === "not_saved") {
+    return "not_saved";
   }
   if (visibility === "session") {
     return "session";
   }
-  return items.length > 0 ? "unknown" : "none";
+  return "none";
 }
 
 export function projectResultsPage(input: {
@@ -1197,7 +1208,22 @@ export default function ResultsShell({
           {projection.evidenceMode === "not_saved" ? (
             <div>
               <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
+              <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
               <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_NOT_SAVED}</p>
+            </div>
+          ) : null}
+          {projection.evidenceMode === "session" && projection.sourceReport !== null ? (
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
+              <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
+            </div>
+          ) : null}
+          {projection.evidenceMode === "none" &&
+          projection.visibility === "unknown" &&
+          projection.sourceReport !== null ? (
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
+              <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
             </div>
           ) : null}
           {projection.evidenceMode === "expired" ? (
