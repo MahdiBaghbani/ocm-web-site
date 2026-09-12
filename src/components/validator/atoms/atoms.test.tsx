@@ -740,7 +740,7 @@ describe("AreaGrid", () => {
         onAreaClick={() => undefined}
         areas={[
           { area: "discovery", grade: "pass", evidenceCount: 2 },
-          { area: "tls", grade: "fail", evidenceCount: 0 },
+          { area: "tls", grade: null, evidenceCount: 0 },
         ]}
       />,
     );
@@ -802,6 +802,40 @@ describe("AreaGrid", () => {
             variant="results"
             onAreaClick={(areaId) => { seen.push(areaId); }}
             areas={[{ area: "discovery", grade: "pass", evidenceCount: 2 }]}
+          />,
+        );
+      });
+      const card = findNode(container, (node) => node.getAttribute("data-area-card") === "discovery");
+      expect(card).not.toBeNull();
+      if (card === null) throw new Error("missing data-area-card: discovery");
+      const button = findNode(card, (node) => {
+        return node.tagName === "BUTTON" &&
+          node.getAttribute("aria-label") === "View details for Server discovery";
+      });
+      expect(button).not.toBeNull();
+      if (button === null) throw new Error("missing discovery View details button");
+      await act(() => { button.dispatchEvent(new ShimEvent("click")); });
+      expect(seen).toEqual(["discovery"]);
+      await act(() => { root.unmount(); });
+    } finally {
+      restore();
+    }
+  });
+
+  test("results View details opens for an unassessed card with evidence", async () => {
+    const seen: ValidatorAreaId[] = [];
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(
+          <AreaGrid
+            variant="results"
+            onAreaClick={(areaId) => { seen.push(areaId); }}
+            areas={[{ area: "discovery", grade: null, evidenceCount: 1 }]}
           />,
         );
       });

@@ -5,6 +5,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import AreaGrid from "../atoms/AreaGrid";
+import AreaModal from "../atoms/AreaModal";
 import EvidenceDisclosure, { type EvidenceItem } from "../atoms/EvidenceDisclosure";
 import ReportJsonModal from "../atoms/ReportJsonModal";
 import StepRow from "../atoms/StepRow";
@@ -541,6 +542,7 @@ export default function ResultsShell({
     null,
   );
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
+  const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
 
   useEffect(() => {
@@ -557,6 +559,7 @@ export default function ResultsShell({
     setReportFailure(null);
     setError("");
     setRawJsonOpen(false);
+    setSelectedArea(null);
   }, [session?.host, session?.id]);
 
   useEffect(() => {
@@ -659,6 +662,11 @@ export default function ResultsShell({
   }
 
   const totals = areaTotals(projection.score.areas);
+  const resultAreas = resultAreaEntries(projection.score.areas);
+  const selectedEntry =
+    selectedArea === null
+      ? null
+      : resultAreas.find((entry) => entry.area === selectedArea) ?? null;
   const statusText =
     projection.status === "live" || projection.status === "loading_report"
       ? view === null
@@ -800,7 +808,11 @@ export default function ResultsShell({
           </p>
           <div>
             <h2 className="mb-3 text-sm font-semibold text-zinc-100">What was tested</h2>
-            <AreaGrid areas={resultAreaEntries(projection.score.areas)} />
+            <AreaGrid
+              areas={resultAreas}
+              variant="results"
+              onAreaClick={(areaId) => setSelectedArea(areaId)}
+            />
           </div>
         </div>
       ) : null}
@@ -873,6 +885,20 @@ export default function ResultsShell({
           note={projection.rawJsonNote}
           downloadName={`report-${session.id}.json`}
           onClose={() => setRawJsonOpen(false)}
+        />
+      ) : null}
+      {selectedArea !== null &&
+      selectedEntry !== null &&
+      projection.sourceReport !== null &&
+      (projection.status === "ready" || projection.status === "live") ? (
+        <AreaModal
+          area={selectedArea}
+          areaLabel={selectedEntry.label}
+          items={projection.evidence}
+          sourceReport={projection.sourceReport}
+          grade={selectedEntry.grade}
+          evidenceCount={selectedEntry.evidenceCount}
+          onClose={() => setSelectedArea(null)}
         />
       ) : null}
     </div>

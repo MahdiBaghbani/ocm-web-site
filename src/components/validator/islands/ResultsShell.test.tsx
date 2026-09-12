@@ -1,5 +1,5 @@
 import React, { act } from "react";
-import { describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import ResultsShell, {
@@ -948,6 +948,109 @@ describe("ResultsShell session change reset", () => {
       restore();
     }
   });
+
+  test("closes the area detail modal when the session id changes to a ready permanent report", async () => {
+    const sessionB = "0193b1d3-8d2e-7c5b-9f3f-2b3c4d5e6f70";
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+          validator_api_origin: API_ORIGIN,
+        });
+      }
+      if (url.includes(`/api/session/${SESSION_ID}`)) {
+        return jsonResponse(200, { state: "terminal_pass", ts: 1, optInActive: false });
+      }
+      if (url.includes(`/api/report/${SESSION_ID}`)) {
+        return jsonResponse(200, permanentReport(specification(() => "pass")));
+      }
+      if (url.includes(`/api/session/${sessionB}`)) {
+        return jsonResponse(200, { state: "terminal_pass", ts: 3, optInActive: false });
+      }
+      if (url.includes(`/api/report/${sessionB}`)) {
+        // Session B is a ready permanent report with a real sourceReport and its
+        // own assessed areas. The warn area gives it a distinct headline so the
+        // test can wait for B's report to finish loading.
+        return jsonResponse(
+          200,
+          permanentReport(specification((id) => (id === "tls" ? "warn" : "pass"), "warn")),
+        );
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+
+      const trigger = findByExactText(container, "button", "View details");
+      expect(trigger.getAttribute("aria-label")).toBe("View details for Server discovery");
+      await act(() => {
+        reactClick(trigger);
+      });
+      await waitForText(doc.body, "Raw JSON");
+
+      // Session A: the area modal is open on the discovery card.
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(true);
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-area-modal")),
+      ).toBe(true);
+      expect(nodesByRole(doc.body, "dialog").length).toBeGreaterThan(0);
+      expect(
+        nodesByRole(doc.body, "tablist").some(
+          (node) => node.getAttribute("aria-label") === "Area details",
+        ),
+      ).toBe(true);
+      expect(doc.body.textContent).toContain("Server discovery");
+
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={sessionB} />);
+      });
+      expect(container.textContent).toContain(sessionB);
+      // Wait for session B's distinct terminal report so its sourceReport is
+      // loaded and the results grid is interactive again. If selectedArea were
+      // not reset on the session change, the modal guard (sourceReport !== null
+      // and status ready) would keep the AreaModal open here, which is what
+      // makes this regression non-vacuous.
+      await waitForText(container, RESULT_HEADLINE.compatibleWithWarnings);
+      expect(viewDetailsAriaLabels(container).length).toBeGreaterThan(0);
+
+      // Session B: the area modal is closed even though a valid sourceReport
+      // exists, proving the session change reset selectedArea.
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(false);
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-area-modal")),
+      ).toBe(false);
+      expect(nodesByRole(doc.body, "dialog").length).toBe(0);
+      expect(
+        nodesByRole(doc.body, "tablist").some(
+          (node) => node.getAttribute("aria-label") === "Area details",
+        ),
+      ).toBe(false);
+      expect(doc.body.textContent).not.toContain("Raw JSON");
+      await act(() => { root.unmount(); });
+    } finally {
+      globalThis.fetch = previousFetch;
+      restore();
+    }
+  });
 });
 
 function walk(node: ShimNode, visit: (current: ShimNode) => void): void {
@@ -1311,6 +1414,246 @@ describe("ResultsShell testHref", () => {
     } finally {
       restoreFetch();
       restore();
+    }
+  });
+});
+
+function viewDetailsAriaLabels(root: ShimNode): string[] {
+  return nodesByTag(root, "button")
+    .map((node) => node.getAttribute("aria-label"))
+    .filter((label): label is string => label !== null && label.startsWith("View details for"));
+}
+
+describe("ResultsShell area detail modal", () => {
+  test("a ready results card opens the area detail modal", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification(() => "pass")),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+
+      const trigger = findByExactText(container, "button", "View details");
+      expect(trigger.getAttribute("aria-label")).toBe("View details for Server discovery");
+      await act(() => {
+        reactClick(trigger);
+      });
+      await waitForText(doc.body, "Raw JSON");
+
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(true);
+      expect(nodesByRole(doc.body, "dialog").length).toBeGreaterThan(0);
+      expect(
+        nodesByRole(doc.body, "tablist").some(
+          (node) => node.getAttribute("aria-label") === "Area details",
+        ),
+      ).toBe(true);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("an assessed zero-evidence card opens the area detail modal", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification((id) => (id === "tls" ? "warn" : "pass"), "warn")),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatibleWithWarnings);
+
+      const triggers = nodesByTag(container, "button").filter(
+        (node) => node.getAttribute("aria-label") === "View details for Secure connection",
+      );
+      expect(triggers.length).toBe(1);
+      const trigger = triggers[0];
+      expect(trigger).not.toBeUndefined();
+      await act(() => {
+        reactClick(trigger as ShimNode);
+      });
+      await waitForText(doc.body, "Raw JSON");
+
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(true);
+      expect(
+        nodesByRole(doc.body, "tablist").some(
+          (node) => node.getAttribute("aria-label") === "Area details",
+        ),
+      ).toBe(true);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("a truly empty unassessed card has no View details button", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification((id) => (id === "jwks" ? null : "pass"))),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+
+      const labels = viewDetailsAriaLabels(container);
+      expect(labels).toContain("View details for Server discovery");
+      expect(labels).not.toContain("View details for Signing keys");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("ready results use the interactive results grid, not statistics tiles", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification(() => "pass")),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+
+      expect(
+        nodesByTag(container, "article").some((node) => node.hasAttribute("data-area-card")),
+      ).toBe(true);
+      expect(viewDetailsAriaLabels(container).length).toBeGreaterThan(0);
+      expect(container.textContent).not.toContain("areas assessed");
+      expect(container.textContent).not.toContain("pass rate");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+});
+
+interface HappyDomRegistrator {
+  register: (options?: { url?: string }) => void;
+  unregister: () => void;
+}
+
+async function waitForDom(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2000;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error("timed out waiting for a DOM condition");
+    }
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 5);
+      });
+    });
+  }
+}
+
+describe("ResultsShell area detail modal focus restoration", () => {
+  let registrator: HappyDomRegistrator | null = null;
+
+  beforeAll(async () => {
+    const specifier: string = "@happy-dom/global-registrator";
+    const mod = (await import(specifier)) as {
+      GlobalRegistrator?: HappyDomRegistrator;
+    };
+    if (mod.GlobalRegistrator === undefined) {
+      throw new Error(
+        "ResultsShell.test.tsx focus tests need a DOM environment. Install the " +
+          "dev-only harness with `bun add -d happy-dom @happy-dom/global-registrator`.",
+      );
+    }
+    registrator = mod.GlobalRegistrator;
+    registrator.register({ url: "http://localhost/" });
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  });
+
+  afterAll(() => {
+    registrator?.unregister();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+    document.body.removeAttribute("style");
+  });
+
+  test("Escape closes the area modal and restores focus to the trigger", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification(() => "pass")),
+    );
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes(RESULT_HEADLINE.compatible) === true,
+      );
+
+      const trigger = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="View details for Server discovery"]',
+      );
+      if (trigger === null) {
+        throw new Error("missing discovery View details button");
+      }
+      act(() => {
+        trigger.focus();
+      });
+      expect(document.activeElement).toBe(trigger);
+
+      await act(() => {
+        trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await waitForDom(() => document.querySelector("[data-overlay-frame-root]") !== null);
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+      if (dialog === null) {
+        throw new Error("missing dialog after opening the area modal");
+      }
+      expect(document.activeElement === trigger).toBe(false);
+
+      await act(() => {
+        dialog.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+        );
+      });
+      await waitForDom(() => document.querySelector("[data-overlay-frame-root]") === null);
+
+      expect(document.querySelector("[data-overlay-frame-root]")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      restoreFetch();
     }
   });
 });

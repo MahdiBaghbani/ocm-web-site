@@ -233,7 +233,7 @@ function renderResultsGrid(
             <div className="mt-1 text-xs text-zinc-400">
               {evidenceCountLabel(evidenceCount)}
             </div>
-            {selectArea !== undefined && evidenceCount > 0 ? (
+            {selectArea !== undefined && (grade !== null || evidenceCount > 0) ? (
               <button
                 type="button"
                 className="mt-3 w-full min-h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
