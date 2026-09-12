@@ -1,11 +1,28 @@
 import React, { act, useState } from "react";
 import { describe, expect, test } from "bun:test";
+import { ChevronRight } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import EvidenceDisclosure from "./EvidenceDisclosure";
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);
+}
+
+function svgInnerMarkup(html: string): string {
+  const match = /<svg[^>]*>([\s\S]*?)<\/svg>/.exec(html);
+  if (match === null) {
+    throw new Error("missing svg");
+  }
+  return match[1];
+}
+
+function disclosureChevronSlot(html: string): string {
+  const match = /data-icon="disclosure-chevron"[^>]*>([\s\S]*?)<\/span>/.exec(html);
+  if (match === null) {
+    throw new Error("missing disclosure-chevron slot");
+  }
+  return match[1];
 }
 
 function pillLabels(html: string): string[] {
@@ -499,6 +516,37 @@ describe("EvidenceDisclosure", () => {
     const bodyId = controls === null ? "" : controls[1];
     expect(bodyId).not.toBe("");
     expect(html).toContain(`id="${bodyId}" hidden`);
+  });
+
+  test("renders a ChevronRight icon that rotates when open", () => {
+    const refInner = svgInnerMarkup(render(<ChevronRight size={16} />));
+    const openHtml = render(
+      <EvidenceDisclosure title="TLS" items={[]} expanded={true} />,
+    );
+    const closedHtml = render(
+      <EvidenceDisclosure title="TLS" items={[]} expanded={false} />,
+    );
+    expect(openHtml).toContain('data-icon="disclosure-chevron"');
+    expect(closedHtml).toContain('data-icon="disclosure-chevron"');
+    expect(openHtml).toContain("<svg");
+    expect(closedHtml).toContain("<svg");
+    expect(svgInnerMarkup(openHtml)).toBe(refInner);
+    expect(svgInnerMarkup(closedHtml)).toBe(refInner);
+    expect(openHtml).toContain("rotate-90");
+    expect(closedHtml).not.toContain("rotate-90");
+    const openSlot = disclosureChevronSlot(openHtml);
+    const closedSlot = disclosureChevronSlot(closedHtml);
+    expect(openSlot).toContain("<svg");
+    expect(closedSlot).toContain("<svg");
+    expect(openSlot).toContain(refInner);
+    expect(closedSlot).toContain(refInner);
+    expect(openHtml).not.toContain(">v<");
+    expect(closedHtml).not.toContain(">v<");
+    expect(openSlot).not.toBe("v");
+    expect(closedSlot).not.toBe(">");
+    expect(closedSlot).not.toBe("&gt;");
+    expect(openHtml).not.toContain("font-mono");
+    expect(closedHtml).not.toContain("font-mono");
   });
 
   test("assigns unique body ids to sibling disclosures", () => {

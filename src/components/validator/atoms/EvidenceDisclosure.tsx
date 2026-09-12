@@ -3,6 +3,7 @@
  * tokens; does not wrap the matrix FlowAccordionSection contract.
  */
 import React, { useId, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import FieldRow from "../../observatory/stack/cards/FieldRow";
 import Pill, { type GradeKind } from "./Pill";
 import { reasonCopyFor } from "../lib/validatorReasons";
@@ -117,10 +118,15 @@ export default function EvidenceDisclosure({
       >
         <span className="flex items-start gap-2">
           <span
-            className="mt-0.5 w-3 shrink-0 font-mono text-sm text-zinc-400"
+            className={
+              isOpen
+                ? "mt-0.5 shrink-0 text-zinc-400 rotate-90"
+                : "mt-0.5 shrink-0 text-zinc-400"
+            }
+            data-icon="disclosure-chevron"
             aria-hidden="true"
           >
-            {isOpen ? "v" : ">"}
+            <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
           </span>
           <span className="flex flex-col">
             <span className="text-sm font-semibold text-zinc-100">
