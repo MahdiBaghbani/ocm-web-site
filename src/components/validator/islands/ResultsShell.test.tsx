@@ -1483,6 +1483,28 @@ function firstByHasAttr(root: ShimNode, attr: string): ShimNode | null {
   return found;
 }
 
+function nodesByAttr(root: ShimNode, attr: string, value: string): ShimNode[] {
+  const found: ShimNode[] = [];
+  walk(root, (node) => {
+    if (node.getAttribute(attr) === value) {
+      found.push(node);
+    }
+  });
+  return found;
+}
+
+function summaryChip(root: ShimNode, icon: string): ShimNode {
+  const band = firstByHasAttr(root, "data-summary-chips");
+  if (band === null) {
+    throw new Error("missing data-summary-chips");
+  }
+  const chip = band.childNodes.find((node) => node.getAttribute("data-icon") === icon);
+  if (chip === undefined) {
+    throw new Error(`missing summary chip ${icon}`);
+  }
+  return chip;
+}
+
 function documentOrderIndex(root: ShimNode, match: (node: ShimNode) => boolean): number {
   let index = 0;
   let found = -1;
@@ -2145,10 +2167,13 @@ describe("ResultsShell ready results IA", () => {
       const chips = firstByHasAttr(container, "data-summary-chips");
       expect(chips).not.toBeNull();
       if (chips === null) {
-        throw new Error("missing data-summary-chips placeholder");
+        throw new Error("missing data-summary-chips");
       }
-      expect(chips.textContent).toBe("");
-      expect(chips.childNodes.length).toBe(0);
+      expect(chips.childNodes.length).toBe(4);
+      expect(summaryChip(container, "pass").textContent).toContain("8");
+      expect(summaryChip(container, "warn").textContent).toContain("0");
+      expect(summaryChip(container, "fail").textContent).toContain("0");
+      expect(summaryChip(container, "not-tested").textContent).toContain("0");
 
       const banner = firstByHasAttr(container, "data-banner-region");
       expect(banner).not.toBeNull();
@@ -2238,6 +2263,165 @@ describe("ResultsShell ready results IA", () => {
       // Host kicker must precede VerdictBanner. This fails if host is moved
       // after the banner region.
       expect(hostIndex).toBeLessThan(bannerIndex);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("renders one chip per grade with lucide icons, visible N/8, and one sr-only sentence", async () => {
+    const spec = specification(() => "pass");
+    const expectedCoverage = project({
+      terminalReport: permanentReport(spec),
+    }).score.coverageLabel;
+    const coverageLine = `${expectedCoverage} areas tested`;
+    const sentence = "8 of 8 areas tested: 8 pass, 0 warn, 0 fail, 0 not tested";
+    const restoreFetch = installTerminalReportFetch(permanentReport(spec));
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      await waitForText(container, coverageLine);
+
+      const icons = ["pass", "warn", "fail", "not-tested"] as const;
+      const expectedCounts = { pass: "8", warn: "0", fail: "0", "not-tested": "0" };
+      for (const icon of icons) {
+        const chip = summaryChip(container, icon);
+        expect(chip.getAttribute("data-icon")).toBe(icon);
+        expect(chip.getAttribute("aria-hidden")).toBe("true");
+        expect(chip.textContent).toContain(expectedCounts[icon]);
+        const svgs = nodesByTag(chip, "svg");
+        expect(svgs.length).toBe(1);
+        const svg = svgs[0];
+        if (svg === undefined) {
+          throw new Error(`missing lucide svg on ${icon} chip`);
+        }
+        expect(svg.getAttribute("aria-hidden")).toBe("true");
+        expect(svg.getAttribute("width")).toBe("16");
+        expect(svg.getAttribute("height")).toBe("16");
+      }
+
+      const coverage = firstByHasAttr(container, "data-summary-coverage");
+      expect(coverage).not.toBeNull();
+      if (coverage === null) {
+        throw new Error("missing data-summary-coverage");
+      }
+      expect(coverage.tagName).toBe("P");
+      expect(coverage.textContent).toBe(coverageLine);
+      expect(coverage.getAttribute("class") ?? "").not.toContain("sr-only");
+
+      const srNodes = nodesByAttr(container, "data-summary-sr", "");
+      expect(srNodes.length).toBe(1);
+      const sr = srNodes[0];
+      if (sr === undefined) {
+        throw new Error("missing data-summary-sr");
+      }
+      expect(sr.textContent).toBe(sentence);
+      expect(sr.getAttribute("class") ?? "").toContain("sr-only");
+
+      const banner = firstByHasAttr(container, "data-banner-region");
+      expect(banner).not.toBeNull();
+      if (banner === null) {
+        throw new Error("missing data-banner-region");
+      }
+      expect(banner.textContent).not.toContain("Assessed");
+      expect(banner.textContent).not.toContain(expectedCoverage);
+      expect(container.textContent).toContain(coverageLine);
+      expect(container.textContent).toContain(sentence);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("counts mixed grades including not-tested areas on the summary chips", async () => {
+    const spec = specification((id) => {
+      if (id === "discovery" || id === "tls" || id === "jwks") {
+        return "pass";
+      }
+      if (id === "httpsig" || id === "sharing") {
+        return "warn";
+      }
+      if (id === "notification") {
+        return "fail";
+      }
+      return null;
+    }, "fail");
+    const projected = project({ terminalReport: permanentReport(spec) });
+    expect(projected.score.assessed).toBe(6);
+    expect(projected.score.total).toBe(8);
+    const coverageLine = `${projected.score.coverageLabel} areas tested`;
+    const sentence = "6 of 8 areas tested: 3 pass, 2 warn, 1 fail, 2 not tested";
+    const restoreFetch = installTerminalReportFetch(permanentReport(spec));
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, coverageLine);
+      expect(summaryChip(container, "pass").getAttribute("data-icon")).toBe("pass");
+      expect(summaryChip(container, "pass").textContent).toContain("3");
+      expect(summaryChip(container, "warn").getAttribute("data-icon")).toBe("warn");
+      expect(summaryChip(container, "warn").textContent).toContain("2");
+      expect(summaryChip(container, "fail").getAttribute("data-icon")).toBe("fail");
+      expect(summaryChip(container, "fail").textContent).toContain("1");
+      expect(summaryChip(container, "not-tested").getAttribute("data-icon")).toBe("not-tested");
+      expect(summaryChip(container, "not-tested").textContent).toContain("2");
+      const coverage = firstByHasAttr(container, "data-summary-coverage");
+      expect(coverage?.textContent).toBe(coverageLine);
+      const srNodes = nodesByAttr(container, "data-summary-sr", "");
+      expect(srNodes.length).toBe(1);
+      expect(srNodes[0]?.textContent).toBe(sentence);
+      const banner = firstByHasAttr(container, "data-banner-region");
+      expect(banner?.textContent).not.toContain("Assessed");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("treats null area grades as not-tested and keeps a single sr-only sentence", async () => {
+    const spec = specification(() => null, null);
+    const projected = project({ terminalReport: permanentReport(spec) });
+    expect(projected.showAreas).toBe(true);
+    expect(projected.score.assessed).toBe(0);
+    const coverageLine = `${projected.score.coverageLabel} areas tested`;
+    const sentence = "0 of 8 areas tested: 0 pass, 0 warn, 0 fail, 8 not tested";
+    const restoreFetch = installTerminalReportFetch(permanentReport(spec));
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, coverageLine);
+      expect(summaryChip(container, "pass").textContent).toContain("0");
+      expect(summaryChip(container, "warn").textContent).toContain("0");
+      expect(summaryChip(container, "fail").textContent).toContain("0");
+      expect(summaryChip(container, "not-tested").textContent).toContain("8");
+      expect(nodesByAttr(container, "data-summary-sr", "").length).toBe(1);
+      expect(nodesByAttr(container, "data-summary-sr", "")[0]?.textContent).toBe(sentence);
+      const coverage = firstByHasAttr(container, "data-summary-coverage");
+      expect(coverage?.textContent).toBe(coverageLine);
+      expect(coverage?.getAttribute("class") ?? "").not.toContain("sr-only");
+      const banner = firstByHasAttr(container, "data-banner-region");
+      expect(banner?.textContent).not.toContain("Assessed");
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();

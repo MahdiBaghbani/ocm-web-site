@@ -4,6 +4,7 @@
  * load error.
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { CircleCheck, CircleMinus, CircleX, TriangleAlert } from "lucide-react";
 import AreaGrid from "../atoms/AreaGrid";
 import AreaModal from "../atoms/AreaModal";
 import EvidenceDisclosure, { type EvidenceItem } from "../atoms/EvidenceDisclosure";
@@ -554,6 +555,94 @@ export function projectResultsPage(input: {
     rawJsonTitle: cached ? "Last session JSON" : "Raw report JSON",
     reportFailure: failure,
   };
+}
+
+type SummaryChipIcon = "pass" | "warn" | "fail" | "not-tested";
+
+function summaryChipCounts(
+  areas: readonly Pick<SpecificationAreaGridEntry, "grade">[],
+): { pass: number; warn: number; fail: number; notTested: number } {
+  let pass = 0;
+  let warn = 0;
+  let fail = 0;
+  let notTested = 0;
+  for (const area of areas) {
+    if (area.grade === "pass") {
+      pass += 1;
+    } else if (area.grade === "warn") {
+      warn += 1;
+    } else if (area.grade === "fail") {
+      fail += 1;
+    } else {
+      notTested += 1;
+    }
+  }
+  return { pass, warn, fail, notTested };
+}
+
+const SUMMARY_CHIPS = [
+  { icon: "pass", label: "pass", text: "text-emerald-300", Icon: CircleCheck },
+  { icon: "warn", label: "warn", text: "text-amber-200", Icon: TriangleAlert },
+  { icon: "fail", label: "fail", text: "text-rose-300", Icon: CircleX },
+  { icon: "not-tested", label: "not tested", text: "text-zinc-300", Icon: CircleMinus },
+] as const satisfies ReadonlyArray<{
+  icon: SummaryChipIcon;
+  label: string;
+  text: string;
+  Icon: typeof CircleCheck;
+}>;
+
+function SummaryChipBand({
+  areas,
+  assessed,
+  total,
+  coverageLabel,
+}: {
+  areas: readonly SpecificationAreaGridEntry[];
+  assessed: number;
+  total: number;
+  coverageLabel: string;
+}): React.ReactElement {
+  const counts = summaryChipCounts(areas);
+  const countFor: Record<SummaryChipIcon, number> = {
+    pass: counts.pass,
+    warn: counts.warn,
+    fail: counts.fail,
+    "not-tested": counts.notTested,
+  };
+  const sentence =
+    `${assessed} of ${total} areas tested: ${counts.pass} pass, ` +
+    `${counts.warn} warn, ${counts.fail} fail, ${counts.notTested} not tested`;
+  return (
+    <>
+      <div
+        data-summary-chips=""
+        className="grid min-h-[5.5rem] grid-cols-2 gap-2 sm:min-h-11 sm:grid-cols-4"
+      >
+        {SUMMARY_CHIPS.map((chip) => {
+          const Icon = chip.Icon;
+          return (
+            <span
+              key={chip.icon}
+              data-icon={chip.icon}
+              className={`inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/40 px-2.5 py-0.5 text-xs tabular-nums ${chip.text}`}
+              aria-hidden="true"
+            >
+              <Icon size={16} strokeWidth={2} aria-hidden="true" />
+              <span className="min-w-[1ch]">{countFor[chip.icon]}</span>
+              <span>{chip.label}</span>
+            </span>
+          );
+        })}
+      </div>
+      <p className="text-sm text-zinc-300" data-summary-coverage="">
+        {coverageLabel} areas tested
+      </p>
+      <span className="sr-only" data-summary-sr="">
+        {sentence}
+      </span>
+    </>
+  );
 }
 
 function BackToTest({ href }: { href: string }): React.ReactElement {
@@ -1139,10 +1228,12 @@ export default function ResultsShell({
       ) : null}
       {projection.showAreas ? (
         <div className="space-y-4">
-          <div data-summary-chips="" />
-          <p className="text-sm text-zinc-300">
-            {projection.score.coverageLabel} areas tested
-          </p>
+          <SummaryChipBand
+            areas={projection.score.areas}
+            assessed={projection.score.assessed}
+            total={projection.score.total}
+            coverageLabel={projection.score.coverageLabel}
+          />
           <div>
             <h2
               ref={gridHeadingRef}
