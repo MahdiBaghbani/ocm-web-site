@@ -1182,6 +1182,40 @@ function firstByAttr(root: ShimNode, attr: string, value: string): ShimNode | nu
   return found;
 }
 
+function firstByHasAttr(root: ShimNode, attr: string): ShimNode | null {
+  let found: ShimNode | null = null;
+  walk(root, (node) => {
+    if (found === null && node.hasAttribute(attr)) {
+      found = node;
+    }
+  });
+  return found;
+}
+
+function documentOrderIndex(root: ShimNode, match: (node: ShimNode) => boolean): number {
+  let index = 0;
+  let found = -1;
+  walk(root, (node) => {
+    if (found === -1 && match(node)) {
+      found = index;
+    }
+    index += 1;
+  });
+  return found;
+}
+
+function documentOrderIndices(root: ShimNode, match: (node: ShimNode) => boolean): number[] {
+  let index = 0;
+  const found: number[] = [];
+  walk(root, (node) => {
+    if (match(node)) {
+      found.push(index);
+    }
+    index += 1;
+  });
+  return found;
+}
+
 function reactClick(node: ShimNode): void {
   const key = Object.getOwnPropertyNames(node).find((name) => name.startsWith("__reactProps"));
   if (key !== undefined) {
@@ -1468,6 +1502,194 @@ describe("ResultsShell interrupted ready recovery", () => {
     } finally {
       restoreFetch();
       restore();
+    }
+  });
+});
+
+describe("ResultsShell ready results IA", () => {
+  test("reserves the chip band, shows coverage beside the grid, and keeps public actions after it", async () => {
+    const spec = specification(() => "pass");
+    const expectedCoverage = project({
+      terminalReport: permanentReport(spec),
+    }).score.coverageLabel;
+    const coverageLine = `${expectedCoverage} areas tested`;
+    const restoreFetch = installTerminalReportFetch(permanentReport(spec));
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      await waitForText(container, coverageLine);
+
+      const chips = firstByHasAttr(container, "data-summary-chips");
+      expect(chips).not.toBeNull();
+      if (chips === null) {
+        throw new Error("missing data-summary-chips placeholder");
+      }
+      expect(chips.textContent).toBe("");
+      expect(chips.childNodes.length).toBe(0);
+
+      const banner = firstByHasAttr(container, "data-banner-region");
+      expect(banner).not.toBeNull();
+      if (banner === null) {
+        throw new Error("missing data-banner-region");
+      }
+      expect(banner.textContent).not.toContain(expectedCoverage);
+      expect(banner.textContent).not.toContain("areas tested");
+      expect(banner.textContent).not.toContain(coverageLine);
+
+      const headingIndex = documentOrderIndex(
+        container,
+        (node) => node.tagName === "H2" && node.textContent === "What was tested",
+      );
+      const chipsIndex = documentOrderIndex(container, (node) => node.hasAttribute("data-summary-chips"));
+      const coverageIndex = documentOrderIndex(
+        container,
+        (node) => node.tagName === "P" && node.textContent === coverageLine,
+      );
+      const cardIndices = documentOrderIndices(
+        container,
+        (node) => node.hasAttribute("data-area-card"),
+      );
+      const firstCardIndex = cardIndices[0] ?? -1;
+      const lastCardIndex = cardIndices[cardIndices.length - 1] ?? -1;
+      const openIndex = documentOrderIndex(
+        container,
+        (node) => node.tagName === "A" && node.textContent === "Open public report",
+      );
+      const copyIndex = documentOrderIndex(
+        container,
+        (node) => node.tagName === "BUTTON" && node.textContent === "Copy public report link",
+      );
+      const bannerIndex = documentOrderIndex(container, (node) => node.hasAttribute("data-banner-region"));
+      expect(bannerIndex).toBeGreaterThan(-1);
+      expect(chipsIndex).toBeGreaterThan(bannerIndex);
+      expect(coverageIndex).toBeGreaterThan(chipsIndex);
+      expect(headingIndex).toBeGreaterThan(coverageIndex);
+      expect(cardIndices.length).toBe(AREA_IDS.length);
+      expect(firstCardIndex).toBeGreaterThan(headingIndex);
+      expect(lastCardIndex).toBeGreaterThan(firstCardIndex);
+      // Action row must follow every grid card. Comparing only the first card
+      // would still pass if the row were moved between cards; these checks fail
+      // if Open/Copy appear before any data-area-card.
+      for (const cardIndex of cardIndices) {
+        expect(openIndex).toBeGreaterThan(cardIndex);
+        expect(copyIndex).toBeGreaterThan(cardIndex);
+      }
+      expect(container.textContent).toContain(coverageLine);
+      expect(container.textContent).toContain("What was tested");
+      expect(container.textContent).toContain("Open public report");
+      expect(container.textContent).toContain("Copy public report link");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("host kicker appears before the verdict banner", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification(() => "pass")),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+
+      const hostIndex = documentOrderIndex(
+        container,
+        (node) => node.tagName === "P" && node.textContent === "Result for peer.example",
+      );
+      const bannerIndex = documentOrderIndex(
+        container,
+        (node) => node.hasAttribute("data-banner-region"),
+      );
+      expect(hostIndex).toBeGreaterThan(-1);
+      expect(bannerIndex).toBeGreaterThan(-1);
+      // Host kicker must precede VerdictBanner. This fails if host is moved
+      // after the banner region.
+      expect(hostIndex).toBeLessThan(bannerIndex);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+});
+
+describe("ResultsShell public action row ready/live guard", () => {
+  let registrator: HappyDomRegistrator | null = null;
+
+  beforeAll(async () => {
+    const specifier: string = "@happy-dom/global-registrator";
+    const mod = (await import(specifier)) as {
+      GlobalRegistrator?: HappyDomRegistrator;
+    };
+    if (mod.GlobalRegistrator === undefined) {
+      throw new Error(
+        "ResultsShell.test.tsx public-action tests need a DOM environment. " +
+          "Install the dev-only harness with " +
+          "`bun add -d happy-dom @happy-dom/global-registrator`.",
+      );
+    }
+    registrator = mod.GlobalRegistrator;
+    registrator.register({ url: "http://localhost/" });
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  });
+
+  afterAll(() => {
+    registrator?.unregister();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+    document.body.removeAttribute("style");
+  });
+
+  test("hides public actions for a malformed permanent report with a valid reportUrl", async () => {
+    // permanentReport({ grade: null }) is visibility permanent with a valid
+    // public reportUrl, so showPublicActions is true, but the score is
+    // unusable and status is malformed. The action row must stay hidden
+    // because status is not ready/live. Dropping that guard and gating only
+    // on showPublicActions && reportUrl would render Open/Copy here.
+    const report = permanentReport({ grade: null });
+    const result = project({
+      terminalReport: report,
+    });
+    expect(result.status).toBe("malformed");
+    expect(result.visibility).toBe("permanent");
+    expect(result.reportUrl).not.toBeNull();
+    expect(result.showPublicActions).toBe(true);
+
+    const restoreFetch = installTerminalReportFetch(report);
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes(RESULT_HEADLINE.resultUnavailable) === true,
+      );
+
+      expect(document.body.textContent).not.toContain("Open public report");
+      expect(document.body.textContent).not.toContain("Copy public report link");
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      restoreFetch();
     }
   });
 });

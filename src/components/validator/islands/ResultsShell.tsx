@@ -739,7 +739,6 @@ export default function ResultsShell({
     );
   }
 
-  const totals = areaTotals(projection.score.areas);
   const resultAreas = resultAreaEntries(projection.score.areas);
   const selectedEntry =
     selectedArea === null
@@ -796,11 +795,13 @@ export default function ResultsShell({
       </div>
       {projection.bannerVerdict !== null &&
       (projection.status === "live" || projection.status === "ready") ? (
-        <VerdictBanner
-          verdict={projection.bannerVerdict}
-          title={projection.bannerTitle}
-          message={projection.bannerMessage}
-        />
+        <div data-banner-region="">
+          <VerdictBanner
+            verdict={projection.bannerVerdict}
+            title={projection.bannerTitle}
+            message={projection.bannerMessage}
+          />
+        </div>
       ) : null}
       {statusText !== null ? (
         <p role="status" aria-live="polite" aria-atomic="true" className="text-sm text-zinc-400">
@@ -895,11 +896,9 @@ export default function ResultsShell({
       ) : null}
       {projection.showAreas ? (
         <div className="space-y-4">
+          <div data-summary-chips="" />
           <p className="text-sm text-zinc-300">
-            <span className="font-mono">v</span> {totals.passed} passed{" "}
-            <span className="font-mono">!</span> {totals.warn} need attention{" "}
-            <span className="font-mono">x</span> {totals.failed} failed{" "}
-            <span className="font-mono">i</span> {totals.rest} not tested
+            {projection.score.coverageLabel} areas tested
           </p>
           <div>
             <h2
@@ -925,29 +924,30 @@ export default function ResultsShell({
           {projection.visibility === "permanent" ? (
             <p className="text-sm text-zinc-400">The validator retention policy applies.</p>
           ) : null}
-          {projection.showPublicActions &&
-          projection.reportUrl !== null &&
-          projection.bannerVerdict !== "interrupted" ? (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <a
-                href={projection.reportUrl}
-                className={ACTION_BTN}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open public report
-              </a>
-              <button
-                type="button"
-                className={ACTION_BTN}
-                onClick={() => {
-                  void handleCopyReport();
-                }}
-              >
-                Copy public report link
-              </button>
-            </div>
-          ) : null}
+        </div>
+      ) : null}
+      {(projection.status === "ready" || projection.status === "live") &&
+      projection.showPublicActions &&
+      projection.reportUrl !== null &&
+      projection.bannerVerdict !== "interrupted" ? (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <a
+            href={projection.reportUrl}
+            className={ACTION_BTN}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open public report
+          </a>
+          <button
+            type="button"
+            className={ACTION_BTN}
+            onClick={() => {
+              void handleCopyReport();
+            }}
+          >
+            Copy public report link
+          </button>
         </div>
       ) : null}
       {projection.bannerVerdict === "interrupted" ? (
