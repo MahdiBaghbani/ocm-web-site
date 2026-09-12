@@ -6,6 +6,7 @@ import ResultsShell, {
   AREA_DESCRIPTIONS,
   CACHED_SESSION_JSON_NOTE,
   EVIDENCE_NOT_SAVED,
+  PAGE_LINK_NOT_SAVED_NOTICE,
   TEST_HREF,
   VISIBILITY_NOTICE,
   areaTotals,
@@ -147,7 +148,7 @@ describe("ResultsShell hydration", () => {
     expect(html).toContain("Session");
     expect(html).toContain(SESSION_ID);
     expect(html).not.toContain("Back to Test");
-    expect(html).toContain("Copy session ID");
+    expect(html).toContain("Copy page link");
     expect(html).toContain("Loading session...");
     expect(html).not.toContain("Missing host or session id");
   });
@@ -1286,18 +1287,195 @@ function installInterruptedReportFetch(): () => void {
   };
 }
 
-function installRejectedClipboard(): () => void {
-  const writeText = (): Promise<void> => Promise.reject(new Error("clipboard rejected"));
-  const navigatorHost = globalThis.navigator as { clipboard?: { writeText: (value: string) => Promise<void> } };
-  const previous = navigatorHost.clipboard;
-  navigatorHost.clipboard = { writeText };
+function installClipboardWriteText(
+  writeText: (value: string) => Promise<void>,
+): () => void {
+  const nav = globalThis.navigator as {
+    clipboard?: { writeText: (value: string) => Promise<void> };
+  };
+  const previousClipboard = nav.clipboard;
+  if (previousClipboard !== undefined) {
+    const previousWrite = previousClipboard.writeText.bind(previousClipboard);
+    try {
+      previousClipboard.writeText = writeText;
+      return () => {
+        previousClipboard.writeText = previousWrite;
+      };
+    } catch {
+      Object.defineProperty(previousClipboard, "writeText", {
+        configurable: true,
+        writable: true,
+        value: writeText,
+      });
+      return () => {
+        Object.defineProperty(previousClipboard, "writeText", {
+          configurable: true,
+          writable: true,
+          value: previousWrite,
+        });
+      };
+    }
+  }
+  try {
+    nav.clipboard = { writeText };
+  } catch {
+    Object.defineProperty(nav, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+  }
   return () => {
-    if (previous === undefined) {
-      delete navigatorHost.clipboard;
-    } else {
-      navigatorHost.clipboard = previous;
+    if (nav.clipboard !== undefined && nav.clipboard.writeText === writeText) {
+      delete nav.clipboard;
     }
   };
+}
+
+function installRejectedClipboard(): () => void {
+  return installClipboardWriteText(() => Promise.reject(new Error("clipboard rejected")));
+}
+
+function installCapturedClipboard(): { copied: string[]; restore: () => void } {
+  const copied: string[] = [];
+  const restore = installClipboardWriteText(async (value: string) => {
+    copied.push(value);
+  });
+  return { copied, restore };
+}
+
+function installExecCommand(handler: () => boolean): { restore: () => void } {
+  const previous = document.execCommand;
+  document.execCommand = ((command: string) => {
+    if (command === "copy") {
+      return handler();
+    }
+    return previous.call(document, command);
+  }) as typeof document.execCommand;
+  return {
+    restore: () => {
+      document.execCommand = previous;
+    },
+  };
+}
+
+function installLiveSessionFetch(): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return jsonResponse(200, {
+        state: "passive_running",
+        ts: 1,
+        optInActive: false,
+        nextInstruction: "wait_probe",
+      });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(200, liveReport(specification(() => "pass")));
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+function installNotSavedCachedFetch(): () => void {
+  let deliveredRunning = false;
+  let lastPoll: "running" | "terminal" = "running";
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      if (!deliveredRunning) {
+        deliveredRunning = true;
+        lastPoll = "running";
+        return jsonResponse(200, {
+          state: "passive_running",
+          ts: 1,
+          optInActive: false,
+          nextInstruction: "wait_probe",
+        });
+      }
+      lastPoll = "terminal";
+      return jsonResponse(200, { state: "terminal_pass", ts: 2, optInActive: false });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      if (lastPoll === "running") {
+        return jsonResponse(200, liveReport(specification(() => "pass")));
+      }
+      return jsonResponse(404, { error: "report_not_public", message: "report is not public" });
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+function installStopInstructionFetch(calls: { stop: number; sessionGet: number }): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = requestUrl(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes("/stop") && method === "POST") {
+      calls.stop += 1;
+      return jsonResponse(200, { id: SESSION_ID, state: "interrupted" });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      calls.sessionGet += 1;
+      return jsonResponse(200, {
+        state: "passive_complete",
+        ts: 1,
+        optInActive: false,
+        nextInstruction: "stop",
+      });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(200, liveReport(specification(() => "pass")));
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+function setWindowHref(href: string): void {
+  const host = globalThis as unknown as { window?: { location?: { href: string } } };
+  if (host.window?.location !== undefined) {
+    host.window.location.href = href;
+  }
 }
 
 describe("ResultsShell raw JSON disclosure and copy notice", () => {
@@ -1493,11 +1671,91 @@ describe("ResultsShell interrupted ready recovery", () => {
       });
       await waitForText(container, RESULT_HEADLINE.scanInterrupted);
       expect(container.textContent).toContain("Run a new check");
+      expect(container.textContent).toContain("Copy page link");
+      expect(container.textContent).toContain(`Session ${SESSION_ID}`);
       expect(container.textContent).not.toContain("This scan was not saved");
       expect(container.textContent).not.toContain("Open public report");
       expect(container.textContent).not.toContain("Copy public report link");
       const recovery = findByExactText(container, "a", "Run a new check");
       expect(recovery.getAttribute("href")).toBe("/validator/");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+});
+
+describe("ResultsShell page-link action", () => {
+  test("shows the exact not-saved honesty notice on ready cached results", async () => {
+    const restoreFetch = installNotSavedCachedFetch();
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      await waitForText(container, PAGE_LINK_NOT_SAVED_NOTICE);
+      expect(container.textContent).toContain("Copy page link");
+      expect(container.textContent).toContain(`Session ${SESSION_ID}`);
+      expect(container.textContent).toContain(
+        "Not saved. This result was not stored as a public report. A copied page link identifies the session but does not preserve these scores or evidence.",
+      );
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("keeps the page-link action when a permanent public URL is invalid", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification(() => "pass"), {
+        reportUrl: "https://evil.example/validator/report/abc",
+      }),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain("Copy page link");
+      expect(container.textContent).toContain(`Session ${SESSION_ID}`);
+      expect(container.textContent).not.toContain("Open public report");
+      expect(container.textContent).not.toContain("Copy public report link");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("read-only live links keep GET polling and do not POST /stop", async () => {
+    const calls = { stop: 0, sessionGet: 0 };
+    const restoreFetch = installStopInstructionFetch(calls);
+    const { document: doc, restore } = installDomShim();
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}&ro=1`);
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, "Continue or finish");
+      expect(container.textContent).toContain("Copy page link");
+      expect(calls.sessionGet).toBeGreaterThan(0);
+      expect(calls.stop).toBe(0);
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();
@@ -1583,6 +1841,8 @@ describe("ResultsShell ready results IA", () => {
       }
       expect(container.textContent).toContain(coverageLine);
       expect(container.textContent).toContain("What was tested");
+      expect(container.textContent).toContain("Copy page link");
+      expect(container.textContent).toContain(`Session ${SESSION_ID}`);
       expect(container.textContent).toContain("Open public report");
       expect(container.textContent).toContain("Copy public report link");
       await act(() => { root.unmount(); });
@@ -2062,6 +2322,8 @@ describe("ResultsShell not-saved empty JSON action", () => {
       await waitForText(container, "This scan was not saved");
 
       // No source report exists, so there is no JSON action and no modal.
+      expect(container.textContent).toContain(`Session ${SESSION_ID}`);
+      expect(container.textContent).not.toContain("Copy page link");
       expect(container.textContent).not.toContain("View full report JSON");
       expect(container.textContent).not.toContain("View raw report JSON");
       expect(
@@ -2293,9 +2555,9 @@ describe("ResultsShell area detail modal focus restoration", () => {
       // restore, focus would land on the copy button here.
       const copyButton = Array.from(
         document.querySelectorAll<HTMLButtonElement>("button"),
-      ).find((node) => node.textContent === "Copy session ID");
+      ).find((node) => node.textContent === "Copy page link");
       if (copyButton === undefined) {
-        throw new Error("missing Copy session ID button");
+        throw new Error("missing Copy page link button");
       }
       act(() => {
         copyButton.focus();
@@ -2523,6 +2785,186 @@ describe("ResultsShell loaded-evidence projection", () => {
         root.unmount();
       });
     } finally {
+      restoreFetch();
+    }
+  });
+});
+
+function pageLinkButton(): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll("button")).find(
+    (node) => node.textContent === "Copy page link",
+  );
+  if (button === undefined) {
+    throw new Error("missing Copy page link button");
+  }
+  return button;
+}
+
+describe("ResultsShell page-link clipboard", () => {
+  let registrator: HappyDomRegistrator | null = null;
+
+  beforeAll(async () => {
+    const specifier: string = "@happy-dom/global-registrator";
+    const mod = (await import(specifier)) as {
+      GlobalRegistrator?: HappyDomRegistrator;
+    };
+    if (mod.GlobalRegistrator === undefined) {
+      throw new Error(
+        "ResultsShell.test.tsx page-link clipboard tests need a DOM environment. " +
+          "Install the dev-only harness with " +
+          "`bun add -d happy-dom @happy-dom/global-registrator`.",
+      );
+    }
+    registrator = mod.GlobalRegistrator;
+    registrator.register({ url: "http://localhost/?host=peer.example&id=" + SESSION_ID });
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  });
+
+  afterAll(() => {
+    registrator?.unregister();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+    document.body.removeAttribute("style");
+  });
+
+  test("Clipboard API copies window.location.href, not the session id", async () => {
+    const restoreFetch = installPermanentReportFetch();
+    const clipboard = installCapturedClipboard();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(() => document.body.textContent?.includes("Copy page link") === true);
+      const href = window.location.href;
+      await act(() => {
+        pageLinkButton().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await waitForDom(() => document.body.textContent?.includes("Copied") === true);
+      expect(clipboard.copied).toEqual([href]);
+      expect(clipboard.copied[0]).toBe(window.location.href);
+      expect(clipboard.copied[0]).not.toBe(SESSION_ID);
+      expect(document.querySelector("[data-copy-fallback]")).toBeNull();
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      clipboard.restore();
+      restoreFetch();
+    }
+  });
+
+  test("rejected Clipboard API falls back to a successful execCommand", async () => {
+    const restoreFetch = installPermanentReportFetch();
+    const restoreClipboard = installRejectedClipboard();
+    const copied: string[] = [];
+    const restoreExec = installExecCommand(() => {
+      const areas = document.body.querySelectorAll("textarea");
+      const last = areas[areas.length - 1];
+      if (last !== undefined) {
+        copied.push(last.value);
+      }
+      return true;
+    });
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(() => document.body.textContent?.includes("Copy page link") === true);
+      const href = window.location.href;
+      await act(() => {
+        pageLinkButton().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await waitForDom(() => document.body.textContent?.includes("Copied") === true);
+      expect(copied).toEqual([href]);
+      expect(copied[0]).not.toBe(SESSION_ID);
+      expect(document.body.textContent).not.toContain("Could not copy the page link.");
+      expect(document.querySelector("[data-copy-fallback]")).toBeNull();
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      restoreExec.restore();
+      restoreClipboard();
+      restoreFetch();
+    }
+  });
+
+  test("both programmatic tiers failing expose a visible unfocused selectable input", async () => {
+    const restoreFetch = installPermanentReportFetch();
+    const restoreClipboard = installRejectedClipboard();
+    const restoreExec = installExecCommand(() => false);
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(() => document.body.textContent?.includes("Copy page link") === true);
+      const href = window.location.href;
+      await act(() => {
+        pageLinkButton().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await waitForDom(() => document.querySelector("[data-copy-fallback]") !== null);
+      const fallback = document.querySelector<HTMLInputElement>("[data-copy-fallback]");
+      expect(fallback).not.toBeNull();
+      if (fallback === null) {
+        throw new Error("missing copy fallback input");
+      }
+      expect(fallback.tagName).toBe("INPUT");
+      expect(fallback.readOnly).toBe(true);
+      expect(fallback.value).toBe(href);
+      expect(fallback.value).not.toBe(SESSION_ID);
+      expect(fallback.hasAttribute("autofocus")).toBe(false);
+      expect(document.activeElement === fallback).toBe(false);
+      expect(document.body.textContent).toContain("Could not copy the page link.");
+      expect(document.body.textContent).not.toContain("Copied");
+      const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+      expect(alerts.some((node) => node.textContent === "Could not copy the page link.")).toBe(true);
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      restoreExec.restore();
+      restoreClipboard();
+      restoreFetch();
+    }
+  });
+
+  test("a live page link appends the read-only query parameter", async () => {
+    const restoreFetch = installLiveSessionFetch();
+    const clipboard = installCapturedClipboard();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(() => document.body.textContent?.includes("Copy page link") === true);
+      await act(() => {
+        pageLinkButton().dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await waitForDom(() => clipboard.copied.length > 0);
+      const copied = clipboard.copied[0];
+      expect(copied).toBeDefined();
+      if (copied === undefined) {
+        throw new Error("missing copied page link");
+      }
+      const parsed = new URL(copied);
+      expect(parsed.searchParams.get("ro")).toBe("1");
+      expect(copied).not.toBe(SESSION_ID);
+      expect(copied).not.toBe(window.location.href);
+      expect(copied.startsWith(window.location.origin)).toBe(true);
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      clipboard.restore();
       restoreFetch();
     }
   });

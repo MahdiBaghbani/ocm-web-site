@@ -90,6 +90,12 @@ export const EVIDENCE_NOT_SAVED =
 export const EVIDENCE_EXPIRED =
   "Evidence cannot be loaded because the saved report is no longer available.";
 
+export const PAGE_LINK_NOT_SAVED_NOTICE =
+  "Not saved. This result was not stored as a public report. A copied page link identifies the session but does not preserve these scores or evidence.";
+
+const PAGE_LINK_READONLY_PARAM = "ro";
+const PAGE_LINK_READONLY_VALUE = "1";
+
 const DEFAULT_BANNER_BODY: Record<ValidatorScoreOutcomeKind, string> = {
   compatible: "This server passed all assessed OCM compatibility areas.",
   compatible_with_warnings:
@@ -571,15 +577,87 @@ function ReloadButton({ label }: { label: string }): React.ReactElement {
   );
 }
 
-async function copyText(value: string): Promise<boolean> {
-  if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
-    return false;
-  }
+function pageLinkIsReadOnly(href: string): boolean {
   try {
-    await navigator.clipboard.writeText(value);
-    return true;
+    return new URL(href).searchParams.get(PAGE_LINK_READONLY_PARAM) === PAGE_LINK_READONLY_VALUE;
   } catch {
     return false;
+  }
+}
+
+function pageLinkHref(status: ResultsPageStatus, href: string): string {
+  if (status !== "live") {
+    return href;
+  }
+  try {
+    const url = new URL(href);
+    url.searchParams.set(PAGE_LINK_READONLY_PARAM, PAGE_LINK_READONLY_VALUE);
+    return url.href;
+  } catch {
+    return href;
+  }
+}
+
+function readOnlyStop(): Promise<{
+  ok: false;
+  kind: "aborted";
+  status: null;
+  error: string;
+  message: string;
+}> {
+  return Promise.resolve({
+    ok: false,
+    kind: "aborted",
+    status: null,
+    error: "aborted",
+    message: "",
+  });
+}
+
+async function copyText(value: string): Promise<boolean> {
+  if (typeof navigator !== "undefined" && navigator.clipboard !== undefined) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Clipboard API rejected; fall through to execCommand.
+    }
+  }
+  if (typeof document === "undefined") {
+    return false;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  try {
+    if (typeof textarea.select === "function") {
+      textarea.select();
+    }
+    if (typeof document.createRange === "function" && typeof window.getSelection === "function") {
+      const selection = window.getSelection();
+      if (selection !== null) {
+        const range = document.createRange();
+        range.selectNodeContents(textarea);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    if (typeof document.execCommand !== "function") {
+      return false;
+    }
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    const parent = textarea.parentNode;
+    if (parent !== null) {
+      parent.removeChild(textarea);
+    }
   }
 }
 
@@ -602,9 +680,11 @@ export default function ResultsShell({
   const [copyNotice, setCopyNotice] = useState<{ ok: boolean; text: string } | null>(
     null,
   );
+  const [copyFallback, setCopyFallback] = useState<string | null>(null);
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Live trigger buttons keyed by canonical area id, plus a grid-heading
   // fallback. On close we restore focus by area id so the correct trigger wins
   // even if the modal remounted a fresh button; OverlayFrame does its own
@@ -638,7 +718,21 @@ export default function ResultsShell({
     setError("");
     setRawJsonOpen(false);
     setSelectedArea(null);
+    setCopyNotice(null);
+    setCopyFallback(null);
+    if (copyTimerRef.current !== null) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
   }, [session?.host, session?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -657,6 +751,8 @@ export default function ResultsShell({
       return;
     }
     const controller = new AbortController();
+    const readOnly =
+      typeof window !== "undefined" && pageLinkIsReadOnly(window.location.href);
     void runResultsPollLoop(
       {
         sessionId: session.id,
@@ -666,6 +762,8 @@ export default function ResultsShell({
         },
         deps: requestDeps(config, controller.signal),
         signal: controller.signal,
+        // Copied live links use ?ro=1 so this view does not POST /stop.
+        stop: readOnly ? readOnlyStop : undefined,
       },
       {
         onPoll: setPoll,
@@ -696,17 +794,27 @@ export default function ResultsShell({
     validatorApiOrigin: config?.validatorApiOrigin ?? "",
   });
 
-  async function handleCopySession(): Promise<void> {
-    if (session === null) {
+  async function handleCopyPageLink(): Promise<void> {
+    if (session === null || typeof window === "undefined") {
       return;
     }
-    const ok = await copyText(session.id);
+    const value = pageLinkHref(projection.status, window.location.href);
+    const ok = await copyText(value);
+    if (copyTimerRef.current !== null) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
     if (ok) {
+      setCopyFallback(null);
       setCopyNotice({ ok: true, text: "Copied" });
-      window.setTimeout(() => setCopyNotice(null), 2000);
+      copyTimerRef.current = setTimeout(() => {
+        setCopyNotice(null);
+        copyTimerRef.current = null;
+      }, 2000);
       return;
     }
-    setCopyNotice({ ok: false, text: "Could not copy the session ID." });
+    setCopyFallback(value);
+    setCopyNotice({ ok: false, text: "Could not copy the page link." });
   }
 
   async function handleCopyReport(): Promise<void> {
@@ -714,11 +822,20 @@ export default function ResultsShell({
       return;
     }
     const ok = await copyText(projection.reportUrl);
+    if (copyTimerRef.current !== null) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
     if (ok) {
+      setCopyFallback(null);
       setCopyNotice({ ok: true, text: "Copied" });
-      window.setTimeout(() => setCopyNotice(null), 2000);
+      copyTimerRef.current = setTimeout(() => {
+        setCopyNotice(null);
+        copyTimerRef.current = null;
+      }, 2000);
       return;
     }
+    setCopyFallback(projection.reportUrl);
     setCopyNotice({
       ok: false,
       text: "Could not copy the report link. Open the report and copy its address instead.",
@@ -788,9 +905,26 @@ export default function ResultsShell({
           <p className="mt-1 break-all text-sm text-zinc-400">
             Session {session.id}
           </p>
-          <button type="button" className={`${ACTION_BTN} mt-2`} onClick={() => { void handleCopySession(); }}>
-            Copy session ID
-          </button>
+          {projection.status !== "not_saved_empty" ? (
+            <>
+              <button
+                type="button"
+                className={`${ACTION_BTN} mt-2`}
+                onClick={() => {
+                  void handleCopyPageLink();
+                }}
+              >
+                Copy page link
+              </button>
+              {projection.status === "ready" &&
+              projection.visibility === "not_saved" &&
+              projection.sourceKind === "cached_session" ? (
+                <p className="mt-2 text-sm text-zinc-400">
+                  {PAGE_LINK_NOT_SAVED_NOTICE}
+                </p>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </div>
       {projection.bannerVerdict !== null &&
@@ -808,14 +942,29 @@ export default function ResultsShell({
           {statusText}
         </p>
       ) : null}
-      {copyNotice !== null ? (
+      <div className="space-y-2">
         <p
-          className={`text-sm ${copyNotice.ok ? "text-zinc-300" : "text-rose-200"}`}
-          role={copyNotice.ok ? "status" : "alert"}
+          id="results-copy-notice"
+          className={`text-sm ${
+            copyNotice !== null && !copyNotice.ok ? "text-rose-200" : "text-zinc-300"
+          }`}
+          role={copyNotice !== null && !copyNotice.ok ? "alert" : "status"}
+          aria-live={copyNotice !== null && !copyNotice.ok ? "assertive" : "polite"}
+          aria-atomic="true"
         >
-          {copyNotice.text}
+          {copyNotice === null ? "" : copyNotice.text}
         </p>
-      ) : null}
+        {copyFallback !== null ? (
+          <input
+            type="text"
+            readOnly
+            value={copyFallback}
+            aria-describedby="results-copy-notice"
+            data-copy-fallback=""
+            className="w-full rounded-xl border border-rose-400 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          />
+        ) : null}
+      </div>
       {error !== "" ? (
         <div className="space-y-3">
           <p className="text-sm text-rose-200" role="alert">
