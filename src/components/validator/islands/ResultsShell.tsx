@@ -960,7 +960,9 @@ export default function ResultsShell({
         },
         deps: requestDeps(config, controller.signal),
         signal: controller.signal,
-        // Copied live links use ?ro=1 so this view does not POST /stop.
+        // Copied live links use ?ro=1 so this view keeps GET polling but
+        // never POSTs /stop.
+        readOnly,
         stop: readOnly ? readOnlyStop : undefined,
       },
       {
@@ -1260,7 +1262,7 @@ export default function ResultsShell({
           ) : null}
         </div>
       ) : null}
-      {(projection.status === "ready" || projection.status === "live") &&
+      {projection.status === "ready" &&
       projection.showPublicActions &&
       projection.reportUrl !== null &&
       projection.bannerVerdict !== "interrupted" ? (

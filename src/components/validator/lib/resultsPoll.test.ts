@@ -294,4 +294,47 @@ describe("runResultsPollLoop", () => {
     });
     expect(recorded.errors).toEqual(["session not found"]);
   });
+
+  test("read-only loop uses the zero-interval fallback, never posts stop, then exits on terminal", async () => {
+    const controller = new AbortController();
+    const delays: number[] = [];
+    let polls = 0;
+    let stops = 0;
+    const recorded = hooks();
+    await runLoop(recorded, {
+      sessionId: SESSION_ID,
+      cadence: { pollIntervalMs: 1000, activePollIntervalMs: 2000 },
+      deps: {},
+      signal: controller.signal,
+      readOnly: true,
+      poll: async () => {
+        polls += 1;
+        // Non-terminal poll with no instruction: continuePolling is false and
+        // pollIntervalMs is 0, so the read-only zero-interval fallback applies.
+        if (polls === 1) {
+          return okPoll({ state: "passive_running", ts: 1, optInActive: false });
+        }
+        if (polls === 2) {
+          return okPoll({ state: "terminal_pass", ts: 2, optInActive: false });
+        }
+        // Guard against a hang if read-only terminalization regresses.
+        controller.abort();
+        return fail("timeout", "loop did not terminalize");
+      },
+      stop: async () => {
+        stops += 1;
+        return okStop("interrupted");
+      },
+      report: async () => ({ ok: true, status: 200, data: REPORT }),
+      wait: async (ms) => {
+        delays.push(ms);
+        return { ok: true };
+      },
+    });
+    expect(polls).toBe(2);
+    expect(stops).toBe(0);
+    expect(delays).toEqual([1000]);
+    expect(recorded.errors).toEqual([]);
+    expect(recorded.terminal.at(-1)).toBe(true);
+  });
 });

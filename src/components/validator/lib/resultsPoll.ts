@@ -74,6 +74,8 @@ export interface ResultsPollLoopInput {
   cadence: MachineCadence;
   deps: ValidatorFetchDeps;
   signal: AbortSignal;
+  // Copied read-only links keep GET polling but never POST /stop.
+  readOnly?: boolean;
   reportRefreshMs?: number;
   now?: () => number;
   poll?: PollFn;
@@ -107,6 +109,7 @@ export async function runResultsPollLoop(
   const refreshMs = input.reportRefreshMs ?? REPORT_REFRESH_MS;
   const clock = input.now ?? Date.now;
   const { sessionId, cadence, deps, signal } = input;
+  const readOnly = input.readOnly ?? false;
   const fallbackMs = cadence.pollIntervalMs ?? DEFAULT_VALIDATOR_CONFIG.pollIntervalMs;
 
   let postedStop = false;
@@ -178,7 +181,9 @@ export async function runResultsPollLoop(
       return;
     }
 
-    if (machine.shouldPostStop && !postedStop) {
+    // Read-only views keep GET polling and never POST /stop; they only
+    // stop when the session reaches a real terminal state.
+    if (!readOnly && machine.shouldPostStop && !postedStop) {
       postedStop = true;
       const stopped = await stop(sessionId, deps);
       if (signal.aborted) {
@@ -198,11 +203,18 @@ export async function runResultsPollLoop(
       return;
     }
 
-    if (machine.terminalize || !machine.continuePolling) {
+    if (machine.terminalize) {
+      return;
+    }
+    if (!readOnly && !machine.continuePolling) {
       return;
     }
 
-    const waited = await wait(machine.pollIntervalMs, { signal });
+    // shouldPostStop keeps a non-zero cadence, but a null-instruction
+    // non-terminal read-only poll would be 0; fall back so we do not busy-loop.
+    const waitMs =
+      readOnly && machine.pollIntervalMs === 0 ? fallbackMs : machine.pollIntervalMs;
+    const waited = await wait(waitMs, { signal });
     if (!waited.ok) {
       return;
     }

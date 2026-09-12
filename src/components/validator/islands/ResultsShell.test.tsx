@@ -2134,8 +2134,48 @@ describe("ResultsShell page-link action", () => {
       });
       await waitForText(container, "Continue or finish");
       expect(container.textContent).toContain("Copy page link");
-      expect(calls.sessionGet).toBeGreaterThan(0);
+      // The fixture returns passive_complete + "stop" on every poll. A
+      // read-only view must keep GET polling past that first stop
+      // instruction instead of exiting after one poll, and must never POST
+      // /stop.
+      await waitForDom(() => calls.sessionGet >= 2);
+      expect(calls.sessionGet).toBeGreaterThanOrEqual(2);
       expect(calls.stop).toBe(0);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("shows the not-saved visibility notice beside disclosed cache evidence", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      liveReport(specification(() => "pass"), {
+        visibility: "not_saved",
+        evidence: [EVIDENCE_ITEM],
+      }),
+    );
+    const { document: doc, restore } = installDomShim();
+    // A non-read-only link so this mount is unaffected by any earlier test
+    // that toggled the read-only page-link parameter.
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}`);
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+
+      // A terminal not_saved cache with evidence items discloses the items
+      // (evidenceMode = disclosure), and the not-saved visibility notice must
+      // render in the same document beside that disclosed evidence.
+      expect(container.textContent).toContain(VISIBILITY_NOTICE.not_saved);
+      const disclosure = firstByHasAttr(container, "data-reason-source");
+      expect(disclosure).not.toBeNull();
+      expect(container.textContent).toContain("1 item");
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();
