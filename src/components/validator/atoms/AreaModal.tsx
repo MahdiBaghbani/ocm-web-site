@@ -8,7 +8,7 @@ import { OverlayFrame } from "../../observatory/modal/OverlayFrame";
 import EvidenceDisclosure, { type EvidenceItem } from "./EvidenceDisclosure";
 import Pill, { type GradeKind } from "./Pill";
 import RawJsonPanel from "./RawJsonPanel";
-import { reasonCopyFor } from "../lib/validatorReasons";
+import { reasonCopyFor, selectPrimaryReasonItem } from "../lib/validatorReasons";
 import type { CanonicalAreaId } from "../lib/validatorScore";
 
 // Short plain-language question shown beside each area label. Kept local so the
@@ -55,10 +55,6 @@ function itemAreaOf(item: EvidenceItem): string | undefined {
   return item.scoreArea ?? item.area;
 }
 
-function hasReasonCode(item: EvidenceItem): boolean {
-  return typeof item.reasonCode === "string" && item.reasonCode.trim() !== "";
-}
-
 export function AreaModalContent({
   area,
   areaLabel,
@@ -84,7 +80,7 @@ export function AreaModalContent({
   // still shown unfiltered in the Raw JSON tab.
   const areaItems = items.filter((item) => itemAreaOf(item) === area);
 
-  const primaryItem = areaItems.find(hasReasonCode);
+  const primaryItem = selectPrimaryReasonItem(areaItems);
   const resolved =
     primaryItem === undefined
       ? null

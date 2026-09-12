@@ -3,7 +3,7 @@
  * a private or public terminal result without treating report_not_public as a
  * load error.
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import AreaGrid from "../atoms/AreaGrid";
 import AreaModal from "../atoms/AreaModal";
 import EvidenceDisclosure, { type EvidenceItem } from "../atoms/EvidenceDisclosure";
@@ -28,7 +28,7 @@ import {
   type ValidatorFailure,
   type ValidatorFetchDeps,
 } from "../lib/validatorFetch";
-import type { ReasonSeverity } from "../lib/validatorReasons";
+import { selectPrimaryReasonItem, type ReasonSeverity } from "../lib/validatorReasons";
 import { runResultsPollLoop } from "../lib/resultsPoll";
 import {
   USER_STEPS,
@@ -43,6 +43,7 @@ import {
 } from "../lib/urlState";
 import { isRecord } from "../lib/validatorShared";
 import {
+  CANONICAL_AREA_IDS,
   isCanonicalAreaId,
   isUsableSpecificationScore,
   projectValidatorScore,
@@ -234,19 +235,29 @@ function evidenceItems(value: unknown): EvidenceItem[] {
   return items;
 }
 
-// Primary reason slug per canonical area. scoreArea wins over area, matching
-// AreaModal; the first evidence row with a non-empty reason code represents the
-// area, so warn and fail cards can explain the outcome.
+// Evidence rows scoped to one canonical area. scoreArea wins over area,
+// matching AreaModal; rows with neither field are excluded.
+function areaEvidenceItems(
+  items: readonly EvidenceItem[],
+  areaId: CanonicalAreaId,
+): EvidenceItem[] {
+  return items.filter((item) => (item.scoreArea ?? item.area) === areaId);
+}
+
+// Primary reason slug per canonical area. Selected with the shared precedence
+// (affectsGrade true > undefined > false, then grade fail > warn > pass > null,
+// source order for ties) so warn and fail cards can explain the outcome and
+// stay consistent with primaryReasonsByArea and AreaModal.
 export function primaryReasonCodesByArea(
   items: readonly EvidenceItem[],
 ): Partial<Record<CanonicalAreaId, string>> {
   const byArea: Partial<Record<CanonicalAreaId, string>> = {};
-  for (const item of items) {
-    const areaId = item.scoreArea ?? item.area;
-    if (areaId === undefined || !isCanonicalAreaId(areaId) || byArea[areaId] !== undefined) {
+  for (const areaId of CANONICAL_AREA_IDS) {
+    const primary = selectPrimaryReasonItem(areaEvidenceItems(items, areaId));
+    if (primary === undefined) {
       continue;
     }
-    const code = typeof item.reasonCode === "string" ? item.reasonCode.trim() : "";
+    const code = typeof primary.reasonCode === "string" ? primary.reasonCode.trim() : "";
     if (code === "") {
       continue;
     }
@@ -255,11 +266,10 @@ export function primaryReasonCodesByArea(
   return byArea;
 }
 
-// Primary reason outcome per canonical area, selected exactly like
-// primaryReasonCodesByArea and AreaModal: scoreArea wins over area, and the
-// first row with a non-empty trimmed reason code represents the area. Carries
-// the grade, severity, and affectsGrade of that row so warn/fail cards can
-// resolve reason copy from the primary item rather than the aggregate grade.
+// Primary reason outcome per canonical area, selected by the same precedence as
+// primaryReasonCodesByArea and AreaModal so both functions choose the same item.
+// Carries the grade, severity, and affectsGrade of that row so warn/fail cards
+// can resolve reason copy from the primary item rather than the aggregate grade.
 export function primaryReasonsByArea(
   items: readonly EvidenceItem[],
 ): Partial<
@@ -268,20 +278,37 @@ export function primaryReasonsByArea(
   const byArea: Partial<
     Record<CanonicalAreaId, { grade: ReasonSeverity | null; severity?: string; affectsGrade?: boolean }>
   > = {};
-  for (const item of items) {
-    const areaId = item.scoreArea ?? item.area;
-    if (areaId === undefined || !isCanonicalAreaId(areaId) || byArea[areaId] !== undefined) {
+  for (const areaId of CANONICAL_AREA_IDS) {
+    const primary = selectPrimaryReasonItem(areaEvidenceItems(items, areaId));
+    if (primary === undefined) {
       continue;
     }
-    const code = typeof item.reasonCode === "string" ? item.reasonCode.trim() : "";
+    const code = typeof primary.reasonCode === "string" ? primary.reasonCode.trim() : "";
     if (code === "") {
       continue;
     }
     byArea[areaId] = {
-      grade: item.grade ?? null,
-      severity: item.severity,
-      affectsGrade: item.affectsGrade,
+      grade: primary.grade ?? null,
+      severity: primary.severity,
+      affectsGrade: primary.affectsGrade,
     };
+  }
+  return byArea;
+}
+
+// Count of loaded evidence rows per canonical area. scoreArea wins over area,
+// matching the primary-reason selection; lets a card stay interactive when
+// loaded evidence exists even if the reported score was zero.
+export function loadedEvidenceCountsByArea(
+  items: readonly EvidenceItem[],
+): Partial<Record<CanonicalAreaId, number>> {
+  const byArea: Partial<Record<CanonicalAreaId, number>> = {};
+  for (const item of items) {
+    const areaId = item.scoreArea ?? item.area;
+    if (areaId === undefined || !isCanonicalAreaId(areaId)) {
+      continue;
+    }
+    byArea[areaId] = (byArea[areaId] ?? 0) + 1;
   }
   return byArea;
 }
@@ -432,6 +459,7 @@ export function projectResultsPage(input: {
     descriptions: AREA_DESCRIPTIONS,
     reasonCodes: primaryReasonCodesByArea(evidence),
     primaryReasons: primaryReasonsByArea(evidence),
+    loadedEvidenceByArea: loadedEvidenceCountsByArea(evidence),
   });
   const usable = isUsableSpecificationScore(score.parsed);
 
@@ -577,6 +605,23 @@ export default function ResultsShell({
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
+  // Live trigger buttons keyed by canonical area id, plus a grid-heading
+  // fallback. On close we restore focus by area id so the correct trigger wins
+  // even if the modal remounted a fresh button; OverlayFrame does its own
+  // restore first and this deferred restore wins afterward.
+  const triggerRefs = useRef(new Map<CanonicalAreaId, HTMLButtonElement | null>());
+  const gridHeadingRef = useRef<HTMLHeadingElement | null>(null);
+
+  const registerTriggerRef = useCallback(
+    (area: CanonicalAreaId, el: HTMLButtonElement | null): void => {
+      if (el === null) {
+        triggerRefs.current.delete(area);
+        return;
+      }
+      triggerRefs.current.set(area, el);
+    },
+    [],
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -706,14 +751,31 @@ export default function ResultsShell({
         ? "Loading session..."
         : progressAnnouncement(view)
       : null;
-  const rawJsonTrigger =
+  const rawJsonLabel = "View full report JSON";
+  // Normal ready/live results surface the full report JSON as a low-emphasis
+  // footer action; the malformed terminal keeps a prominent action button.
+  const readyRawJsonTrigger =
+    projection.sourceReport !== null ? (
+      <button
+        type="button"
+        className="text-sm text-zinc-400 underline hover:text-zinc-200"
+        aria-haspopup="dialog"
+        aria-expanded={rawJsonOpen}
+        onClick={() => setRawJsonOpen(true)}
+      >
+        {rawJsonLabel}
+      </button>
+    ) : null;
+  const malformedRawJsonTrigger =
     projection.sourceReport !== null ? (
       <button
         type="button"
         className={ACTION_BTN}
+        aria-haspopup="dialog"
+        aria-expanded={rawJsonOpen}
         onClick={() => setRawJsonOpen(true)}
       >
-        View raw report JSON
+        {rawJsonLabel}
       </button>
     ) : null;
 
@@ -840,11 +902,19 @@ export default function ResultsShell({
             <span className="font-mono">i</span> {totals.rest} not tested
           </p>
           <div>
-            <h2 className="mb-3 text-sm font-semibold text-zinc-100">What was tested</h2>
+            <h2
+              ref={gridHeadingRef}
+              tabIndex={-1}
+              className="mb-3 text-sm font-semibold text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+            >
+              What was tested
+            </h2>
             <AreaGrid
               areas={resultAreas}
               variant="results"
+              openArea={selectedArea}
               onAreaClick={(areaId) => setSelectedArea(areaId)}
+              registerTriggerRef={registerTriggerRef}
             />
           </div>
         </div>
@@ -907,10 +977,10 @@ export default function ResultsShell({
           {projection.sourceKind === "cached_session" ? (
             <p className="text-sm text-zinc-400">{CACHED_SESSION_JSON_NOTE}</p>
           ) : null}
-          {rawJsonTrigger}
+          {readyRawJsonTrigger}
         </div>
       ) : null}
-      {projection.status === "malformed" ? rawJsonTrigger : null}
+      {projection.status === "malformed" ? malformedRawJsonTrigger : null}
       {rawJsonOpen && projection.sourceReport !== null ? (
         <ReportJsonModal
           title={projection.rawJsonTitle}
@@ -931,7 +1001,30 @@ export default function ResultsShell({
           sourceReport={projection.sourceReport}
           grade={selectedEntry.grade}
           evidenceCount={selectedEntry.evidenceCount}
-          onClose={() => setSelectedArea(null)}
+          onClose={() => {
+            const area = selectedArea;
+            setSelectedArea(null);
+            // OverlayFrame removes inert and restores its captured element in a
+            // passive-effect cleanup. A microtask would run before that cleanup,
+            // so the focus could land while the body is still inert. Defer with
+            // setTimeout(0): a macrotask that runs after OverlayFrame's inert
+            // cleanup (React flushes passive effects via MessageChannel, which
+            // beats the clamped setTimeout) and that the happy-dom tests flush
+            // through their act/timer loop. This deferred focus is remount
+            // insurance and wins afterward, refocusing the current trigger for
+            // the stored area id or the grid heading when the trigger is gone.
+            setTimeout(() => {
+              if (area === null) {
+                return;
+              }
+              const btn = triggerRefs.current.get(area);
+              if (btn !== undefined && btn !== null && btn.isConnected) {
+                btn.focus();
+              } else {
+                gridHeadingRef.current?.focus();
+              }
+            }, 0);
+          }}
         />
       ) : null}
     </div>

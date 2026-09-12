@@ -80,6 +80,10 @@ export interface SpecificationAreaGridEntry {
   label: string;
   grade: SpecificationGrade | null;
   evidenceCount: number;
+  // Count of evidence rows actually loaded for this area, independent of the
+  // reported evidenceCount. Lets a card stay interactive when loaded evidence
+  // exists even if the score reported zero.
+  loadedEvidenceCount?: number;
   description?: string;
   pillLabel?: string;
   // Primary reason slug for the area, derived from its evidence. Optional so
@@ -119,6 +123,7 @@ export interface ProjectValidatorScoreInput {
       { grade?: ReasonSeverity | null; severity?: string; affectsGrade?: boolean }
     >
   >;
+  loadedEvidenceByArea?: Partial<Record<CanonicalAreaId, number>>;
 }
 
 const CANONICAL_AREA_SET: ReadonlySet<string> = new Set(CANONICAL_AREA_IDS);
@@ -450,6 +455,7 @@ export function areaGridEntriesFromScore(
         { grade?: ReasonSeverity | null; severity?: string; affectsGrade?: boolean }
       >
     >;
+    loadedEvidenceByArea?: Partial<Record<CanonicalAreaId, number>>;
   } = {},
 ): SpecificationAreaGridEntry[] {
   const byId: Map<CanonicalAreaId, SpecificationAreaScore> = isUsableSpecificationScore(parsed)
@@ -475,6 +481,7 @@ export function areaGridEntriesFromScore(
       label: CANONICAL_AREA_LABELS[id],
       grade,
       evidenceCount: row?.evidenceCount ?? 0,
+      loadedEvidenceCount: options.loadedEvidenceByArea?.[id] ?? 0,
     };
     if (description !== undefined) {
       entry.description = description;
@@ -532,6 +539,7 @@ export function projectValidatorScore(
       pillLabels: input.pillLabels,
       reasonCodes: input.reasonCodes,
       primaryReasons: input.primaryReasons,
+      loadedEvidenceByArea: input.loadedEvidenceByArea,
     }),
   };
   if (showFailModeLabel && input.failModeLabel !== undefined) {

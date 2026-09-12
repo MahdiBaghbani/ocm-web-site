@@ -1,5 +1,5 @@
 import React, { act } from "react";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import ResultsShell, {
@@ -497,7 +497,7 @@ describe("result area presentation helpers", () => {
 });
 
 describe("primary reason selection precedence", () => {
-  test("first reason-bearing item per area wins for codes and outcome", () => {
+  test("affectsGrade true wins over an earlier affectsGrade false item", () => {
     const items: EvidenceItem[] = [
       { area: "discovery", scoreArea: "tls", reasonCode: "  ", grade: "pass" },
       {
@@ -517,8 +517,40 @@ describe("primary reason selection precedence", () => {
     ];
     const codes = primaryReasonCodesByArea(items);
     const reasons = primaryReasonsByArea(items);
-    expect(codes.tls).toBe("discovery_probed");
-    expect(reasons.tls).toEqual({ grade: "pass", severity: "pass", affectsGrade: false });
+    expect(codes.tls).toBe("tls_probed");
+    expect(reasons.tls).toEqual({ grade: "warn", severity: "warn", affectsGrade: true });
+  });
+
+  test("grade fail beats warn within the same affectsGrade tier", () => {
+    const items: EvidenceItem[] = [
+      {
+        scoreArea: "sharing",
+        reasonCode: "discovery_probed",
+        grade: "warn",
+        severity: "warn",
+        affectsGrade: true,
+      },
+      {
+        scoreArea: "sharing",
+        reasonCode: "httpsig_probed",
+        grade: "fail",
+        severity: "fail",
+        affectsGrade: true,
+      },
+    ];
+    const codes = primaryReasonCodesByArea(items);
+    const reasons = primaryReasonsByArea(items);
+    expect(codes.sharing).toBe("httpsig_probed");
+    expect(reasons.sharing).toEqual({ grade: "fail", severity: "fail", affectsGrade: true });
+  });
+
+  test("codes and outcome choose the same item", () => {
+    const items: EvidenceItem[] = [
+      { scoreArea: "tls", reasonCode: "discovery_probed", grade: "pass", affectsGrade: false },
+      { scoreArea: "tls", reasonCode: "tls_probed", grade: "warn", affectsGrade: true },
+    ];
+    expect(primaryReasonCodesByArea(items).tls).toBe("tls_probed");
+    expect(primaryReasonsByArea(items).tls?.grade).toBe("warn");
   });
 
   test("uses area when scoreArea is absent and skips non-canonical areas", () => {
@@ -850,7 +882,7 @@ describe("ResultsShell session change reset", () => {
       expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
       expect(container.textContent).not.toContain("Continue or finish");
 
-      const cachedTrigger = findByExactText(container, "button", "View raw report JSON");
+      const cachedTrigger = findByExactText(container, "button", "View full report JSON");
       await act(() => {
         reactClick(cachedTrigger);
       });
@@ -954,7 +986,7 @@ describe("ResultsShell session change reset", () => {
       expect(container.textContent).toContain(CACHED_SESSION_JSON_NOTE);
       expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
 
-      const cachedTrigger = findByExactText(container, "button", "View raw report JSON");
+      const cachedTrigger = findByExactText(container, "button", "View full report JSON");
       await act(() => {
         reactClick(cachedTrigger);
       });
@@ -969,7 +1001,7 @@ describe("ResultsShell session change reset", () => {
       expect(container.textContent).toContain(sessionB);
       await waitForText(container, RESULT_HEADLINE.compatible);
       await waitForText(container, VISIBILITY_NOTICE.permanent);
-      expect(container.textContent).toContain("View raw report JSON");
+      expect(container.textContent).toContain("View full report JSON");
       expect(container.textContent).not.toContain(CACHED_SESSION_JSON_NOTE);
       expect(
         nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
@@ -980,7 +1012,7 @@ describe("ResultsShell session change reset", () => {
         });
       });
       expect(container.textContent).toContain(RESULT_HEADLINE.compatible);
-      expect(container.textContent).toContain("View raw report JSON");
+      expect(container.textContent).toContain("View full report JSON");
       expect(
         nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
       ).toBe(false);
@@ -1039,7 +1071,10 @@ describe("ResultsShell session change reset", () => {
       await waitForText(container, RESULT_HEADLINE.compatible);
 
       const trigger = findByExactText(container, "button", "View details");
-      expect(trigger.getAttribute("aria-label")).toBe("View details for Server discovery");
+      expect(trigger.getAttribute("id")).toBe("area-card-discovery-action");
+      expect(trigger.getAttribute("aria-labelledby")).toBe(
+        "area-card-discovery-title area-card-discovery-action",
+      );
       await act(() => {
         reactClick(trigger);
       });
@@ -1070,7 +1105,7 @@ describe("ResultsShell session change reset", () => {
       // and status ready) would keep the AreaModal open here, which is what
       // makes this regression non-vacuous.
       await waitForText(container, RESULT_HEADLINE.compatibleWithWarnings);
-      expect(viewDetailsAriaLabels(container).length).toBeGreaterThan(0);
+      expect(actionButtons(container).length).toBeGreaterThan(0);
 
       // Session B: the area modal is closed even though a valid sourceReport
       // exists, proving the session change reset selectedArea.
@@ -1252,8 +1287,18 @@ describe("ResultsShell raw JSON disclosure and copy notice", () => {
       await waitForText(container, RESULT_HEADLINE.compatible);
       expect(container.textContent).not.toContain(envelopeMarker);
 
-      const trigger = findByExactText(container, "button", "View raw report JSON");
+      const trigger = findByExactText(container, "button", "View full report JSON");
       expect(trigger.getAttribute("type")).toBe("button");
+      // Ready results use a low-emphasis footer action, not the prominent
+      // action button styling reserved for the malformed terminal.
+      expect(trigger.getAttribute("class")).toBe(
+        "text-sm text-zinc-400 underline hover:text-zinc-200",
+      );
+      expect(trigger.getAttribute("class")).not.toContain("min-h-11");
+      // The closed trigger advertises the dialog popup and collapsed state so
+      // assistive tech announces the disclosure before it opens.
+      expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
       await act(() => {
         reactClick(trigger);
       });
@@ -1264,6 +1309,8 @@ describe("ResultsShell raw JSON disclosure and copy notice", () => {
       ).toBe(true);
       expect(doc.body.textContent).toContain("Raw report JSON");
       expect(nodesByRole(doc.body, "dialog").length).toBeGreaterThan(0);
+      // Opening the inspector flips the trigger to the expanded state.
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();
@@ -1291,8 +1338,16 @@ describe("ResultsShell raw JSON disclosure and copy notice", () => {
       await waitForText(container, RESULT_HEADLINE.resultUnavailable);
       expect(container.textContent).not.toContain(envelopeMarker);
 
-      const trigger = findByExactText(container, "button", "View raw report JSON");
+      const trigger = findByExactText(container, "button", "View full report JSON");
       expect(trigger.getAttribute("type")).toBe("button");
+      // The malformed terminal keeps the prominent action button styling.
+      expect(trigger.getAttribute("class")).toContain("inline-flex");
+      expect(trigger.getAttribute("class")).toContain("min-h-11");
+      expect(trigger.getAttribute("class")).not.toContain("underline");
+      // The closed trigger advertises the dialog popup and collapsed state so
+      // assistive tech announces the disclosure before it opens.
+      expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
       await act(() => {
         reactClick(trigger);
       });
@@ -1302,6 +1357,8 @@ describe("ResultsShell raw JSON disclosure and copy notice", () => {
       expect(
         nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
       ).toBe(true);
+      // Opening the inspector flips the trigger to the expanded state.
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();
@@ -1332,7 +1389,7 @@ describe("ResultsShell raw JSON disclosure and copy notice", () => {
       await waitForText(container, RESULT_HEADLINE.noCompatibilityResult);
       expect(container.textContent).not.toContain(envelopeMarker);
 
-      const trigger = findByExactText(container, "button", "View raw report JSON");
+      const trigger = findByExactText(container, "button", "View full report JSON");
       expect(trigger.getAttribute("type")).toBe("button");
       await act(() => {
         reactClick(trigger);
@@ -1470,10 +1527,15 @@ describe("ResultsShell testHref", () => {
   });
 });
 
-function viewDetailsAriaLabels(root: ShimNode): string[] {
-  return nodesByTag(root, "button")
-    .map((node) => node.getAttribute("aria-label"))
-    .filter((label): label is string => label !== null && label.startsWith("View details for"));
+function actionButtons(root: ShimNode): ShimNode[] {
+  return nodesByTag(root, "button").filter((node) => {
+    const id = node.getAttribute("id");
+    return id !== null && id.startsWith("area-card-") && id.endsWith("-action");
+  });
+}
+
+function actionButton(root: ShimNode, areaId: string): ShimNode | null {
+  return firstByAttr(root, "id", `area-card-${areaId}-action`);
 }
 
 describe("ResultsShell area detail modal", () => {
@@ -1493,7 +1555,8 @@ describe("ResultsShell area detail modal", () => {
       await waitForText(container, RESULT_HEADLINE.compatible);
 
       const trigger = findByExactText(container, "button", "View details");
-      expect(trigger.getAttribute("aria-label")).toBe("View details for Server discovery");
+      expect(trigger.getAttribute("id")).toBe("area-card-discovery-action");
+      expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
       await act(() => {
         reactClick(trigger);
       });
@@ -1530,14 +1593,13 @@ describe("ResultsShell area detail modal", () => {
       });
       await waitForText(container, RESULT_HEADLINE.compatibleWithWarnings);
 
-      const triggers = nodesByTag(container, "button").filter(
-        (node) => node.getAttribute("aria-label") === "View details for Secure connection",
-      );
-      expect(triggers.length).toBe(1);
-      const trigger = triggers[0];
-      expect(trigger).not.toBeUndefined();
+      const trigger = actionButton(container, "tls");
+      expect(trigger).not.toBeNull();
+      if (trigger === null) throw new Error("missing tls trigger");
+      // A warn card surfaces the reason-forward label, not the pass label.
+      expect(trigger.textContent).toBe("Why and evidence");
       await act(() => {
-        reactClick(trigger as ShimNode);
+        reactClick(trigger);
       });
       await waitForText(doc.body, "Raw JSON");
 
@@ -1571,9 +1633,8 @@ describe("ResultsShell area detail modal", () => {
       });
       await waitForText(container, RESULT_HEADLINE.compatible);
 
-      const labels = viewDetailsAriaLabels(container);
-      expect(labels).toContain("View details for Server discovery");
-      expect(labels).not.toContain("View details for Signing keys");
+      expect(actionButton(container, "discovery")).not.toBeNull();
+      expect(actionButton(container, "jwks")).toBeNull();
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();
@@ -1599,7 +1660,7 @@ describe("ResultsShell area detail modal", () => {
       expect(
         nodesByTag(container, "article").some((node) => node.hasAttribute("data-area-card")),
       ).toBe(true);
-      expect(viewDetailsAriaLabels(container).length).toBeGreaterThan(0);
+      expect(actionButtons(container).length).toBeGreaterThan(0);
       expect(container.textContent).not.toContain("areas assessed");
       expect(container.textContent).not.toContain("pass rate");
       await act(() => { root.unmount(); });
@@ -1629,6 +1690,67 @@ describe("ResultsShell area detail modal", () => {
             scoreArea: "discovery",
             reasonCode: "tls_probed",
             grade: "warn",
+            affectsGrade: false,
+          },
+        ],
+      }),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatibleWithWarnings);
+
+      // The aggregate discovery card is warn, but the primary evidence item by
+      // precedence is the grade-affecting pass discovery_probed row (the warn
+      // tls_probed row does not affect the grade), so the card reason copy must
+      // resolve from the primary item (no remedy) and match AreaModal exactly.
+      const cardReason = firstByAttr(container, "data-area-reason", "discovery");
+      expect(cardReason).not.toBeNull();
+      if (cardReason === null) throw new Error("missing discovery card reason");
+      expect(cardReason.textContent).toContain("Discovery endpoint checked");
+      expect(cardReason.textContent).toContain(why);
+      expect(cardReason.textContent).not.toContain(remedy);
+
+      const trigger = actionButton(container, "discovery");
+      expect(trigger).not.toBeNull();
+      if (trigger === null) throw new Error("missing discovery View details button");
+      await act(() => {
+        reactClick(trigger);
+      });
+      await waitForText(doc.body, "Raw JSON");
+
+      const summary = firstByAttr(doc.body, "data-area-panel", "summary");
+      expect(summary).not.toBeNull();
+      if (summary === null) throw new Error("missing area modal summary panel");
+      expect(summary.textContent).toContain("Discovery endpoint checked");
+      expect(summary.textContent).toContain(why);
+      expect(summary.textContent).not.toContain(remedy);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("card and area modal agree when the primary item has a null grade", async () => {
+    const remedy =
+      "Publish a 200 JSON document at /.well-known/ocm with enabled true and the required apiVersion, endPoint, and resourceTypes.";
+    const why =
+      "The validator sent an uncached GET to /.well-known/ocm and assessed the returned JSON discovery document.";
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification((id) => (id === "discovery" ? "warn" : "pass"), "warn"), {
+        evidence: [
+          {
+            area: "discovery",
+            scoreArea: "discovery",
+            reasonCode: "discovery_probed",
+            grade: null,
             affectsGrade: true,
           },
         ],
@@ -1645,9 +1767,8 @@ describe("ResultsShell area detail modal", () => {
       });
       await waitForText(container, RESULT_HEADLINE.compatibleWithWarnings);
 
-      // The aggregate discovery card is warn, but its primary evidence item is a
-      // pass discovery_probed row, so the card reason copy must resolve from the
-      // primary item (no remedy) and match AreaModal exactly.
+      // A null primary grade resolves to no remedy, and the card and modal must
+      // still agree on the reason copy.
       const cardReason = firstByAttr(container, "data-area-reason", "discovery");
       expect(cardReason).not.toBeNull();
       if (cardReason === null) throw new Error("missing discovery card reason");
@@ -1655,11 +1776,9 @@ describe("ResultsShell area detail modal", () => {
       expect(cardReason.textContent).toContain(why);
       expect(cardReason.textContent).not.toContain(remedy);
 
-      const trigger = nodesByTag(container, "button").find(
-        (node) => node.getAttribute("aria-label") === "View details for Server discovery",
-      );
-      expect(trigger).not.toBeUndefined();
-      if (trigger === undefined) throw new Error("missing discovery View details button");
+      const trigger = actionButton(container, "discovery");
+      expect(trigger).not.toBeNull();
+      if (trigger === null) throw new Error("missing discovery trigger");
       await act(() => {
         reactClick(trigger);
       });
@@ -1671,6 +1790,65 @@ describe("ResultsShell area detail modal", () => {
       expect(summary.textContent).toContain("Discovery endpoint checked");
       expect(summary.textContent).toContain(why);
       expect(summary.textContent).not.toContain(remedy);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+});
+
+function installNotSavedEmptyFetch(): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return jsonResponse(200, { state: "terminal_pass", ts: 1, optInActive: false });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(404, { error: "report_not_public", message: "report is not public" });
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+describe("ResultsShell not-saved empty JSON action", () => {
+  test("not_saved_empty offers no full report JSON action and opens no overlay", async () => {
+    const restoreFetch = installNotSavedEmptyFetch();
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, "This scan was not saved");
+
+      // No source report exists, so there is no JSON action and no modal.
+      expect(container.textContent).not.toContain("View full report JSON");
+      expect(container.textContent).not.toContain("View raw report JSON");
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(false);
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-area-modal")),
+      ).toBe(false);
+      expect(nodesByRole(doc.body, "dialog").length).toBe(0);
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();
@@ -1721,7 +1899,85 @@ describe("ResultsShell area detail modal focus restoration", () => {
     registrator?.unregister();
   });
 
+  // Test-only focus harness for the deferred-restore ordering.
+  //
+  // 1. Inert focus guard: real browsers refuse focus on an element inside an
+  //    [inert] subtree, but happy-dom does not enforce it. Wrapping focus so a
+  //    target under [inert] is a no-op keeps the browser invariant honest and
+  //    guards against a restore that lands before OverlayFrame's inert cleanup.
+  //
+  // 2. Zero-delay timer control: React (via act) flushes OverlayFrame's passive
+  //    inert cleanup and drains microtasks before the test regains control, so a
+  //    plain outcome check cannot tell a microtask restore from a setTimeout(0)
+  //    restore. To expose the difference, while `captureImmediateTimers` is set
+  //    we capture zero-delay timers (ResultsShell's deferred focus restore)
+  //    instead of scheduling them, and run them explicitly with
+  //    flushImmediateTimers(). React's scheduler uses MessageChannel, so its
+  //    cleanup still runs; only the deferred focus is held. Under the old
+  //    queueMicrotask timing no zero-delay timer is scheduled and the restore
+  //    runs during the act() microtask drain, so the "restore has not run yet"
+  //    assertions fail; the setTimeout(0) restore stays captured until flushed
+  //    and passes. Non-zero timers (waitForDom, copy notices) pass through.
+  //
+  // The harness is installed per test and fully restored in afterEach so no
+  // other describe is affected.
+  let restoreFocusHarness: (() => void) | null = null;
+  let captureImmediateTimers = false;
+  let pendingImmediateTimers: Array<() => void> = [];
+
+  function flushImmediateTimers(): void {
+    const queued = pendingImmediateTimers;
+    pendingImmediateTimers = [];
+    for (const run of queued) {
+      run();
+    }
+  }
+
+  beforeEach(() => {
+    const originalFocus = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function guardedFocus(
+      this: HTMLElement,
+      options?: FocusOptions,
+    ): void {
+      if (this.closest("[inert]") !== null) {
+        return;
+      }
+      originalFocus.call(this, options);
+    };
+
+    const realSetTimeout = globalThis.setTimeout;
+    type TimerReturn = ReturnType<typeof globalThis.setTimeout>;
+    const callRealSetTimeout = realSetTimeout as unknown as (
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => TimerReturn;
+    const patchedSetTimeout = ((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ): TimerReturn => {
+      if (captureImmediateTimers && typeof handler === "function" && (timeout ?? 0) === 0) {
+        pendingImmediateTimers.push(() => {
+          (handler as (...callbackArgs: unknown[]) => void)(...args);
+        });
+        return 0 as unknown as TimerReturn;
+      }
+      return callRealSetTimeout(handler, timeout, ...args);
+    }) as unknown as typeof globalThis.setTimeout;
+    globalThis.setTimeout = patchedSetTimeout;
+
+    restoreFocusHarness = () => {
+      HTMLElement.prototype.focus = originalFocus;
+      globalThis.setTimeout = realSetTimeout;
+    };
+  });
+
   afterEach(() => {
+    captureImmediateTimers = false;
+    pendingImmediateTimers = [];
+    restoreFocusHarness?.();
+    restoreFocusHarness = null;
     document.body.innerHTML = "";
     document.body.removeAttribute("style");
   });
@@ -1741,7 +1997,7 @@ describe("ResultsShell area detail modal focus restoration", () => {
       );
 
       const trigger = document.querySelector<HTMLButtonElement>(
-        'button[aria-label="View details for Server discovery"]',
+        'button#area-card-discovery-action',
       );
       if (trigger === null) {
         throw new Error("missing discovery View details button");
@@ -1769,7 +2025,278 @@ describe("ResultsShell area detail modal focus restoration", () => {
       await waitForDom(() => document.querySelector("[data-overlay-frame-root]") === null);
 
       expect(document.querySelector("[data-overlay-frame-root]")).toBeNull();
+      // Focus restoration is deferred to a macrotask that runs after
+      // OverlayFrame removes inert, so await it rather than asserting inline.
+      await waitForDom(() => document.activeElement === trigger);
       expect(document.activeElement).toBe(trigger);
+      // The trigger sits outside any inert subtree once OverlayFrame cleaned up.
+      // A restore that fired while the body was still inert would leave the
+      // trigger inside an inert ancestor, so this assertion fails for the old
+      // microtask timing.
+      expect(trigger.closest("[inert]")).toBeNull();
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  test("ID-based restore returns focus to the area trigger after close", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification(() => "pass")),
+    );
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes(RESULT_HEADLINE.compatible) === true,
+      );
+
+      const trigger = document.querySelector<HTMLButtonElement>(
+        "button#area-card-discovery-action",
+      );
+      if (trigger === null) {
+        throw new Error("missing discovery View details button");
+      }
+
+      // Focus a control other than the trigger before opening so OverlayFrame
+      // captures that element as its synchronous restore target. The deferred
+      // ID-based restore must still return focus to the discovery trigger by its
+      // area-id ref map after OverlayFrame's cleanup, proving the deferred
+      // restore wins over OverlayFrame's captured element. Without the ID-based
+      // restore, focus would land on the copy button here.
+      const copyButton = Array.from(
+        document.querySelectorAll<HTMLButtonElement>("button"),
+      ).find((node) => node.textContent === "Copy session ID");
+      if (copyButton === undefined) {
+        throw new Error("missing Copy session ID button");
+      }
+      act(() => {
+        copyButton.focus();
+      });
+      expect(document.activeElement).toBe(copyButton);
+
+      await act(() => {
+        trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await waitForDom(() => document.querySelector("[data-overlay-frame-root]") !== null);
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+      if (dialog === null) {
+        throw new Error("missing dialog after opening the area modal");
+      }
+
+      // Capture zero-delay timers during the close so the deferred focus restore
+      // is held instead of running. React's MessageChannel-scheduled cleanup
+      // still runs inside act(): it removes inert and restores its captured
+      // element (the copy button).
+      captureImmediateTimers = true;
+      await act(() => {
+        dialog.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+        );
+      });
+      captureImmediateTimers = false;
+
+      const restored = document.querySelector<HTMLButtonElement>(
+        "button#area-card-discovery-action",
+      );
+      // The deferred setTimeout(0) restore is still captured, so focus is on
+      // OverlayFrame's captured element (the copy button), not the trigger. The
+      // old queueMicrotask timing would have run during the act() microtask drain
+      // and already moved focus to the trigger, so these assertions fail for that
+      // timing while they hold for the deferred setTimeout(0) restore. Identity
+      // is compared as a boolean so a regression prints true/false rather than
+      // serializing the whole happy-dom node tree.
+      expect(document.querySelector("[data-overlay-frame-root]")).toBeNull();
+      expect(document.activeElement === copyButton).toBe(true);
+      expect(document.activeElement === trigger).toBe(false);
+
+      // Run the deferred restore: it wins over OverlayFrame's captured element
+      // and moves focus to the discovery trigger by its area-id ref map.
+      flushImmediateTimers();
+      await act(() => {});
+      expect(document.activeElement === restored).toBe(true);
+      expect(document.activeElement === copyButton).toBe(false);
+      // The restored trigger is outside any inert subtree; a restore that fired
+      // while the body was still inert would leave it inside an inert ancestor.
+      expect(restored?.closest("[inert]") ?? null).toBeNull();
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  test("grid-heading fallback focuses the heading when the trigger ref is unavailable", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification(() => "pass")),
+    );
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes(RESULT_HEADLINE.compatible) === true,
+      );
+
+      const trigger = document.querySelector<HTMLButtonElement>(
+        "button#area-card-discovery-action",
+      );
+      if (trigger === null) {
+        throw new Error("missing discovery View details button");
+      }
+      act(() => {
+        trigger.focus();
+      });
+
+      await act(() => {
+        trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await waitForDom(() => document.querySelector("[data-overlay-frame-root]") !== null);
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+      if (dialog === null) {
+        throw new Error("missing dialog after opening the area modal");
+      }
+
+      // Detach the discovery trigger node before close. React still holds this
+      // exact node in its area-id ref map because a manual DOM removal does not
+      // notify React, so on close the stored ref is present but disconnected.
+      // This is how the test simulates an unavailable trigger lookup in
+      // happy-dom: btn.isConnected is false, so the restore falls through to the
+      // grid heading.
+      trigger.remove();
+
+      // Capture the grid heading before close so the ordering checkpoint below
+      // can assert the deferred fallback focus has not run yet.
+      const heading = Array.from(
+        document.querySelectorAll<HTMLHeadingElement>("h2"),
+      ).find((node) => node.textContent === "What was tested");
+      expect(heading).not.toBeUndefined();
+      if (heading === undefined) {
+        throw new Error("missing grid heading");
+      }
+
+      // Capture zero-delay timers during the close so the deferred fallback
+      // focus is held instead of running. The captured trigger is disconnected,
+      // so OverlayFrame's cleanup restores nothing during act().
+      captureImmediateTimers = true;
+      await act(() => {
+        dialog.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+        );
+      });
+      captureImmediateTimers = false;
+
+      // The deferred setTimeout(0) fallback is still captured, so the heading is
+      // not focused yet. The old queueMicrotask timing would have focused the
+      // heading during the act() microtask drain, so this ordering assertion
+      // fails for that timing while it holds for the deferred setTimeout(0)
+      // fallback. Identity is compared as a boolean so a regression prints
+      // true/false rather than serializing the whole happy-dom node tree.
+      expect(document.querySelector("[data-overlay-frame-root]")).toBeNull();
+      expect(document.activeElement === heading).toBe(false);
+
+      // Run the deferred fallback: with the trigger ref gone, focus lands on the
+      // grid heading.
+      flushImmediateTimers();
+      await act(() => {});
+      expect(document.activeElement === heading).toBe(true);
+      // The heading is outside any inert subtree; a restore that fired while the
+      // body was still inert would leave it inside an inert ancestor.
+      expect(heading.closest("[inert]")).toBeNull();
+      await act(() => {
+        root.unmount();
+      });
+    } finally {
+      restoreFetch();
+    }
+  });
+});
+
+describe("ResultsShell loaded-evidence projection", () => {
+  let registrator: HappyDomRegistrator | null = null;
+
+  beforeAll(async () => {
+    const specifier: string = "@happy-dom/global-registrator";
+    const mod = (await import(specifier)) as {
+      GlobalRegistrator?: HappyDomRegistrator;
+    };
+    if (mod.GlobalRegistrator === undefined) {
+      throw new Error(
+        "ResultsShell.test.tsx loaded-evidence tests need a DOM environment. " +
+          "Install the dev-only harness with " +
+          "`bun add -d happy-dom @happy-dom/global-registrator`.",
+      );
+    }
+    registrator = mod.GlobalRegistrator;
+    registrator.register({ url: "http://localhost/" });
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  });
+
+  afterAll(() => {
+    registrator?.unregister();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+    document.body.removeAttribute("style");
+  });
+
+  test("a zero-count scored area stays interactive when loaded evidence exists", async () => {
+    // jwks is scored with a null grade and zero reported evidence, so its card
+    // trigger renders only because loaded evidence rows exist for the area. This
+    // exercises the full projection wiring end to end:
+    //   ResultsShell.loadedEvidenceCountsByArea (evidence rows)
+    //     -> projectResultsPage loadedEvidenceByArea
+    //     -> validatorScore areaGridEntriesFromScore entry.loadedEvidenceCount
+    //     -> AreaGrid interactive open predicate.
+    // Removing the loadedEvidenceByArea argument from the projectResultsPage
+    // call leaves loadedEvidenceCount at 0, so the interactive predicate
+    // (grade !== null || evidenceCount > 0 || loadedEvidence > 0) is false and
+    // the trigger never renders, which fails the assertions below.
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification((id) => (id === "jwks" ? null : "pass")), {
+        evidence: [
+          { area: "jwks", scoreArea: "jwks", reasonCode: "jwks_probed", grade: "pass" },
+          { area: "jwks", scoreArea: "jwks", reasonCode: "jwks_probed", grade: "pass" },
+        ],
+      }),
+    );
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(document.body);
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes(RESULT_HEADLINE.compatible) === true,
+      );
+
+      // The jwks area has a null grade and zero reported evidence; the only
+      // reason its card is interactive is the loaded evidence projected through
+      // the score. Without the loadedEvidenceByArea wiring this query is null.
+      await waitForDom(
+        () => document.querySelector("button#area-card-jwks-action") !== null,
+      );
+      const trigger = document.querySelector<HTMLButtonElement>(
+        "button#area-card-jwks-action",
+      );
+      expect(trigger).not.toBeNull();
+      if (trigger === null) {
+        throw new Error("missing jwks trigger");
+      }
+      expect(trigger.getAttribute("id")).toBe("area-card-jwks-action");
+      expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
+      // Null grade means no warn/fail reason forward label, so the neutral
+      // View details label proves the card is interactive purely via evidence.
+      expect(trigger.textContent).toBe("View details");
       await act(() => {
         root.unmount();
       });

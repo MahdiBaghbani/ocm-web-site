@@ -28,6 +28,8 @@ export interface AreaGridEntry {
   /** Fraction in [0, 1]. Wins over pass/warn/fail counts when set. */
   passRate?: number | null;
   evidenceCount?: number;
+  /** Loaded evidence rows for this area; keeps a card interactive at zero grade. */
+  loadedEvidenceCount?: number;
   description?: string;
   pillLabel?: string;
   /** Primary reason slug for the area; drives warn/fail card reason copy. */
@@ -42,6 +44,13 @@ export interface AreaGridProps {
   areas?: readonly AreaGridEntry[];
   variant?: "statistics" | "results";
   onAreaClick?: (areaId: ValidatorAreaId) => void;
+  // Currently open area, results variant only. Drives aria-expanded on each
+  // card trigger so the open card reflects its dialog state.
+  openArea?: CanonicalAreaId | null;
+  // Registers the live trigger button for an area so the parent can restore
+  // focus by area id after the detail modal closes. Called with null when the
+  // trigger unmounts so the map never holds a stale node.
+  registerTriggerRef?: (area: CanonicalAreaId, el: HTMLButtonElement | null) => void;
 }
 
 function countOf(value: number | undefined): number {
@@ -192,31 +201,57 @@ function renderStatisticsGrid(entries: ResolvedAreaEntry[]): React.ReactElement 
 function renderResultsGrid(
   entries: ResolvedAreaEntry[],
   onAreaClick: ((areaId: ValidatorAreaId) => void) | undefined,
+  openArea: CanonicalAreaId | null | undefined,
+  registerTriggerRef:
+    | ((area: CanonicalAreaId, el: HTMLButtonElement | null) => void)
+    | undefined,
 ): React.ReactElement {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {entries.map((entry) => {
         const evidenceCount = countOf(entry.evidenceCount);
+        const loadedEvidence = countOf(entry.loadedEvidenceCount);
         const label = areaLabel(entry);
         const selectArea = onAreaClick;
         const grade = foldGrade(entry);
+        const isWarnOrFail = grade === "warn" || grade === "fail";
         // Warn and fail cards surface the primary resolved reason, but only
         // when the entry carries a real reason code. Trim first so a
-        // whitespace-only code is treated as absent, and suppress the whole
-        // reason block rather than showing the missing-slug fallback.
+        // whitespace-only code is treated as absent; without a code the card
+        // shows an honest missing-reason caption instead of the slug fallback.
         const trimmedReasonCode =
           entry.reasonCode !== undefined ? entry.reasonCode.trim() : undefined;
         const hasReasonCode =
           trimmedReasonCode !== undefined && trimmedReasonCode !== "";
+        // Use the primary evidence outcome exactly when any primary field is
+        // present; otherwise fall back to the aggregate grade for backward
+        // compatibility. The warn/fail guard stays keyed on foldGrade.
+        const hasPrimary =
+          entry.primaryGrade !== undefined ||
+          entry.primarySeverity !== undefined ||
+          entry.primaryAffectsGrade !== undefined;
         const reason =
-          (grade === "warn" || grade === "fail") && hasReasonCode
-            ? reasonCopyFor({
-                reasonCode: trimmedReasonCode,
-                grade: entry.primaryGrade ?? grade,
-                severity: entry.primarySeverity,
-                affectsGrade: entry.primaryAffectsGrade ?? true,
-              })
+          isWarnOrFail && hasReasonCode
+            ? reasonCopyFor(
+                hasPrimary
+                  ? {
+                      reasonCode: trimmedReasonCode,
+                      grade: entry.primaryGrade ?? null,
+                      severity: entry.primarySeverity,
+                      affectsGrade: entry.primaryAffectsGrade ?? true,
+                    }
+                  : {
+                      reasonCode: trimmedReasonCode,
+                      grade,
+                      affectsGrade: true,
+                    },
+              )
             : null;
+        const titleId = `area-card-${entry.area}-title`;
+        const actionId = `area-card-${entry.area}-action`;
+        const interactive =
+          selectArea !== undefined &&
+          (grade !== null || evidenceCount > 0 || loadedEvidence > 0);
         return (
           <article
             key={entry.area}
@@ -224,7 +259,7 @@ function renderResultsGrid(
             className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-900/30 p-3"
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zinc-100">{label}</h3>
+              <h3 id={titleId} className="text-sm font-semibold text-zinc-100">{label}</h3>
               {areaPill(entry)}
             </div>
             {entry.description !== undefined && entry.description !== "" ? (
@@ -238,18 +273,28 @@ function renderResultsGrid(
                   <p className="text-xs text-zinc-400">{reason.remedy}</p>
                 ) : null}
               </div>
+            ) : isWarnOrFail ? (
+              <p className="text-xs text-zinc-400" data-area-reason={entry.area}>
+                Reason not provided in this report.
+              </p>
             ) : null}
             <div className="mt-1 text-xs text-zinc-400">
               {evidenceCountLabel(evidenceCount)}
             </div>
-            {selectArea !== undefined && (grade !== null || evidenceCount > 0) ? (
+            {interactive ? (
               <button
                 type="button"
+                id={actionId}
+                ref={(el) => {
+                  registerTriggerRef?.(entry.area, el);
+                }}
                 className="mt-3 w-full min-h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
-                aria-label={`View details for ${label}`}
+                aria-haspopup="dialog"
+                aria-expanded={openArea === entry.area}
+                aria-labelledby={`${titleId} ${actionId}`}
                 onClick={() => selectArea(entry.area)}
               >
-                View details
+                {isWarnOrFail ? "Why and evidence" : "View details"}
               </button>
             ) : null}
           </article>
@@ -263,10 +308,12 @@ export default function AreaGrid({
   areas,
   variant = "statistics",
   onAreaClick,
+  openArea,
+  registerTriggerRef,
 }: AreaGridProps): React.ReactElement {
   const entries = resolveEntries(areas);
   if (variant === "results") {
-    return renderResultsGrid(entries, onAreaClick);
+    return renderResultsGrid(entries, onAreaClick, openArea, registerTriggerRef);
   }
   return renderStatisticsGrid(entries);
 }

@@ -44,6 +44,18 @@ export interface ReasonResolveInput {
   affectsGrade?: boolean;
 }
 
+/**
+ * Structural shape of an evidence item for primary-reason selection. Kept as a
+ * plain structural type so both EvidenceItem and grid inputs satisfy it without
+ * importing React or the evidence module.
+ */
+export interface PrimaryReasonCandidate {
+  reasonCode?: string;
+  grade?: ReasonSeverity | null;
+  severity?: string;
+  affectsGrade?: boolean;
+}
+
 const MISSING_TITLE = "Check note";
 
 const MISSING_WHY =
@@ -207,4 +219,60 @@ export function reasonCopyFor(input: ReasonResolveInput): ResolvedReasonCopy {
     resolved.remedy = UNKNOWN_REMEDY;
   }
   return resolved;
+}
+
+// affectsGrade precedence tier: true first, then undefined, then false.
+function affectsGradeTier(affectsGrade: boolean | undefined): number {
+  if (affectsGrade === true) {
+    return 0;
+  }
+  if (affectsGrade === undefined) {
+    return 1;
+  }
+  return 2;
+}
+
+// Grade priority within a tier: strictly fail > warn > pass > null. info is not
+// part of that ordering, so info and any null or absent grade share the lowest
+// tier (0).
+const GRADE_PRIORITY: Partial<Record<ReasonSeverity, number>> = {
+  fail: 3,
+  warn: 2,
+  pass: 1,
+};
+
+function gradePriority(grade: ReasonSeverity | null | undefined): number {
+  if (grade === null || grade === undefined) {
+    return 0;
+  }
+  return GRADE_PRIORITY[grade] ?? 0;
+}
+
+/**
+ * Select the primary reason item for an area. Considers only items with a
+ * non-empty trimmed reasonCode, then orders by affectsGrade tier
+ * (true > undefined > false), then by grade priority (fail > warn > pass >
+ * null), and keeps the earliest source-order item on a complete tie. Pure and
+ * structural; no React imports.
+ */
+export function selectPrimaryReasonItem<T extends PrimaryReasonCandidate>(
+  items: readonly T[],
+): T | undefined {
+  let best: T | undefined;
+  let bestTier = Number.POSITIVE_INFINITY;
+  let bestGrade = -1;
+  for (const item of items) {
+    const code = typeof item.reasonCode === "string" ? item.reasonCode.trim() : "";
+    if (code === "") {
+      continue;
+    }
+    const tier = affectsGradeTier(item.affectsGrade);
+    const priority = gradePriority(item.grade);
+    if (best === undefined || tier < bestTier || (tier === bestTier && priority > bestGrade)) {
+      best = item;
+      bestTier = tier;
+      bestGrade = priority;
+    }
+  }
+  return best;
 }

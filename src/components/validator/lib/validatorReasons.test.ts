@@ -3,7 +3,9 @@ import { describe, expect, test } from "bun:test";
 import {
   VALIDATOR_REASONS,
   reasonCopyFor,
+  selectPrimaryReasonItem,
   titleizeSlug,
+  type PrimaryReasonCandidate,
 } from "./validatorReasons";
 
 describe("jwks_unadvertised grade-specific outcome", () => {
@@ -102,6 +104,75 @@ describe("remedy is limited to warn or fail outcomes", () => {
     expect(reasonCopyFor({ reasonCode: "foo_bar", grade: "info" }).remedy).toBeUndefined();
     expect(reasonCopyFor({ reasonCode: "foo_bar", grade: "warn" }).remedy).toBeDefined();
     expect(reasonCopyFor({ reasonCode: "foo_bar", grade: "fail" }).remedy).toBeDefined();
+  });
+});
+
+describe("selectPrimaryReasonItem precedence", () => {
+  test("affectsGrade true beats undefined beats false", () => {
+    const items: PrimaryReasonCandidate[] = [
+      { reasonCode: "a", grade: "fail", affectsGrade: false },
+      { reasonCode: "b", grade: "pass", affectsGrade: undefined },
+      { reasonCode: "c", grade: "pass", affectsGrade: true },
+    ];
+    expect(selectPrimaryReasonItem(items)?.reasonCode).toBe("c");
+
+    const withoutTrue: PrimaryReasonCandidate[] = [
+      { reasonCode: "a", grade: "fail", affectsGrade: false },
+      { reasonCode: "b", grade: "pass", affectsGrade: undefined },
+    ];
+    expect(selectPrimaryReasonItem(withoutTrue)?.reasonCode).toBe("b");
+  });
+
+  test("grade fail beats warn beats pass beats null within a tier", () => {
+    const items: PrimaryReasonCandidate[] = [
+      { reasonCode: "n", grade: null, affectsGrade: true },
+      { reasonCode: "p", grade: "pass", affectsGrade: true },
+      { reasonCode: "w", grade: "warn", affectsGrade: true },
+      { reasonCode: "f", grade: "fail", affectsGrade: true },
+    ];
+    expect(selectPrimaryReasonItem(items)?.reasonCode).toBe("f");
+    expect(selectPrimaryReasonItem(items.slice(0, 3))?.reasonCode).toBe("w");
+    expect(selectPrimaryReasonItem(items.slice(0, 2))?.reasonCode).toBe("p");
+    expect(selectPrimaryReasonItem(items.slice(0, 1))?.reasonCode).toBe("n");
+  });
+
+  test("info shares the lowest tier with null and does not outrank pass", () => {
+    // pass outranks info within the same affectsGrade tier.
+    const passOverInfo: PrimaryReasonCandidate[] = [
+      { reasonCode: "i", grade: "info", affectsGrade: true },
+      { reasonCode: "p", grade: "pass", affectsGrade: true },
+    ];
+    expect(selectPrimaryReasonItem(passOverInfo)?.reasonCode).toBe("p");
+    // info ties with null, so the earliest source-order item wins.
+    const infoTiesNull: PrimaryReasonCandidate[] = [
+      { reasonCode: "i", grade: "info", affectsGrade: true },
+      { reasonCode: "n", grade: null, affectsGrade: true },
+    ];
+    expect(selectPrimaryReasonItem(infoTiesNull)?.reasonCode).toBe("i");
+    const nullTiesInfo: PrimaryReasonCandidate[] = [
+      { reasonCode: "n", grade: null, affectsGrade: true },
+      { reasonCode: "i", grade: "info", affectsGrade: true },
+    ];
+    expect(selectPrimaryReasonItem(nullTiesInfo)?.reasonCode).toBe("n");
+  });
+
+  test("keeps the earliest source-order item on a complete tie", () => {
+    const items: PrimaryReasonCandidate[] = [
+      { reasonCode: "first", grade: "warn", affectsGrade: true },
+      { reasonCode: "second", grade: "warn", affectsGrade: true },
+    ];
+    expect(selectPrimaryReasonItem(items)?.reasonCode).toBe("first");
+  });
+
+  test("ignores items without a non-empty trimmed reason code", () => {
+    const items: PrimaryReasonCandidate[] = [
+      { reasonCode: "   ", grade: "fail", affectsGrade: true },
+      { grade: "fail", affectsGrade: true },
+      { reasonCode: "real", grade: "pass", affectsGrade: false },
+    ];
+    expect(selectPrimaryReasonItem(items)?.reasonCode).toBe("real");
+    expect(selectPrimaryReasonItem([{ reasonCode: "  " }])).toBeUndefined();
+    expect(selectPrimaryReasonItem([])).toBeUndefined();
   });
 });
 

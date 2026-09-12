@@ -95,9 +95,21 @@ function hasNonAscii(value: string): boolean {
   return false;
 }
 
-function viewDetailsLabels(html: string): string[] {
-  const labelRe = /aria-label="(View details for [^"]+)"/g;
-  return [...html.matchAll(labelRe)].map((match) => match[1]);
+function actionButtonIds(html: string): string[] {
+  const idRe = /<button[^>]*\sid="(area-card-[^"]+-action)"/g;
+  return [...html.matchAll(idRe)].map((match) => match[1]);
+}
+
+function actionButtonLabelledby(html: string, areaId: string): string | null {
+  const buttonRe = new RegExp(
+    `<button[^>]*\\sid="area-card-${areaId}-action"[^>]*>`,
+  );
+  const match = buttonRe.exec(html);
+  if (match === null) {
+    return null;
+  }
+  const labelledby = /aria-labelledby="([^"]+)"/.exec(match[0]);
+  return labelledby === null ? null : labelledby[1];
 }
 
 const ELEMENT_NODE = 1;
@@ -649,7 +661,7 @@ describe("AreaGrid", () => {
     expect(html).not.toContain("text-lg font-semibold text-zinc-100");
   });
 
-  test("warn card without a reason code suppresses the missing-slug fallback", () => {
+  test("warn card without a reason code shows the honest missing-reason caption", () => {
     const html = render(
       <AreaGrid
         variant="results"
@@ -659,12 +671,13 @@ describe("AreaGrid", () => {
     const card = areaResultCardHtml(html, "tls");
     expect(card).toContain(">Secure connection</h3>");
     expect(areaGradeText(html, "Secure connection")).toBe("Needs attention");
+    expect(card).toContain("Reason not provided in this report.");
+    expect(card).toContain('data-area-reason="tls"');
     expect(card).not.toContain("Check note");
     expect(card).not.toContain("This evidence item has no reason code");
-    expect(card).not.toContain('data-area-reason="tls"');
   });
 
-  test("whitespace-only reason code suppresses the missing-slug fallback", () => {
+  test("whitespace-only reason code shows the honest missing-reason caption", () => {
     const html = render(
       <AreaGrid
         variant="results"
@@ -674,9 +687,40 @@ describe("AreaGrid", () => {
     const card = areaResultCardHtml(html, "tls");
     expect(card).toContain(">Secure connection</h3>");
     expect(areaGradeText(html, "Secure connection")).toBe("Fail");
+    expect(card).toContain("Reason not provided in this report.");
+    expect(card).toContain('data-area-reason="tls"');
     expect(card).not.toContain("Check note");
     expect(card).not.toContain("This evidence item has no reason code");
-    expect(card).not.toContain('data-area-reason="tls"');
+  });
+
+  test("mapped reason copy renders when a warn card has a reason code", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        areas={[
+          { area: "jwks", grade: "warn", reasonCode: "jwks_unadvertised", pillLabel: "Needs attention" },
+        ]}
+      />,
+    );
+    const card = areaResultCardHtml(html, "jwks");
+    expect(card).toContain("Signing keys not advertised");
+    expect(card).toContain('data-area-reason="jwks"');
+    expect(card).not.toContain("Reason not provided in this report.");
+  });
+
+  test("pass result card renders no reason block", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        areas={[
+          { area: "discovery", grade: "pass", reasonCode: "discovery_probed", pillLabel: "Pass" },
+        ]}
+      />,
+    );
+    const card = areaResultCardHtml(html, "discovery");
+    expect(card).not.toContain('data-area-reason="discovery"');
+    expect(card).not.toContain("Reason not provided in this report.");
+    expect(card).not.toContain("Discovery endpoint checked");
   });
 
   test("null grade can render Not tested", () => {
@@ -775,7 +819,7 @@ describe("AreaGrid", () => {
     expect(html).not.toContain("This area checks");
   });
 
-  test("results View details appears only when openable", () => {
+  test("results interactive trigger appears only when openable", () => {
     const html = render(
       <AreaGrid
         variant="results"
@@ -790,18 +834,93 @@ describe("AreaGrid", () => {
     const tls = areaResultCardHtml(html, "tls");
     expect(discovery).toContain(">Server discovery</h3>");
     expect(discovery).toContain("View details");
-    expect(discovery).toContain('aria-label="View details for Server discovery"');
+    expect(discovery).toContain('id="area-card-discovery-action"');
+    expect(discovery).toContain('aria-haspopup="dialog"');
+    expect(discovery).toContain('id="area-card-discovery-title"');
     expect(tls).toContain(">Secure connection</h3>");
     expect(tls).not.toContain("View details");
+    expect(tls).not.toContain("area-card-tls-action");
     expect(countAttr(html, ">View details</")).toBe(1);
-    expect(viewDetailsLabels(html)).toEqual(["View details for Server discovery"]);
+    expect(actionButtonIds(html)).toEqual(["area-card-discovery-action"]);
+    expect(actionButtonLabelledby(html, "discovery")).toBe(
+      "area-card-discovery-title area-card-discovery-action",
+    );
     expect(html).not.toContain("This area checks");
     expect(html).not.toContain("areas assessed");
     expect(html).not.toContain("pass rate");
     expect(html).not.toContain("text-lg font-semibold text-zinc-100");
   });
 
-  test("results View details buttons have unique accessible names", () => {
+  test("loaded-evidence-only card stays interactive without a grade or reported evidence", () => {
+    // foldGrade(entry) is null here: no explicit grade and no pass/warn/fail
+    // counts. evidenceCount is undefined (countOf -> 0), so the only clause that
+    // can make the card interactive is loadedEvidenceCount > 0. This proves the
+    // loadedEvidence clause: if it were removed from the interactive predicate,
+    // the trigger button would not render and this assertion would fail.
+    const html = render(
+      <AreaGrid
+        variant="results"
+        onAreaClick={() => undefined}
+        areas={[{ area: "discovery", loadedEvidenceCount: 2 }]}
+      />,
+    );
+    const card = areaResultCardHtml(html, "discovery");
+    expect(card).toContain('id="area-card-discovery-action"');
+    expect(actionButtonIds(html)).toEqual(["area-card-discovery-action"]);
+  });
+
+  test("card with no grade and no reported or loaded evidence renders no trigger", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        onAreaClick={() => undefined}
+        areas={[{ area: "discovery" }]}
+      />,
+    );
+    const card = areaResultCardHtml(html, "discovery");
+    expect(card).not.toContain("area-card-discovery-action");
+    expect(actionButtonIds(html)).toEqual([]);
+  });
+
+  test("warn and fail result triggers read Why and evidence, pass reads View details", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        onAreaClick={() => undefined}
+        areas={[
+          { area: "discovery", grade: "pass", evidenceCount: 1 },
+          { area: "tls", grade: "warn", evidenceCount: 1 },
+          { area: "jwks", grade: "fail", evidenceCount: 1 },
+        ]}
+      />,
+    );
+    const discovery = areaResultCardHtml(html, "discovery");
+    const tls = areaResultCardHtml(html, "tls");
+    const jwks = areaResultCardHtml(html, "jwks");
+    expect(discovery).toContain(">View details</button>");
+    expect(tls).toContain(">Why and evidence</button>");
+    expect(jwks).toContain(">Why and evidence</button>");
+  });
+
+  test("card trigger reflects openArea through aria-expanded", () => {
+    const html = render(
+      <AreaGrid
+        variant="results"
+        onAreaClick={() => undefined}
+        openArea="tls"
+        areas={[
+          { area: "discovery", grade: "pass", evidenceCount: 1 },
+          { area: "tls", grade: "warn", evidenceCount: 1 },
+        ]}
+      />,
+    );
+    const discovery = areaResultCardHtml(html, "discovery");
+    const tls = areaResultCardHtml(html, "tls");
+    expect(discovery).toContain('aria-expanded="false"');
+    expect(tls).toContain('aria-expanded="true"');
+  });
+
+  test("results triggers have unique ids and resolve accessible names via labelledby", () => {
     const html = render(
       <AreaGrid
         variant="results"
@@ -813,18 +932,15 @@ describe("AreaGrid", () => {
         }))}
       />,
     );
-    const labels = viewDetailsLabels(html);
-    expect(labels).toEqual([
-      "View details for Server discovery",
-      "View details for Secure connection",
-      "View details for Signing keys",
-      "View details for Request signing",
-      "View details for Share exchange",
-      "View details for Notifications",
-      "View details for Access tokens",
-      "View details for Capabilities",
-    ]);
-    expect(new Set(labels).size).toBe(8);
+    const ids = actionButtonIds(html);
+    expect(ids).toEqual(VALIDATOR_AREA_IDS.map((area) => `area-card-${area}-action`));
+    expect(new Set(ids).size).toBe(8);
+    for (const area of VALIDATOR_AREA_IDS) {
+      expect(actionButtonLabelledby(html, area)).toBe(
+        `area-card-${area}-title area-card-${area}-action`,
+      );
+      expect(html).toContain(`id="area-card-${area}-title"`);
+    }
     expect(countAttr(html, ">View details</")).toBe(8);
     expect(html).not.toContain("This area checks");
     expect(html).not.toContain("<h3 class=\"text-sm font-semibold text-zinc-100\"><button");
@@ -852,7 +968,7 @@ describe("AreaGrid", () => {
       if (card === null) throw new Error("missing data-area-card: discovery");
       const button = findNode(card, (node) => {
         return node.tagName === "BUTTON" &&
-          node.getAttribute("aria-label") === "View details for Server discovery";
+          node.getAttribute("id") === "area-card-discovery-action";
       });
       expect(button).not.toBeNull();
       if (button === null) throw new Error("missing discovery View details button");
@@ -864,7 +980,7 @@ describe("AreaGrid", () => {
     }
   });
 
-  test("results View details opens for an unassessed card with evidence", async () => {
+  test("results trigger opens for an unassessed card with evidence", async () => {
     const seen: ValidatorAreaId[] = [];
     const { document: doc, restore } = installDomShim();
     try {
@@ -886,7 +1002,7 @@ describe("AreaGrid", () => {
       if (card === null) throw new Error("missing data-area-card: discovery");
       const button = findNode(card, (node) => {
         return node.tagName === "BUTTON" &&
-          node.getAttribute("aria-label") === "View details for Server discovery";
+          node.getAttribute("id") === "area-card-discovery-action";
       });
       expect(button).not.toBeNull();
       if (button === null) throw new Error("missing discovery View details button");
