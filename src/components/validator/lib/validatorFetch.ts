@@ -22,6 +22,14 @@ export interface StartSessionRequest { target: string; optInActive?: boolean; op
 export interface StartSessionResponse { id: string; optInStats: boolean; optInPermanent: boolean }
 export interface SessionPollResponse { state: string; ts: number; optInActive: boolean; nextInstruction?: string; failModeLabel?: string }
 export interface StopSessionResponse { id: string; state: string }
+export interface ClaimInviteResponse {
+  inviteString: string;
+  issuerFqdn: string;
+  pasteTargetOrigin: string;
+  pasteTargetHost: string;
+  expiresAt: string;
+}
+export interface ReverseInviteResponse { status: string }
 
 export const REPORT_VISIBILITY = [
   "session",
@@ -397,6 +405,36 @@ function parseStopResponse(body: unknown): StopSessionResponse | null {
   return id === null || id.trim() === "" || state === null || state === "" ? null : { id, state };
 }
 
+function parseClaimInviteResponse(body: unknown): ClaimInviteResponse | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+  const inviteString = readString(body.inviteString);
+  const issuerFqdn = readString(body.issuerFqdn);
+  const pasteTargetOrigin = readString(body.pasteTargetOrigin);
+  const pasteTargetHost = readString(body.pasteTargetHost);
+  const expiresAt = readString(body.expiresAt);
+  if (
+    inviteString === null || inviteString.trim() === ""
+    || issuerFqdn === null || issuerFqdn.trim() === ""
+    || pasteTargetOrigin === null || pasteTargetOrigin.trim() === ""
+    || pasteTargetHost === null || pasteTargetHost.trim() === ""
+    || expiresAt === null || expiresAt.trim() === ""
+    || Number.isNaN(Date.parse(expiresAt))
+  ) {
+    return null;
+  }
+  return { inviteString, issuerFqdn, pasteTargetOrigin, pasteTargetHost, expiresAt };
+}
+
+function parseReverseInviteResponse(body: unknown): ReverseInviteResponse | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+  const status = readString(body.status);
+  return status === null || status.trim() === "" ? null : { status };
+}
+
 function parseReportResponse(body: unknown): ReportResponse | null {
   if (!isRecord(body)) {
     return null;
@@ -551,6 +589,29 @@ export function pollSession(id: string, deps?: ValidatorFetchDeps): Promise<Vali
 
 export function stopSession(id: string, deps?: ValidatorFetchDeps): Promise<ValidatorResult<StopSessionResponse>> {
   return validatorRequest({ method: "POST", path: "/stop", body: { id }, parse: parseStopResponse, retry: false }, deps);
+}
+
+export function claimInvite(id: string, deps?: ValidatorFetchDeps): Promise<ValidatorResult<ClaimInviteResponse>> {
+  return validatorRequest({
+    method: "POST",
+    path: `/api/session/${encodeURIComponent(id)}/invite`,
+    parse: parseClaimInviteResponse,
+    retry: false,
+  }, deps);
+}
+
+export function postReverseInvite(
+  id: string,
+  inviteString: string,
+  deps?: ValidatorFetchDeps,
+): Promise<ValidatorResult<ReverseInviteResponse>> {
+  return validatorRequest({
+    method: "POST",
+    path: `/api/session/${encodeURIComponent(id)}/reverse-invite`,
+    body: { inviteString },
+    parse: parseReverseInviteResponse,
+    retry: false,
+  }, deps);
 }
 
 export function fetchReport(id: string, deps?: ValidatorFetchDeps): Promise<ValidatorResult<ReportResponse>> {
