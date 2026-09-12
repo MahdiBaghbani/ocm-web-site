@@ -1351,6 +1351,7 @@ export default function ResultsShell({
           items={projection.evidence}
           sourceReport={projection.sourceReport}
           grade={selectedEntry.grade}
+          pillLabel={selectedEntry.pillLabel}
           evidenceCount={selectedEntry.evidenceCount}
           onClose={() => {
             const area = selectedArea;

@@ -228,6 +228,45 @@ describe("AreaModalContent evidence filtering and Raw JSON", () => {
   });
 });
 
+describe("AreaModalContent Summary grade pill", () => {
+  test("shows the friendly pillLabel in the Summary pill when provided", () => {
+    const html = renderToStaticMarkup(
+      <AreaModalContent
+        area={DISCOVERY}
+        areaLabel="Server discovery"
+        items={ITEMS}
+        sourceReport={{}}
+        grade="warn"
+        pillLabel="Needs attention"
+      />,
+    );
+
+    const summaryRegion = panelRegion(html, "summary");
+    expect(summaryRegion).toContain('data-pill-kind="warn"');
+    // Matches the friendly label the results card shows, not the raw "warn".
+    expect(summaryRegion).toContain("Needs attention");
+    expect(summaryRegion).not.toContain(">warn<");
+  });
+
+  test("falls back to the default pill label when no pillLabel is provided", () => {
+    const html = renderToStaticMarkup(
+      <AreaModalContent
+        area={DISCOVERY}
+        areaLabel="Server discovery"
+        items={ITEMS}
+        sourceReport={{}}
+        grade="warn"
+      />,
+    );
+
+    const summaryRegion = panelRegion(html, "summary");
+    expect(summaryRegion).toContain('data-pill-kind="warn"');
+    // With no pillLabel the pill keeps the raw DEFAULT_LABEL text.
+    expect(summaryRegion).toContain(">warn<");
+    expect(summaryRegion).not.toContain("Needs attention");
+  });
+});
+
 describe("AreaModalContent Summary reason copy", () => {
   test("renders the resolved reason title, why, and remedy in the Summary panel", () => {
     // jwks_unadvertised is grade-specific (warn), so reasonCopyFor resolves a

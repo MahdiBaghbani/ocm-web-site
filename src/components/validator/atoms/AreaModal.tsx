@@ -43,6 +43,7 @@ export interface AreaModalProps {
   sourceReport: unknown;
   onClose: () => void;
   grade?: GradeKind | null;
+  pillLabel?: string;
   evidenceCount?: number;
   loadedEvidenceCount?: number;
 }
@@ -61,6 +62,7 @@ export function AreaModalContent({
   items,
   sourceReport,
   grade,
+  pillLabel,
   evidenceCount,
   loadedEvidenceCount,
 }: AreaModalContentProps): React.ReactElement {
@@ -188,7 +190,7 @@ export function AreaModalContent({
                     </p>
                     <p className="text-zinc-400">{question}</p>
                     {grade === "pass" || grade === "warn" || grade === "fail" ? (
-                      <Pill kind={grade} />
+                      <Pill kind={grade} label={pillLabel} />
                     ) : null}
                     {countsDiffer ? (
                       <div className="space-y-1">
@@ -238,6 +240,7 @@ export default function AreaModal({
   sourceReport,
   onClose,
   grade,
+  pillLabel,
   evidenceCount,
   loadedEvidenceCount,
 }: AreaModalProps): React.ReactElement {
@@ -249,6 +252,7 @@ export default function AreaModal({
         items={items}
         sourceReport={sourceReport}
         grade={grade}
+        pillLabel={pillLabel}
         evidenceCount={evidenceCount}
         loadedEvidenceCount={loadedEvidenceCount}
       />
