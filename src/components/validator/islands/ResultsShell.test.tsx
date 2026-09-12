@@ -174,7 +174,6 @@ describe("projectResultsPage private terminal completion", () => {
     expect(result.bannerTitle).toBe(RESULT_HEADLINE.compatible);
     expect(result.showPublicActions).toBe(false);
     expect(result.rawJsonNote).toBe(CACHED_SESSION_JSON_NOTE);
-    expect(result.rawJsonSummary).toBe("Last session JSON");
     expect(result.evidenceMode).toBe("not_saved");
     expect(result.showAreas).toBe(true);
   });
@@ -294,7 +293,6 @@ describe("projectResultsPage private terminal completion", () => {
     expect(result.showPublicActions).toBe(true);
     expect(result.reportUrl).toBe(`https://validator.example.com/validator/report/${SESSION_ID}`);
     expect(result.rawJsonNote).toBeNull();
-    expect(result.rawJsonSummary).toBe("Raw report JSON");
     expect(result.evidenceMode).toBe("disclosure");
   });
 
@@ -569,12 +567,28 @@ class ShimNode {
     this.childNodes.splice(index === -1 ? this.childNodes.length : index, 0, node);
     return node;
   }
+  get children(): ShimNode[] {
+    return this.childNodes.filter((child) => child.nodeType === ELEMENT_NODE);
+  }
+  get isConnected(): boolean {
+    let node: ShimNode | null = this;
+    while (node !== null) {
+      if (node.nodeType === DOCUMENT_NODE) return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
   setAttribute(name: string, value: string): void { this.attrs.set(name, String(value)); }
   setAttributeNS(_ns: string, name: string, value: string): void { this.setAttribute(name, value); }
   getAttribute(name: string): string | null {
     return this.attrs.has(name) ? (this.attrs.get(name) ?? "") : null;
   }
+  hasAttribute(name: string): boolean { return this.attrs.has(name); }
   removeAttribute(name: string): void { this.attrs.delete(name); }
+  querySelectorAll(_selector: string): ShimNode[] { return []; }
+  querySelector(_selector: string): ShimNode | null { return null; }
+  closest(_selector: string): ShimNode | null { return null; }
+  focus(): void { this.ownerDocument.activeElement = this; }
   addEventListener(type: string, listener: ShimFnArg, options?: ShimOpts): void {
     if (typeof listener !== "function") return;
     const list = this.listeners.get(type) ?? [];
@@ -658,21 +672,32 @@ function reactDomContainerOf(node: ShimNode): Element {
 
 function installDomShim(): { document: ShimDocument; restore: () => void } {
   const globals = shimGlobalSlots();
+  const htmlHost = globalThis as { HTMLElement?: unknown };
   const owned = {
     window: Object.prototype.hasOwnProperty.call(globals, "window"),
     document: Object.prototype.hasOwnProperty.call(globals, "document"),
     act: Object.prototype.hasOwnProperty.call(globals, "IS_REACT_ACT_ENVIRONMENT"),
+    html: Object.prototype.hasOwnProperty.call(htmlHost, "HTMLElement"),
   };
-  const prev = { window: globals.window, document: globals.document, act: globals.IS_REACT_ACT_ENVIRONMENT };
+  const prev = {
+    window: globals.window,
+    document: globals.document,
+    act: globals.IS_REACT_ACT_ENVIRONMENT,
+    html: htmlHost.HTMLElement,
+  };
   const doc = new ShimDocument();
   const win = new ShimWindow(doc);
   doc.defaultView = win; globals.window = win; globals.document = doc; globals.IS_REACT_ACT_ENVIRONMENT = true;
+  if (typeof htmlHost.HTMLElement === "undefined") {
+    htmlHost.HTMLElement = class HTMLElement {};
+  }
   return {
     document: doc,
     restore: () => {
       if (owned.window) globals.window = prev.window; else delete globals.window;
       if (owned.document) globals.document = prev.document; else delete globals.document;
       if (owned.act) globals.IS_REACT_ACT_ENVIRONMENT = prev.act; else delete globals.IS_REACT_ACT_ENVIRONMENT;
+      if (owned.html) htmlHost.HTMLElement = prev.html; else delete htmlHost.HTMLElement;
     },
   };
 }
@@ -781,8 +806,18 @@ describe("ResultsShell session change reset", () => {
       expect(container.textContent).toContain(SESSION_ID);
       expect(container.textContent).toContain(CACHED_SESSION_JSON_NOTE);
       expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
-      expect(container.textContent).toContain(cacheMarker);
       expect(container.textContent).not.toContain("Continue or finish");
+
+      const cachedTrigger = findByExactText(container, "button", "View raw report JSON");
+      await act(() => {
+        reactClick(cachedTrigger);
+      });
+      await waitForText(doc.body, cacheMarker);
+      expect(doc.body.textContent).toContain(cacheMarker);
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(true);
+      expect(doc.body.textContent).toContain("Last session JSON");
 
       await act(() => {
         root.render(<ResultsShell host="peer.example" id={sessionB} />);
@@ -814,6 +849,105 @@ describe("ResultsShell session change reset", () => {
       restore();
     }
   });
+
+  test("resets raw JSON overlay when the session id changes to a ready permanent report", async () => {
+    const sessionB = "0193b1d3-8d2e-7c5b-9f3f-2b3c4d5e6f70";
+    const cacheMarker = "session_a_cache_marker";
+    let deliveredRunningA = false;
+    let lastAPoll: "running" | "terminal" = "running";
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+          validator_api_origin: API_ORIGIN,
+        });
+      }
+      if (url.includes(`/api/session/${SESSION_ID}`)) {
+        if (!deliveredRunningA) {
+          deliveredRunningA = true;
+          lastAPoll = "running";
+          return jsonResponse(200, {
+            state: "passive_running",
+            ts: 1,
+            optInActive: false,
+            nextInstruction: "wait_probe",
+          });
+        }
+        lastAPoll = "terminal";
+        return jsonResponse(200, { state: "terminal_pass", ts: 2, optInActive: false });
+      }
+      if (url.includes(`/api/report/${SESSION_ID}`)) {
+        if (lastAPoll === "running") {
+          return jsonResponse(200, liveReport(specification(() => "pass"), {
+            evidence: [{ area: "discovery", reasonCode: cacheMarker, grade: "pass" }],
+          }));
+        }
+        return jsonResponse(404, { error: "report_not_public", message: "report is not public" });
+      }
+      if (url.includes(`/api/session/${sessionB}`)) {
+        return jsonResponse(200, { state: "terminal_pass", ts: 3, optInActive: false });
+      }
+      if (url.includes(`/api/report/${sessionB}`)) {
+        return jsonResponse(200, permanentReport(specification(() => "pass")));
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain(CACHED_SESSION_JSON_NOTE);
+      expect(container.textContent).toContain(EVIDENCE_NOT_SAVED);
+
+      const cachedTrigger = findByExactText(container, "button", "View raw report JSON");
+      await act(() => {
+        reactClick(cachedTrigger);
+      });
+      await waitForText(doc.body, cacheMarker);
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(true);
+
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={sessionB} />);
+      });
+      expect(container.textContent).toContain(sessionB);
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      await waitForText(container, VISIBILITY_NOTICE.permanent);
+      expect(container.textContent).toContain("View raw report JSON");
+      expect(container.textContent).not.toContain(CACHED_SESSION_JSON_NOTE);
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(false);
+      await act(async () => {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 5);
+        });
+      });
+      expect(container.textContent).toContain(RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain("View raw report JSON");
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(false);
+      await act(() => { root.unmount(); });
+    } finally {
+      globalThis.fetch = previousFetch;
+      restore();
+    }
+  });
 });
 
 function walk(node: ShimNode, visit: (current: ShimNode) => void): void {
@@ -823,21 +957,21 @@ function walk(node: ShimNode, visit: (current: ShimNode) => void): void {
   }
 }
 
-function nodesByTag(root: ShimNode, tagName: string): ShimNode[] {
-  const upper = tagName.toUpperCase();
+function nodesByRole(root: ShimNode, role: string): ShimNode[] {
   const found: ShimNode[] = [];
   walk(root, (node) => {
-    if (node.tagName === upper) {
+    if (node.getAttribute("role") === role) {
       found.push(node);
     }
   });
   return found;
 }
 
-function nodesByRole(root: ShimNode, role: string): ShimNode[] {
+function nodesByTag(root: ShimNode, tagName: string): ShimNode[] {
+  const upper = tagName.toUpperCase();
   const found: ShimNode[] = [];
   walk(root, (node) => {
-    if (node.getAttribute("role") === role) {
+    if (node.tagName === upper) {
       found.push(node);
     }
   });
@@ -870,7 +1004,7 @@ function reactClick(node: ShimNode): void {
   node.dispatchEvent(new ShimEvent("click"));
 }
 
-function installPermanentReportFetch(): () => void {
+function installTerminalReportFetch(report: ReportResponse): () => void {
   const previousFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = requestUrl(input);
@@ -888,13 +1022,17 @@ function installPermanentReportFetch(): () => void {
       return jsonResponse(200, { state: "terminal_pass", ts: 1, optInActive: false });
     }
     if (url.includes(`/api/report/${SESSION_ID}`)) {
-      return jsonResponse(200, permanentReport(specification(() => "pass")));
+      return jsonResponse(200, report);
     }
     return jsonResponse(404, { error: "missing", message: "missing" });
   }) as typeof fetch;
   return () => {
     globalThis.fetch = previousFetch;
   };
+}
+
+function installPermanentReportFetch(): () => void {
+  return installTerminalReportFetch(permanentReport(specification(() => "pass")));
 }
 
 function installInterruptedReportFetch(): () => void {
@@ -939,8 +1077,14 @@ function installRejectedClipboard(): () => void {
 }
 
 describe("ResultsShell raw JSON disclosure and copy notice", () => {
-  test("Raw JSON uses details/summary and defaults closed", async () => {
-    const restoreFetch = installPermanentReportFetch();
+  test("Raw JSON opens OverlayFrame inspector from the trigger", async () => {
+    const envelopeMarker = "compatible_sf14_full_envelope_marker";
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(specification(() => "pass"), {
+        envelopeMarker,
+        retentionTier: envelopeMarker,
+      } as unknown as Partial<ReportResponse>),
+    );
     const { document: doc, restore } = installDomShim();
     try {
       const { createRoot } = await import("react-dom/client");
@@ -950,14 +1094,100 @@ describe("ResultsShell raw JSON disclosure and copy notice", () => {
       await act(() => {
         root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
       });
-      await waitForText(container, "Raw report JSON");
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).not.toContain(envelopeMarker);
 
-      const details = nodesByTag(container, "details");
-      const summaries = nodesByTag(container, "summary");
-      expect(details.length).toBe(1);
-      expect(summaries.length).toBe(1);
-      expect(details[0]?.getAttribute("open")).toBeNull();
-      expect(summaries[0]?.textContent).toContain("Raw report JSON");
+      const trigger = findByExactText(container, "button", "View raw report JSON");
+      expect(trigger.getAttribute("type")).toBe("button");
+      await act(() => {
+        reactClick(trigger);
+      });
+      await waitForText(doc.body, envelopeMarker);
+      expect(doc.body.textContent).toContain(envelopeMarker);
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(true);
+      expect(doc.body.textContent).toContain("Raw report JSON");
+      expect(nodesByRole(doc.body, "dialog").length).toBeGreaterThan(0);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("malformed report opens the modal with the full envelope", async () => {
+    const envelopeMarker = "malformed_sf14_full_envelope_marker";
+    const restoreFetch = installTerminalReportFetch(
+      liveReport({ grade: null }, {
+        envelopeMarker,
+        retentionTier: envelopeMarker,
+      } as unknown as Partial<ReportResponse>),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.resultUnavailable);
+      expect(container.textContent).not.toContain(envelopeMarker);
+
+      const trigger = findByExactText(container, "button", "View raw report JSON");
+      expect(trigger.getAttribute("type")).toBe("button");
+      await act(() => {
+        reactClick(trigger);
+      });
+      await waitForText(doc.body, envelopeMarker);
+      expect(doc.body.textContent).toContain(envelopeMarker);
+      expect(doc.body.textContent).toContain("Raw report JSON");
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(true);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("no-grid ready report opens the modal with the full envelope", async () => {
+    const envelopeMarker = "nogrid_sf14_full_envelope_marker";
+    const restoreFetch = installTerminalReportFetch(
+      permanentReport(
+        specification(() => null, null),
+        {
+          envelopeMarker,
+          retentionTier: envelopeMarker,
+        } as unknown as Partial<ReportResponse>,
+      ),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.noCompatibilityResult);
+      expect(container.textContent).not.toContain(envelopeMarker);
+
+      const trigger = findByExactText(container, "button", "View raw report JSON");
+      expect(trigger.getAttribute("type")).toBe("button");
+      await act(() => {
+        reactClick(trigger);
+      });
+      await waitForText(doc.body, envelopeMarker);
+      expect(doc.body.textContent).toContain(envelopeMarker);
+      expect(doc.body.textContent).toContain("Raw report JSON");
+      expect(
+        nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-overlay-frame-root")),
+      ).toBe(true);
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();

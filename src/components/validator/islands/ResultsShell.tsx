@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import AreaGrid from "../atoms/AreaGrid";
 import EvidenceDisclosure, { type EvidenceItem } from "../atoms/EvidenceDisclosure";
-import RawJsonPanel from "../atoms/RawJsonPanel";
+import ReportJsonModal from "../atoms/ReportJsonModal";
 import StepRow from "../atoms/StepRow";
 import VerdictBanner, {
   verdictKindFromScore,
@@ -134,7 +134,6 @@ export interface ResultsPageProjection {
   evidenceMode: "disclosure" | "not_saved" | "expired" | "session" | "unknown" | "none";
   evidence: EvidenceItem[];
   rawJsonNote: string | null;
-  rawJsonSummary: string;
   rawJsonTitle: string;
   reportFailure: ValidatorFailure | null;
 }
@@ -473,7 +472,6 @@ export function projectResultsPage(input: {
     evidenceMode: evidenceModeFor(visibility, evidence),
     evidence,
     rawJsonNote: cached ? CACHED_SESSION_JSON_NOTE : null,
-    rawJsonSummary: cached ? "Last session JSON" : "Raw report JSON",
     rawJsonTitle: cached ? "Last session JSON" : "Raw report JSON",
     reportFailure: failure,
   };
@@ -542,6 +540,7 @@ export default function ResultsShell({
   const [copyNotice, setCopyNotice] = useState<{ ok: boolean; text: string } | null>(
     null,
   );
+  const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const viewRef = useRef<MachineView | null>(null);
 
   useEffect(() => {
@@ -557,6 +556,7 @@ export default function ResultsShell({
     setTerminalReport(null);
     setReportFailure(null);
     setError("");
+    setRawJsonOpen(false);
   }, [session?.host, session?.id]);
 
   useEffect(() => {
@@ -665,23 +665,15 @@ export default function ResultsShell({
         ? "Loading session..."
         : progressAnnouncement(view)
       : null;
-  const rawJsonDisclosure =
+  const rawJsonTrigger =
     projection.sourceReport !== null ? (
-      <details className="rounded-2xl border border-zinc-800 bg-zinc-900/20">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center px-5 py-3 text-sm font-semibold text-zinc-100">
-          {projection.rawJsonSummary}
-        </summary>
-        <div className="space-y-3 border-t border-zinc-800 px-5 py-4">
-          {projection.rawJsonNote !== null ? (
-            <p className="text-sm text-zinc-400">{projection.rawJsonNote}</p>
-          ) : null}
-          <RawJsonPanel
-            value={projection.sourceReport}
-            title={projection.rawJsonTitle}
-            downloadName={`report-${session.id}.json`}
-          />
-        </div>
-      </details>
+      <button
+        type="button"
+        className={ACTION_BTN}
+        onClick={() => setRawJsonOpen(true)}
+      >
+        View raw report JSON
+      </button>
     ) : null;
 
   return (
@@ -867,10 +859,22 @@ export default function ResultsShell({
               <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EXPIRED}</p>
             </div>
           ) : null}
-          {rawJsonDisclosure}
+          {projection.sourceKind === "cached_session" ? (
+            <p className="text-sm text-zinc-400">{CACHED_SESSION_JSON_NOTE}</p>
+          ) : null}
+          {rawJsonTrigger}
         </div>
       ) : null}
-      {projection.status === "malformed" ? rawJsonDisclosure : null}
+      {projection.status === "malformed" ? rawJsonTrigger : null}
+      {rawJsonOpen && projection.sourceReport !== null ? (
+        <ReportJsonModal
+          title={projection.rawJsonTitle}
+          sourceReport={projection.sourceReport}
+          note={projection.rawJsonNote}
+          downloadName={`report-${session.id}.json`}
+          onClose={() => setRawJsonOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
