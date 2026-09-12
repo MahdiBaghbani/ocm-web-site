@@ -614,38 +614,84 @@ function readOnlyStop(): Promise<{
   });
 }
 
-async function copyText(value: string): Promise<boolean> {
-  if (typeof navigator !== "undefined" && navigator.clipboard !== undefined) {
+export type CopyNotice = {
+  ok: boolean;
+  text: string;
+};
+
+export const EMPTY_COPY_NOTICE: CopyNotice = { ok: true, text: "" };
+export const COPY_SUCCESS_TEXT = "Copied";
+
+function clipboardWriter(): Clipboard | undefined {
+  if (
+    typeof window === "undefined" ||
+    window.isSecureContext !== true ||
+    typeof navigator === "undefined"
+  ) {
+    return undefined;
+  }
+  const clipboard = navigator.clipboard;
+  if (clipboard === undefined || typeof clipboard.writeText !== "function") {
+    return undefined;
+  }
+  return clipboard;
+}
+
+function createOffscreenCopyTextarea(value: string): HTMLTextAreaElement {
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  // 1px offscreen. display:none and the old opacity:0 fixed trick both break
+  // selection in some browsers, so the node stays measurable for the copy.
+  textarea.style.position = "absolute";
+  textarea.style.width = "1px";
+  textarea.style.height = "1px";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  textarea.style.padding = "0";
+  textarea.style.border = "0";
+  textarea.style.overflow = "hidden";
+  return textarea;
+}
+
+function restorePriorFocus(previousActive: Element | null, textarea: HTMLTextAreaElement): void {
+  if (
+    previousActive instanceof HTMLElement &&
+    previousActive !== textarea &&
+    previousActive.isConnected
+  ) {
     try {
-      await navigator.clipboard.writeText(value);
+      previousActive.focus({ preventScroll: true });
+    } catch {
+      // Focus restore is best-effort.
+    }
+  }
+}
+
+// Shared page-link / report-link / later AG-1.4 copy helper. Tier 2 execCommand
+// is best-effort only; a true return is not a guarantee on every browser.
+export async function copyText(value: string): Promise<boolean> {
+  const clipboard = clipboardWriter();
+  if (clipboard !== undefined) {
+    try {
+      await clipboard.writeText(value);
       return true;
     } catch {
-      // Clipboard API rejected; fall through to execCommand.
+      // Clipboard API rejected; try the execCommand fallback.
     }
   }
   if (typeof document === "undefined") {
     return false;
   }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.top = "0";
-  textarea.style.left = "0";
-  textarea.style.opacity = "0";
+  const previousActive = document.activeElement;
+  const textarea = createOffscreenCopyTextarea(value);
   document.body.appendChild(textarea);
   try {
+    if (typeof textarea.focus === "function") {
+      textarea.focus({ preventScroll: true });
+    }
     if (typeof textarea.select === "function") {
       textarea.select();
-    }
-    if (typeof document.createRange === "function" && typeof window.getSelection === "function") {
-      const selection = window.getSelection();
-      if (selection !== null) {
-        const range = document.createRange();
-        range.selectNodeContents(textarea);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
     }
     if (typeof document.execCommand !== "function") {
       return false;
@@ -654,11 +700,61 @@ async function copyText(value: string): Promise<boolean> {
   } catch {
     return false;
   } finally {
-    const parent = textarea.parentNode;
-    if (parent !== null) {
-      parent.removeChild(textarea);
+    try {
+      const parent = textarea.parentNode;
+      if (parent !== null) {
+        parent.removeChild(textarea);
+      }
+    } catch {
+      // Textarea cleanup is best-effort.
     }
+    restorePriorFocus(previousActive, textarea);
   }
+}
+
+export function CopyNoticeRegion({
+  notice,
+  fallbackValue,
+}: {
+  notice: CopyNotice;
+  fallbackValue: string | null;
+}): React.ReactElement {
+  const successText = notice.ok ? notice.text : "";
+  const failureText = notice.ok ? "" : notice.text;
+  return (
+    <div className="space-y-2">
+      <p
+        id="results-copy-notice"
+        className="text-sm text-zinc-300"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {successText}
+      </p>
+      {failureText !== "" ? (
+        <p
+          id="results-copy-failure"
+          className="text-sm text-rose-200"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          {failureText}
+        </p>
+      ) : null}
+      {fallbackValue !== null ? (
+        <input
+          type="text"
+          readOnly
+          value={fallbackValue}
+          aria-describedby={failureText !== "" ? "results-copy-failure" : "results-copy-notice"}
+          data-copy-fallback=""
+          className="w-full rounded-xl border border-rose-400 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+        />
+      ) : null}
+    </div>
+  );
 }
 
 export default function ResultsShell({
@@ -677,14 +773,13 @@ export default function ResultsShell({
   const [terminalReport, setTerminalReport] = useState<ReportResponse | null>(null);
   const [reportFailure, setReportFailure] = useState<ValidatorFailure | null>(null);
   const [error, setError] = useState("");
-  const [copyNotice, setCopyNotice] = useState<{ ok: boolean; text: string } | null>(
-    null,
-  );
+  const [copyNotice, setCopyNotice] = useState<CopyNotice>(EMPTY_COPY_NOTICE);
   const [copyFallback, setCopyFallback] = useState<string | null>(null);
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyMountedRef = useRef(true);
   // Live trigger buttons keyed by canonical area id, plus a grid-heading
   // fallback. On close we restore focus by area id so the correct trigger wins
   // even if the modal remounted a fresh button; OverlayFrame does its own
@@ -718,7 +813,7 @@ export default function ResultsShell({
     setError("");
     setRawJsonOpen(false);
     setSelectedArea(null);
-    setCopyNotice(null);
+    setCopyNotice(EMPTY_COPY_NOTICE);
     setCopyFallback(null);
     if (copyTimerRef.current !== null) {
       clearTimeout(copyTimerRef.current);
@@ -727,9 +822,12 @@ export default function ResultsShell({
   }, [session?.host, session?.id]);
 
   useEffect(() => {
+    copyMountedRef.current = true;
     return () => {
+      copyMountedRef.current = false;
       if (copyTimerRef.current !== null) {
         clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
       }
     };
   }, []);
@@ -794,27 +892,47 @@ export default function ResultsShell({
     validatorApiOrigin: config?.validatorApiOrigin ?? "",
   });
 
+  function clearCopyTimer(): void {
+    if (copyTimerRef.current !== null) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
+  }
+
+  function settleCopyOutcome(ok: boolean, value: string, failureText: string): void {
+    clearCopyTimer();
+    if (ok) {
+      setCopyFallback(null);
+      // Commit an empty live-region tick so a repeat copy can re-announce.
+      setCopyNotice({ ok: true, text: "" });
+      copyTimerRef.current = setTimeout(() => {
+        if (!copyMountedRef.current) {
+          copyTimerRef.current = null;
+          return;
+        }
+        setCopyNotice({ ok: true, text: COPY_SUCCESS_TEXT });
+        copyTimerRef.current = setTimeout(() => {
+          if (!copyMountedRef.current) {
+            copyTimerRef.current = null;
+            return;
+          }
+          setCopyNotice((current) => (current.ok ? { ok: true, text: "" } : current));
+          copyTimerRef.current = null;
+        }, 2000);
+      }, 0);
+      return;
+    }
+    setCopyFallback(value);
+    setCopyNotice({ ok: false, text: failureText });
+  }
+
   async function handleCopyPageLink(): Promise<void> {
     if (session === null || typeof window === "undefined") {
       return;
     }
     const value = pageLinkHref(projection.status, window.location.href);
     const ok = await copyText(value);
-    if (copyTimerRef.current !== null) {
-      clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = null;
-    }
-    if (ok) {
-      setCopyFallback(null);
-      setCopyNotice({ ok: true, text: "Copied" });
-      copyTimerRef.current = setTimeout(() => {
-        setCopyNotice(null);
-        copyTimerRef.current = null;
-      }, 2000);
-      return;
-    }
-    setCopyFallback(value);
-    setCopyNotice({ ok: false, text: "Could not copy the page link." });
+    settleCopyOutcome(ok, value, "Could not copy the page link.");
   }
 
   async function handleCopyReport(): Promise<void> {
@@ -822,24 +940,11 @@ export default function ResultsShell({
       return;
     }
     const ok = await copyText(projection.reportUrl);
-    if (copyTimerRef.current !== null) {
-      clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = null;
-    }
-    if (ok) {
-      setCopyFallback(null);
-      setCopyNotice({ ok: true, text: "Copied" });
-      copyTimerRef.current = setTimeout(() => {
-        setCopyNotice(null);
-        copyTimerRef.current = null;
-      }, 2000);
-      return;
-    }
-    setCopyFallback(projection.reportUrl);
-    setCopyNotice({
-      ok: false,
-      text: "Could not copy the report link. Open the report and copy its address instead.",
-    });
+    settleCopyOutcome(
+      ok,
+      projection.reportUrl,
+      "Could not copy the report link. Open the report and copy its address instead.",
+    );
   }
 
   if (session === null) {
@@ -942,29 +1047,7 @@ export default function ResultsShell({
           {statusText}
         </p>
       ) : null}
-      <div className="space-y-2">
-        <p
-          id="results-copy-notice"
-          className={`text-sm ${
-            copyNotice !== null && !copyNotice.ok ? "text-rose-200" : "text-zinc-300"
-          }`}
-          role={copyNotice !== null && !copyNotice.ok ? "alert" : "status"}
-          aria-live={copyNotice !== null && !copyNotice.ok ? "assertive" : "polite"}
-          aria-atomic="true"
-        >
-          {copyNotice === null ? "" : copyNotice.text}
-        </p>
-        {copyFallback !== null ? (
-          <input
-            type="text"
-            readOnly
-            value={copyFallback}
-            aria-describedby="results-copy-notice"
-            data-copy-fallback=""
-            className="w-full rounded-xl border border-rose-400 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          />
-        ) : null}
-      </div>
+      <CopyNoticeRegion notice={copyNotice} fallbackValue={copyFallback} />
       {error !== "" ? (
         <div className="space-y-3">
           <p className="text-sm text-rose-200" role="alert">
