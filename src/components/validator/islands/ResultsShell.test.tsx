@@ -4394,6 +4394,34 @@ function findAnnouncement(): Element | undefined {
   );
 }
 
+function currentGuidanceText(): string {
+  return document.querySelector('[aria-current="step"] [data-guidance-slot]')?.textContent ?? "";
+}
+
+/**
+ * AG-2.8 lock: paste where-copy stays provider-neutral. Host-appended
+ * strings, provider names, endpoints, and planning markers must not appear
+ * in the rendered guidance body (or in the reserved form/invite slots).
+ */
+function expectProviderNeutralWhereCopy(text: string, host: string): void {
+  expect(text).not.toContain("{host}");
+  expect(text).not.toContain("Accept it on");
+  const lower = text.toLowerCase();
+  expect(lower).not.toContain(host.toLowerCase());
+  expect(lower).not.toContain("nextcloud");
+  expect(lower).not.toContain("owncloud");
+  expect(lower).not.toContain("cernbox");
+  expect(lower).not.toContain("ocis");
+  expect(text).not.toMatch(/https?:\/\//);
+  expect(text).not.toContain("/invite");
+  expect(text).not.toContain("/ocm/");
+  expect(text).not.toContain("[wip]");
+  expect(text).not.toContain("[todo]");
+  expect(text).not.toContain("AG-1");
+  expect(text).not.toContain("AG-2");
+  expect(text).not.toContain("P7");
+}
+
 describe("ResultsShell current-row guidance, announce, and reserved slots", () => {
   beforeAll(async () => {
     await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
@@ -4440,6 +4468,66 @@ describe("ResultsShell current-row guidance, announce, and reserved slots", () =
       await act(() => {
         root.unmount();
       });
+      restoreFetch();
+    }
+  });
+
+  test("locks provider-neutral paste_s1 and paste_s2 where-copy on the current row", async () => {
+    const host = "peer.example";
+    const pasteS1 = guidanceFor("paste_s1");
+    const pasteS2 = guidanceFor("paste_s2");
+    expect(pasteS1).not.toBeNull();
+    expect(pasteS2).not.toBeNull();
+    if (pasteS1 === null || pasteS1.kind !== "instruction") {
+      throw new Error("expected paste_s1 instruction guidance");
+    }
+    if (pasteS2 === null || pasteS2.kind !== "instruction") {
+      throw new Error("expected paste_s2 instruction guidance");
+    }
+
+    const gate = new SessionPollGate();
+    const restoreFetch = installGatedSessionFetch(gate);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host={host} id={SESSION_ID} />);
+      });
+
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      const pasteS1Text = currentGuidanceText();
+      expect(pasteS1Text).toContain(pasteS1.body);
+      expect(pasteS1Text).toContain("target server under test");
+      expectProviderNeutralWhereCopy(pasteS1Text, host);
+      expect(document.querySelector("[data-reserved-form-slot]")).not.toBeNull();
+      expect(document.querySelector("[data-reserved-alert-slot]")).not.toBeNull();
+
+      await releasePoll(gate, 2, {
+        state: "reverse_awaiting_invite",
+        ts: 2,
+        optInActive: true,
+        nextInstruction: "paste_s2",
+      });
+      const pasteS2Text = currentGuidanceText();
+      expect(pasteS2Text).toContain(pasteS2.body);
+      expectProviderNeutralWhereCopy(pasteS2Text, host);
+      expectProviderNeutralWhereCopy(
+        document.querySelector("[data-reserved-form-slot]")?.textContent ?? "",
+        host,
+      );
+      expect(document.querySelector("[data-reserved-form-slot]")).not.toBeNull();
+      expect(document.querySelector("[data-reserved-alert-slot]")).not.toBeNull();
+      expect(document.querySelector("[data-reverse-form]")).not.toBeNull();
+    } finally {
+      await act(() => {
+        root.unmount();
+      });
+      gate.settleRemaining();
       restoreFetch();
     }
   });
