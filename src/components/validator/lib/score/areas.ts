@@ -1,7 +1,39 @@
 /**
- * Lib-owned eight-area description catalog shared by Results and AreaModal.
+ * Canonical area identity plus the eight-area description catalog shared by
+ * Results and AreaModal.
  */
-import type { CanonicalAreaId } from "../validatorScore";
+
+export const CANONICAL_AREA_IDS = [
+  "discovery",
+  "tls",
+  "jwks",
+  "httpsig",
+  "sharing",
+  "notification",
+  "token",
+  "capability",
+] as const;
+
+export type CanonicalAreaId = (typeof CANONICAL_AREA_IDS)[number];
+
+export const CANONICAL_AREA_LABELS = {
+  discovery: "Server discovery",
+  tls: "Secure connection",
+  jwks: "Signing keys",
+  httpsig: "Request signing",
+  sharing: "Share exchange",
+  notification: "Notifications",
+  token: "Access tokens",
+  capability: "Capabilities",
+} as const satisfies Record<CanonicalAreaId, string>;
+
+export const CANONICAL_AREA_TOTAL = CANONICAL_AREA_IDS.length;
+
+const CANONICAL_AREA_SET: ReadonlySet<string> = new Set(CANONICAL_AREA_IDS);
+
+export function isCanonicalAreaId(value: string): value is CanonicalAreaId {
+  return CANONICAL_AREA_SET.has(value);
+}
 
 export const AREA_DESCRIPTIONS: Record<CanonicalAreaId, string> = {
   discovery: "Can other servers find this server's OCM endpoint?",
