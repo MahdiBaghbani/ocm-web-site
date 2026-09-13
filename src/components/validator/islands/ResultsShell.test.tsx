@@ -843,7 +843,10 @@ describe("ResultsShell session change reset", () => {
         root.render(<ResultsShell host="peer.example" id={sessionB} />);
       });
       expect(container.textContent).toContain(sessionB);
-      expect(container.textContent).toContain("Scan in progress");
+      // Resume/navigation must not flash the running banner before the first
+      // successful poll: only "Loading session..." shows until poll and view
+      // exist for the new session.
+      expect(container.textContent).not.toContain("Scan in progress");
       expect(container.textContent).toContain("Loading session...");
       expect(container.textContent).not.toContain(RESULT_HEADLINE.compatible);
       expect(container.textContent).not.toContain(CACHED_SESSION_JSON_NOTE);
@@ -1263,6 +1266,77 @@ describe("ResultsShell evidence disclosure rendering", () => {
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();
+      restore();
+    }
+  });
+});
+
+describe("ResultsShell resume banner gating", () => {
+  test("keeps Loading session... and hides the running banner until the first successful poll", async () => {
+    let releaseFirst = (): void => {};
+    const waitFirst = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstPollDelivered = false;
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+          validator_api_origin: API_ORIGIN,
+        });
+      }
+      if (url.includes(`/api/session/${SESSION_ID}`)) {
+        // Block the first poll so the resume view is exercised with a valid
+        // session identity but no poll or view yet.
+        if (!firstPollDelivered) {
+          firstPollDelivered = true;
+          await waitFirst;
+        }
+        return jsonResponse(200, {
+          state: "passive_running",
+          ts: 1,
+          optInActive: false,
+          nextInstruction: "wait_probe",
+        });
+      }
+      if (url.includes(`/api/report/${SESSION_ID}`)) {
+        return jsonResponse(404, { error: "report_not_public", message: "report is not public" });
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      // Before the first successful poll, the session identity is known but
+      // poll and view do not exist yet: only the loading line shows, the
+      // running banner ("Scan in progress") stays hidden, and the banner
+      // region is not rendered at all.
+      expect(container.textContent).toContain("Loading session...");
+      expect(container.textContent).not.toContain("Scan in progress");
+      expect(firstByHasAttr(container, "data-banner-region")).toBeNull();
+
+      await act(async () => {
+        releaseFirst();
+        await waitFirst;
+      });
+      // Once poll and view exist, the running banner appears normally.
+      await waitForText(container, "Scan in progress");
+      expect(firstByHasAttr(container, "data-banner-region")).not.toBeNull();
+      await act(() => { root.unmount(); });
+    } finally {
+      globalThis.fetch = previousFetch;
       restore();
     }
   });

@@ -1802,6 +1802,7 @@ export default function ResultsShell({
         </div>
       </div>
       {projection.bannerVerdict !== null &&
+      view !== null &&
       (projection.status === "live" || projection.status === "ready") ? (
         <div data-banner-region="">
           <VerdictBanner
