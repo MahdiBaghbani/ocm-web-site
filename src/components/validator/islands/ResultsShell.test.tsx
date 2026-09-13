@@ -6145,6 +6145,118 @@ describe("ResultsShell paste_s1 claim invitation", () => {
     }
   });
 
+  test("clears the shared post-error channel when polling advances from paste_s1 to paste_s2", async () => {
+    const gate = new SessionPollGate();
+    const claim = installGatedClaimFetch(gate, () =>
+      jsonResponse(409, { error: "SESSION_NOT_READY", message: "session not ready" }),
+    );
+    const restoreSecure = installIsSecureContext(true);
+    const restoreClipboard = installClipboardWriteText(async () => {});
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      await waitForDom(() => hasClaimButton(COPY_INVITATION_LABEL));
+
+      await act(() => {
+        claimButton(COPY_INVITATION_LABEL).dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      });
+      await waitForDom(() =>
+        document.body.textContent?.includes(
+          ACTION_ERROR_COPY.claim_409_session_not_ready,
+        ) === true,
+      );
+      expect(claim.inviteCalls()).toBe(1);
+      expect(document.querySelector("[data-post-error]")?.textContent).toBe(
+        ACTION_ERROR_COPY.claim_409_session_not_ready,
+      );
+
+      // Poll advances past paste_s1; the render-phase clear must remove the
+      // visible post-error from the shared channel.
+      await releasePoll(gate, 2, {
+        state: "reverse_awaiting_invite",
+        ts: 2,
+        optInActive: true,
+        nextInstruction: "paste_s2",
+      });
+      await waitForDom(() => document.querySelector("[data-post-error]") === null);
+      expect(document.querySelector("[data-post-error]")).toBeNull();
+      expect(document.body.textContent).not.toContain(
+        ACTION_ERROR_COPY.claim_409_session_not_ready,
+      );
+      expect(reverseTextarea()).not.toBeNull();
+    } finally {
+      await act(() => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      claim.restore();
+      restoreClipboard();
+      restoreSecure();
+    }
+  });
+
+  test("does not match a 410 claim response by HTTP status when the flat error code differs", async () => {
+    const gate = new SessionPollGate();
+    const claim = installGatedClaimFetch(gate, () =>
+      jsonResponse(410, { error: "GONE", message: "invite gone" }),
+    );
+    const restoreSecure = installIsSecureContext(true);
+    const restoreClipboard = installClipboardWriteText(async () => {});
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      await waitForDom(() => hasClaimButton(COPY_INVITATION_LABEL));
+
+      await act(() => {
+        claimButton(COPY_INVITATION_LABEL).dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      });
+      await waitForDom(() => document.querySelector("[data-post-error]") !== null);
+
+      // A 410 whose flat error code is NOT INVITE_ALREADY_CLAIMED must not
+      // trigger the claim-locked copy or lock; matching is by result.error,
+      // not HTTP status. The generic fallthrough still surfaces the backend
+      // message, proving the claim-specific branch did not run.
+      expect(document.body.textContent).not.toContain(
+        ACTION_ERROR_COPY.claim_410_no_cache,
+      );
+      expect(document.querySelector("[data-post-error]")?.textContent ?? "").toContain(
+        "invite gone",
+      );
+    } finally {
+      await act(() => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      claim.restore();
+      restoreClipboard();
+      restoreSecure();
+    }
+  });
+
   test("a claim succeeds when sessionStorage access throws and stays usable once storage returns", async () => {
     const copied: string[] = [];
     const claim = installClaimFetch(() => jsonResponse(200, claimSuccessBody()));
