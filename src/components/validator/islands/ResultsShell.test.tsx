@@ -15,6 +15,7 @@ import ResultsShell, {
   areaTotals,
   bannerBody,
   copyText,
+  liveViewReportHref,
   primaryReasonCodesByArea,
   primaryReasonsByArea,
   progressAnnouncement,
@@ -29,10 +30,12 @@ import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
 import type { EvidenceItem } from "../atoms/EvidenceDisclosure";
 import { resolveValidatorMachine } from "../lib/stateMachine";
 import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "../lib/validatorGuidance";
-import type {
-  ReportResponse,
-  SessionPollResponse,
-  ValidatorFailure,
+import {
+  joinValidatorUrl,
+  resolvePublicReportUrl,
+  type ReportResponse,
+  type SessionPollResponse,
+  type ValidatorFailure,
 } from "../lib/validatorFetch";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
@@ -503,6 +506,58 @@ describe("result area presentation helpers", () => {
     expect(bannerBody(result.score)).toContain("peer closed");
     expect(bannerBody(result.score)).not.toContain("Assessed");
     expect(result.score.showFailModeLabel).toBe(true);
+  });
+});
+
+describe("liveViewReportHref", () => {
+  test("builds the live URL with joinValidatorUrl and the encoded session id", () => {
+    const href = liveViewReportHref(API_ORIGIN, SESSION_ID);
+    expect(href).toBe(
+      joinValidatorUrl(API_ORIGIN, `/report/${encodeURIComponent(SESSION_ID)}`),
+    );
+    expect(href).toBe(`${API_ORIGIN}/validator/report/${SESSION_ID}`);
+  });
+
+  test("percent-encodes reserved session id characters through joinValidatorUrl", () => {
+    const reservedId = "sess ion#id?x/y%z";
+    const encodedId = encodeURIComponent(reservedId);
+    const href = liveViewReportHref(API_ORIGIN, reservedId);
+    expect(encodedId).toContain("%20");
+    expect(encodedId).toContain("%23");
+    expect(href).toBe(joinValidatorUrl(API_ORIGIN, `/report/${encodedId}`));
+    expect(href).toBe(`${API_ORIGIN}/validator/report/${encodedId}`);
+    expect(href).toContain("%20");
+    expect(href).toContain("%23");
+    expect(href).not.toContain(" ");
+    expect(href).not.toBe(`${API_ORIGIN}/validator/report/${reservedId}`);
+    expect(href).not.toBe(`${API_ORIGIN}/report/${reservedId}`);
+    expect(href).not.toBe(`${API_ORIGIN}/report/${encodedId}`);
+  });
+
+  test("hides the live URL when the origin is empty or whitespace", () => {
+    expect(liveViewReportHref("", SESSION_ID)).toBeNull();
+    expect(liveViewReportHref("   ", SESSION_ID)).toBeNull();
+    // joinValidatorUrl would emit a relative /validator path for an empty
+    // origin. The live helper must not use that fallback, and must not call
+    // resolvePublicReportUrl (which also rejects an empty origin).
+    expect(joinValidatorUrl("", `/report/${encodeURIComponent(SESSION_ID)}`)).toBe(
+      `/validator/report/${SESSION_ID}`,
+    );
+    expect(resolvePublicReportUrl(`/validator/report/${SESSION_ID}`, "")).toBeNull();
+  });
+
+  test("keeps the live href distinct from a permanent public report URL", () => {
+    const liveHref = liveViewReportHref(API_ORIGIN, SESSION_ID);
+    const permanentHref = resolvePublicReportUrl(
+      "/validator/report/public-other",
+      API_ORIGIN,
+    );
+    expect(liveHref).not.toBeNull();
+    expect(permanentHref).not.toBeNull();
+    expect(liveHref).not.toBe(permanentHref);
+    expect(liveHref).not.toBe(
+      resolvePublicReportUrl("https://evil.example/validator/report/abc", API_ORIGIN),
+    );
   });
 });
 
@@ -2868,7 +2923,43 @@ describe("ResultsShell area detail modal", () => {
   });
 });
 
-function installNotSavedEmptyFetch(): () => void {
+function installNotSavedEmptyFetch(extraPoll: Partial<SessionPollResponse> = {}): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return jsonResponse(200, {
+        state: "terminal_pass",
+        ts: 1,
+        optInActive: false,
+        ...extraPoll,
+      });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(404, { error: "report_not_public", message: "report is not public" });
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+function viewReportAnchorsFrom(root: ShimNode): ShimNode[] {
+  return nodesByTag(root, "a").filter((node) => node.textContent === "View report");
+}
+
+function installExpiredReportFetch(): () => void {
   const previousFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = requestUrl(input);
@@ -2886,7 +2977,34 @@ function installNotSavedEmptyFetch(): () => void {
       return jsonResponse(200, { state: "terminal_pass", ts: 1, optInActive: false });
     }
     if (url.includes(`/api/report/${SESSION_ID}`)) {
-      return jsonResponse(404, { error: "report_not_public", message: "report is not public" });
+      return jsonResponse(410, { error: "gone", message: "resource expired" });
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+function installReportErrorFetch(): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return jsonResponse(200, { state: "terminal_pass", ts: 1, optInActive: false });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(404, { error: "nope", message: "missing" });
     }
     return jsonResponse(404, { error: "missing", message: "missing" });
   }) as typeof fetch;
@@ -2921,6 +3039,129 @@ describe("ResultsShell not-saved empty JSON action", () => {
         nodesByTag(doc.body, "div").some((node) => node.hasAttribute("data-area-modal")),
       ).toBe(false);
       expect(nodesByRole(doc.body, "dialog").length).toBe(0);
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("not_saved_empty still renders poll-state guidance and the trimmed failModeLabel", async () => {
+    const restoreFetch = installNotSavedEmptyFetch({
+      state: "terminal_fail",
+      failModeLabel: "  handshake failed  ",
+    });
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, "This scan was not saved");
+
+      const guidance = guidanceFor("terminal_fail");
+      expect(guidance).not.toBeNull();
+      if (guidance === null) {
+        throw new Error("expected terminal_fail guidance");
+      }
+      expect(container.textContent).toContain(guidance.body);
+      expect(container.textContent).toContain("handshake failed");
+      expect(container.textContent).not.toContain("  handshake failed  ");
+      expect(container.textContent).not.toContain("reverse_share_timeout");
+      expect(container.textContent).not.toContain("reverse_invite_timeout");
+      expect(viewReportAnchorsFrom(container).length).toBe(0);
+      expect(container.textContent).not.toContain("Open public report");
+      expect(container.textContent).not.toContain("Copy public report link");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+});
+
+describe("ResultsShell report-link visibility", () => {
+  test("permanent ready results keep the public report actions and hide the live View report link", async () => {
+    const restoreFetch = installPermanentReportFetch();
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+
+      const open = findByExactText(container, "a", "Open public report");
+      expect(open.getAttribute("href")).toBe(
+        resolvePublicReportUrl(`/validator/report/${SESSION_ID}`, API_ORIGIN),
+      );
+      expect(open.getAttribute("href")).toBe(
+        `https://validator.example.com/validator/report/${SESSION_ID}`,
+      );
+      expect(viewReportAnchorsFrom(container).length).toBe(0);
+      expect(container.textContent).toContain("Copy public report link");
+      await act(() => { root.unmount(); });
+    } finally {
+      restoreFetch();
+      restore();
+    }
+  });
+
+  test("hides every report link for not_saved, expired, and unresolved terminals", async () => {
+    const cases: Array<{ install: () => () => void; needle: string }> = [
+      { install: installNotSavedCachedFetch, needle: RESULT_HEADLINE.compatible },
+      { install: installExpiredReportFetch, needle: VISIBILITY_NOTICE.expired },
+      { install: installReportErrorFetch, needle: "We could not load this report." },
+    ];
+    for (const item of cases) {
+      const restoreFetch = item.install();
+      const { document: doc, restore } = installDomShim();
+      try {
+        const { createRoot } = await import("react-dom/client");
+        const container = doc.createElement("div");
+        doc.body.appendChild(container);
+        const root = createRoot(reactDomContainerOf(container));
+        await act(() => {
+          root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+        });
+        await waitForText(container, item.needle);
+        expect(viewReportAnchorsFrom(container).length).toBe(0);
+        expect(container.textContent).not.toContain("Open public report");
+        expect(container.textContent).not.toContain("Copy public report link");
+        await act(() => { root.unmount(); });
+      } finally {
+        restoreFetch();
+        restore();
+      }
+    }
+  });
+
+  test("successful unknown-visibility terminal hides every report link", async () => {
+    const restoreFetch = installTerminalReportFetch(
+      liveReport(specification(() => "pass"), { visibility: "unknown" }),
+    );
+    const { document: doc, restore } = installDomShim();
+    try {
+      const { createRoot } = await import("react-dom/client");
+      const container = doc.createElement("div");
+      doc.body.appendChild(container);
+      const root = createRoot(reactDomContainerOf(container));
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForText(container, RESULT_HEADLINE.compatible);
+      expect(container.textContent).toContain(VISIBILITY_NOTICE.unknown);
+      expect(container.textContent).not.toContain("We could not load this report.");
+      expect(viewReportAnchorsFrom(container).length).toBe(0);
+      expect(container.textContent).not.toContain("View report");
+      expect(container.textContent).not.toContain("Open public report");
+      expect(container.textContent).not.toContain("Copy public report link");
       await act(() => { root.unmount(); });
     } finally {
       restoreFetch();
@@ -4210,7 +4451,11 @@ describe("stabilizeLiveView one-poll hold", () => {
   });
 });
 
-function installActiveInviteFetch(): () => void {
+function installActiveInviteFetch(options?: {
+  origin?: string;
+  liveReportExtra?: Partial<ReportResponse>;
+}): () => void {
+  const origin = options?.origin ?? API_ORIGIN;
   const previousFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = requestUrl(input);
@@ -4221,7 +4466,7 @@ function installActiveInviteFetch(): () => void {
         backoff_initial_ms: 1,
         backoff_max_ms: 1,
         request_timeout_ms: 5000,
-        validator_api_origin: API_ORIGIN,
+        validator_api_origin: origin,
       });
     }
     if (url.includes(`/api/session/${SESSION_ID}`)) {
@@ -4233,7 +4478,10 @@ function installActiveInviteFetch(): () => void {
       });
     }
     if (url.includes(`/api/report/${SESSION_ID}`)) {
-      return jsonResponse(200, liveReport(specification(() => "pass")));
+      return jsonResponse(
+        200,
+        liveReport(specification(() => "pass"), options?.liveReportExtra ?? {}),
+      );
     }
     return jsonResponse(404, { error: "missing", message: "missing" });
   }) as typeof fetch;
@@ -4467,9 +4715,21 @@ describe("ResultsShell current-row guidance, announce, and reserved slots", () =
       const currentCtaSlot = currentCard?.querySelector("[data-cta-slot]");
       expect(currentCtaSlot).not.toBeNull();
       expect(currentCtaSlot?.className).toContain("min-w-[10rem]");
-      // No copy/paste actions are wired yet in this task, so the slot stays
-      // reserved but hidden from accessibility APIs.
-      expect(currentCtaSlot?.getAttribute("aria-hidden")).toBe("true");
+      // Copy/paste actions stay unwired. The current row shows the live
+      // View report secondary link when the API origin is real; other
+      // rows keep the reserved empty column.
+      const liveLink = Array.from(currentCtaSlot?.querySelectorAll("a") ?? []).find(
+        (el) => el.textContent === "View report",
+      );
+      expect(liveLink).toBeDefined();
+      expect(currentCtaSlot?.getAttribute("aria-hidden")).toBeNull();
+      for (const slot of ctaSlots) {
+        if (slot === currentCtaSlot) {
+          continue;
+        }
+        expect(slot.getAttribute("aria-hidden")).toBe("true");
+        expect(slot.textContent).toBe("");
+      }
     } finally {
       // Always unmount, even if an assertion above throws, so a failing run
       // cannot leave the root mounted or a poll loop running past this test.
@@ -4906,6 +5166,80 @@ describe("ResultsShell current-row guidance, announce, and reserved slots", () =
         ...guidanceModule,
         guidanceFor: originalGuidanceFor,
       }));
+    }
+  });
+
+  test("wires View report only on the current live row via joinValidatorUrl and opens it in a new tab", async () => {
+    const restoreFetch = installActiveInviteFetch({
+      liveReportExtra: { reportUrl: "https://evil.example/validator/report/abc" },
+    });
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes("Paste the outgoing invite") === true,
+      );
+
+      const expectedHref = joinValidatorUrl(
+        API_ORIGIN,
+        `/report/${encodeURIComponent(SESSION_ID)}`,
+      );
+      const links = Array.from(document.querySelectorAll("a")).filter(
+        (el) => el.textContent === "View report",
+      );
+      expect(links.length).toBe(1);
+      expect(links[0]?.getAttribute("href")).toBe(expectedHref);
+      expect(links[0]?.getAttribute("target")).toBe("_blank");
+      expect(links[0]?.getAttribute("rel")).toBe("noopener noreferrer");
+
+      const currentCard = document.querySelector('[aria-current="step"]');
+      expect(currentCard?.contains(links[0] as Node)).toBe(true);
+      const otherCards = Array.from(document.querySelectorAll("[data-guidance-slot]"))
+        .map((slot) => slot.parentElement)
+        .filter((card) => card !== currentCard);
+      for (const card of otherCards) {
+        expect(card?.textContent).not.toContain("View report");
+      }
+      expect(document.body.textContent).not.toContain("Open public report");
+      expect(document.body.textContent).not.toContain("Copy public report link");
+    } finally {
+      await act(() => {
+        root.unmount();
+      });
+      restoreFetch();
+    }
+  });
+
+  test("hides the live View report link when validatorApiOrigin is empty", async () => {
+    const restoreFetch = installActiveInviteFetch({ origin: "" });
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes("Paste the outgoing invite") === true,
+      );
+
+      const links = Array.from(document.querySelectorAll("a")).filter(
+        (el) => el.textContent === "View report",
+      );
+      expect(links.length).toBe(0);
+      const currentCard = document.querySelector('[aria-current="step"]');
+      const currentCtaSlot = currentCard?.querySelector("[data-cta-slot]");
+      expect(currentCtaSlot).not.toBeNull();
+      expect(currentCtaSlot?.className).toContain("min-w-[10rem]");
+      expect(currentCtaSlot?.getAttribute("aria-hidden")).toBe("true");
+      expect(document.querySelector("[data-reserved-cta-slot]")).toBeNull();
+    } finally {
+      await act(() => {
+        root.unmount();
+      });
+      restoreFetch();
     }
   });
 });

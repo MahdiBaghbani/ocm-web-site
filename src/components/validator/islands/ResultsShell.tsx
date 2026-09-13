@@ -22,6 +22,7 @@ import {
 } from "../lib/validatorConfig";
 import {
   isReportNotPublicFailure,
+  joinValidatorUrl,
   resolvePublicReportUrl,
   type ReportResponse,
   type ReportVisibility,
@@ -125,15 +126,14 @@ const STEP_ANNOUNCE: Record<UserStep, string> = {
 const ACTION_BTN =
   "inline-flex min-h-11 items-center rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800";
 
-// AG-2.2 mounts reserved layout slots only; the copy/paste actions and the
-// report link are wired in a later task. The CTA reservation is the
-// in-row `data-cta-slot` column StepRow already renders for every row
-// (sized for "Copy invitation", "Copy again", and the secondary report
-// link), not a separate element here. The reverse form slot is sized for
-// a label, textarea, submit button, and one alert line, so wiring those in
-// later does not shift this layout. The form slot mounts inside the
-// reverse row's own StepRow card (via its formSlot prop), not as a
-// sibling element.
+// AG-2.2 reserved the in-row `data-cta-slot` column StepRow already
+// renders for every row (sized for "Copy invitation", "Copy again", and
+// the secondary report link). AG-2.3 wires only the live "View report"
+// secondary link on the current row. Copy/paste actions stay unwired.
+// The reverse form slot is sized for a label, textarea, submit button,
+// and one alert line, so wiring those later does not shift this layout.
+// The form slot mounts inside the reverse row's own StepRow card (via
+// its formSlot prop), not as a sibling element.
 const RESERVED_REVERSE_FORM_CLASS = "invisible min-h-56 w-full";
 
 function ReservedReverseForm(): React.ReactElement {
@@ -465,6 +465,23 @@ function visibleIndex(statuses: MachineView["statuses"], step: UserStep): number
     }
   }
   return index;
+}
+
+/**
+ * Live session report href. Shown only when origin is a normalized real
+ * origin. An empty origin has no proxy-confirmation contract, so the link
+ * stays hidden instead of falling back to a relative /validator path.
+ * Built with joinValidatorUrl so that helper supplies the /validator prefix.
+ * Do not use resolvePublicReportUrl here: that helper rejects an empty
+ * origin, and this live route must stay independent of the permanent
+ * public-report URL.
+ */
+export function liveViewReportHref(origin: string, sessionId: string): string | null {
+  const trimmedOrigin = origin.trim();
+  if (trimmedOrigin === "") {
+    return null;
+  }
+  return joinValidatorUrl(trimmedOrigin, `/report/${encodeURIComponent(sessionId)}`);
 }
 
 export function specificationInputFromReport(report: ReportResponse | null): unknown {
@@ -1230,6 +1247,19 @@ export default function ResultsShell({
   const currentRowGuidance: GuidanceRecord | null = sanitizeGuidanceRecord(
     guidanceFor(guidanceKey),
   );
+  // Terminal live-row guidance is cleared (guidanceKey is null). The empty
+  // not-saved panel still uses the poll state so RESULT_GUIDANCE copy and
+  // the trimmed failModeLabel remain visible when report data did not
+  // survive. Use only poll.failModeLabel; do not substitute backend reason
+  // tokens.
+  const emptyStateGuidance: GuidanceRecord | null = sanitizeGuidanceRecord(
+    guidanceFor(poll?.state),
+  );
+  const emptyFailModeLabel = (poll?.failModeLabel ?? "").trim();
+  const liveReportHref =
+    projection.status === "live"
+      ? liveViewReportHref(config?.validatorApiOrigin ?? "", session.id)
+      : null;
   const rawJsonLabel = "View full report JSON";
   // Normal ready/live results surface the full report JSON as a low-emphasis
   // footer action; the malformed terminal keeps a prominent action button.
@@ -1334,6 +1364,7 @@ export default function ResultsShell({
                 status={status}
                 index={visibleIndex(view.statuses, step)}
                 guidance={isCurrent ? currentRowGuidance : undefined}
+                ctaHref={isCurrent && liveReportHref !== null ? liveReportHref : undefined}
                 formSlot={step === "reverse" ? <ReservedReverseForm /> : undefined}
               />
             );
@@ -1350,6 +1381,18 @@ export default function ResultsShell({
             The session finished without a saved public report, and result details
             are not available from this link.
           </p>
+          {emptyStateGuidance !== null && emptyStateGuidance.kind === "instruction" ? (
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-zinc-100">{emptyStateGuidance.title}</p>
+              <p className="text-sm text-zinc-300">{emptyStateGuidance.body}</p>
+            </div>
+          ) : null}
+          {emptyStateGuidance !== null && emptyStateGuidance.kind === "terminal" ? (
+            <p className="text-sm text-zinc-300">{emptyStateGuidance.body}</p>
+          ) : null}
+          {emptyFailModeLabel !== "" ? (
+            <p className="text-sm text-zinc-300">{emptyFailModeLabel}</p>
+          ) : null}
           <RunNewCheck href={testHref} />
         </div>
       ) : null}
