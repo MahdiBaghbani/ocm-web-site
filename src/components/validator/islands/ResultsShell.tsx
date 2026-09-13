@@ -65,8 +65,14 @@ import {
   type ValidatorScoreProjection,
 } from "../lib/validatorScore";
 import { AREA_DESCRIPTIONS } from "../lib/score/areas";
+import {
+  progressAnnouncement,
+  progressStatusText,
+  stripBracketedMarkers,
+} from "../lib/results/progress";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
+export { progressAnnouncement, stripBracketedMarkers };
 
 export interface ResultsShellProps {
   host?: string;
@@ -111,15 +117,6 @@ const DEFAULT_BANNER_BODY: Record<ValidatorScoreOutcomeKind, string> = {
   inconclusive: "The scan finished, but no compatibility area could be assessed.",
   result_unavailable:
     "The scan finished, but the validator returned result data this page could not read.",
-};
-
-const STEP_ANNOUNCE: Record<UserStep, string> = {
-  probe: "Checking server capabilities.",
-  queue_or_rest: "Continuing or finishing the scan.",
-  invite: "Waiting for invitation steps.",
-  reverse: "Waiting for the return invitation.",
-  share: "Testing sharing.",
-  result: "Preparing the result.",
 };
 
 const ACTION_BTN =
@@ -317,14 +314,6 @@ function snapshotFocusLossControl(): Element | null {
   }
   const active = document.activeElement;
   return isFocusLossControl(active) ? active : null;
-}
-
-// Defensive strip for any bracketed planning marker (for example "[wip]")
-// that should never reach a screen reader, even though locked copy has none.
-const BRACKET_MARKER_PATTERN = /\[[^\]]*\]/g;
-
-export function stripBracketedMarkers(value: string): string {
-  return value.replace(BRACKET_MARKER_PATTERN, "").replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -721,31 +710,6 @@ export function bannerBody(score: ValidatorScoreProjection): string {
     }
   }
   return DEFAULT_BANNER_BODY[score.outcome];
-}
-
-export function progressAnnouncement(
-  view: MachineView,
-  guidanceKey: string | null,
-): string {
-  let visible = 0;
-  let current = 1;
-  for (const step of USER_STEPS) {
-    if (view.statuses[step] === "hidden") {
-      continue;
-    }
-    visible += 1;
-    if (step === view.step) {
-      current = visible;
-    }
-  }
-  const guidanceRecord = guidanceFor(guidanceKey);
-  const guidanceTitle =
-    guidanceRecord !== null && guidanceRecord.kind === "instruction"
-      ? guidanceRecord.title
-      : undefined;
-  const shortTitle =
-    guidanceTitle !== undefined && guidanceTitle !== "" ? guidanceTitle : STEP_ANNOUNCE[view.step];
-  return `Step ${current} of ${visible}: ${stripBracketedMarkers(shortTitle)}`;
 }
 
 function evidenceModeFor(
@@ -1719,12 +1683,7 @@ export default function ResultsShell({
     selectedArea === null
       ? null
       : resultAreas.find((entry) => entry.area === selectedArea) ?? null;
-  const statusText =
-    projection.status === "live" || projection.status === "loading_report"
-      ? view === null
-        ? "Loading session..."
-        : progressAnnouncement(view, guidanceKey)
-      : null;
+  const statusText = progressStatusText(projection.status, view, guidanceKey);
   const currentRowGuidance: GuidanceRecord | null = sanitizeGuidanceRecord(
     guidanceFor(guidanceKey),
   );
