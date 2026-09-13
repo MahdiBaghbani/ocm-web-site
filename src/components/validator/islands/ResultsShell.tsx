@@ -26,7 +26,6 @@ import {
   isReportNotPublicFailure,
   joinValidatorUrl,
   postReverseInvite,
-  resolvePublicReportUrl,
   type ReportResponse,
   type ReportVisibility,
   type SessionPollResponse,
@@ -63,6 +62,14 @@ import {
   stripBracketedMarkers,
 } from "../lib/results/progress";
 import { projectActionRows } from "../lib/results/actionRows";
+import {
+  evidenceModeFor,
+  projectCapability,
+  projectPublicReportAvailability,
+  projectReportVisibility,
+  RETENTION_POLICY_TEXT,
+  type EvidenceMode,
+} from "../lib/results/capability";
 import { projectProgressCollections } from "../lib/results/collections";
 import {
   projectSessionStart,
@@ -78,7 +85,6 @@ import {
 import { projectTransportFailure } from "../lib/results/transportFailure";
 import {
   EXPIRED_EVIDENCE_NOTE,
-  EXPIRED_NOTICE,
   projectSessionFailure,
 } from "../lib/results/sessionFailures";
 
@@ -90,6 +96,7 @@ export {
   COPY_AGAIN_LABEL,
   COPY_INVITATION_LABEL,
 } from "../lib/results/actionRows";
+export { VISIBILITY_NOTICE } from "../lib/results/capability";
 
 export interface ResultsShellProps {
   host?: string;
@@ -98,14 +105,6 @@ export interface ResultsShellProps {
 }
 
 export const TEST_HREF = "/validator/";
-
-export const VISIBILITY_NOTICE: Record<ReportVisibility, string> = {
-  session: "Live session. This is not a public report.",
-  permanent: "Public report. Anyone with the link can view it.",
-  not_saved: "Not saved. No public report link exists.",
-  expired: EXPIRED_NOTICE,
-  unknown: "Report visibility is unavailable.",
-};
 
 export const CACHED_SESSION_JSON_NOTE =
   "This is the last live session snapshot. The overall result above was computed from its area scores and the final session state.";
@@ -375,7 +374,7 @@ export interface ResultsPageProjection {
   bannerVerdict: VerdictKind | null;
   bannerTitle: string;
   bannerMessage: string;
-  evidenceMode: "disclosure" | "not_saved" | "expired" | "session" | "none";
+  evidenceMode: EvidenceMode;
   evidence: EvidenceItem[];
   rawJsonNote: string | null;
   rawJsonTitle: string;
@@ -571,33 +570,6 @@ export function bannerBody(score: ValidatorScoreProjection): string {
   return DEFAULT_BANNER_BODY[score.outcome];
 }
 
-function evidenceModeFor(
-  visibility: ReportVisibility,
-  items: EvidenceItem[],
-): ResultsPageProjection["evidenceMode"] {
-  if (visibility === "permanent") {
-    return "disclosure";
-  }
-  if (visibility === "expired") {
-    return "expired";
-  }
-  if (
-    items.length > 0 &&
-    (visibility === "not_saved" ||
-      visibility === "session" ||
-      visibility === "unknown")
-  ) {
-    return "disclosure";
-  }
-  if (visibility === "not_saved") {
-    return "not_saved";
-  }
-  if (visibility === "session") {
-    return "session";
-  }
-  return "none";
-}
-
 export function projectResultsPage(input: {
   poll: SessionPollResponse | null;
   view: MachineView | null;
@@ -638,25 +610,17 @@ export function projectResultsPage(input: {
   });
   const usable = isUsableSpecificationScore(score.parsed);
 
-  let visibility: ReportVisibility;
-  if (!terminal) {
-    visibility = "session";
-  } else if (input.terminalReport !== null) {
-    visibility = input.terminalReport.visibility;
-  } else if (notPublic) {
-    visibility = "not_saved";
-  } else if (expired) {
-    visibility = "expired";
-  } else {
-    visibility = "unknown";
-  }
-
-  const candidate = input.terminalReport?.reportUrl ?? input.terminalReport?.url;
-  const reportUrl =
-    visibility === "permanent"
-      ? resolvePublicReportUrl(candidate, input.validatorApiOrigin)
-      : null;
-  const showPublicActions = visibility === "permanent" && reportUrl !== null;
+  const visibility = projectReportVisibility({
+    terminal,
+    terminalReport: input.terminalReport,
+    notPublic,
+    expired,
+  });
+  const { reportUrl, showPublicActions } = projectPublicReportAvailability(
+    visibility,
+    input.terminalReport,
+    input.validatorApiOrigin,
+  );
 
   let status: ResultsPageStatus;
   if (!terminal) {
@@ -1591,6 +1555,13 @@ export default function ResultsShell({
     liveReportHref,
     steps: collections.steps,
   });
+  const capability = projectCapability({
+    status: projection.status,
+    visibility: projection.visibility,
+    evidenceMode: projection.evidenceMode,
+    sourceKind: projection.sourceKind,
+    hasSourceReport: projection.sourceReport !== null,
+  });
   const rawJsonLabel = "View full report JSON";
   // Normal ready/live results surface the full report JSON as a low-emphasis
   // footer action; the malformed terminal keeps a prominent action button.
@@ -1810,11 +1781,11 @@ export default function ResultsShell({
           </div>
         </div>
       ) : null}
-      {projection.status === "ready" || projection.status === "live" ? (
+      {capability.visibilityNotice.visible ? (
         <div className="space-y-2">
-          <p className="text-sm text-zinc-300">{VISIBILITY_NOTICE[projection.visibility]}</p>
-          {projection.visibility === "permanent" ? (
-            <p className="text-sm text-zinc-400">The validator retention policy applies.</p>
+          <p className="text-sm text-zinc-300">{capability.visibilityNotice.text}</p>
+          {capability.visibilityNotice.showRetentionPolicy ? (
+            <p className="text-sm text-zinc-400">{RETENTION_POLICY_TEXT}</p>
           ) : null}
         </div>
       ) : null}
@@ -1842,43 +1813,41 @@ export default function ResultsShell({
       {actionRows.interruptedRecovery.visible ? (
         <div className="flex flex-wrap gap-2"><RunNewCheck href={testHref} /></div>
       ) : null}
-      {projection.status === "ready" || projection.status === "live" ? (
+      {capability.evidence.sectionVisible ? (
         <div className="space-y-4">
-          {projection.evidenceMode === "disclosure" ? (
+          {capability.evidence.showDisclosure ? (
             <EvidenceDisclosure
               title="Evidence"
               items={collections.evidence}
               defaultExpanded={collections.evidence.length > 0}
             />
           ) : null}
-          {projection.evidenceMode === "not_saved" ? (
+          {capability.evidence.showNotSaved ? (
             <div>
               <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
               <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
               <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_NOT_SAVED}</p>
             </div>
           ) : null}
-          {projection.evidenceMode === "session" && projection.sourceReport !== null ? (
+          {capability.evidence.showSessionEmpty ? (
             <div>
               <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
               <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
             </div>
           ) : null}
-          {projection.evidenceMode === "none" &&
-          projection.visibility === "unknown" &&
-          projection.sourceReport !== null ? (
+          {capability.evidence.showUnknownEmpty ? (
             <div>
               <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
               <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
             </div>
           ) : null}
-          {projection.evidenceMode === "expired" ? (
+          {capability.evidence.showExpired ? (
             <div>
               <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
               <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EXPIRED}</p>
             </div>
           ) : null}
-          {projection.sourceKind === "cached_session" ? (
+          {capability.evidence.showCachedSessionNote ? (
             <p className="text-sm text-zinc-400">{CACHED_SESSION_JSON_NOTE}</p>
           ) : null}
           {readyRawJsonTrigger}
