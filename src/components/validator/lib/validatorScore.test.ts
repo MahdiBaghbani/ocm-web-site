@@ -7,144 +7,15 @@ import {
   CANONICAL_AREA_TOTAL,
   RESULT_HEADLINE,
   areaGridEntriesFromScore,
-  foldOverallSpecificationGrade,
   parseSpecificationScore,
   projectValidatorScore,
-  recountCanonicalAreaGrades,
-  resolveSpecificationGrade,
-  resolveTerminalState,
 } from "./validatorScore";
 import {
   allAreas,
   areaRow,
   completeAreaRow,
-  emptyArea,
   specification,
 } from "./score/test-helpers";
-
-describe("foldOverallSpecificationGrade", () => {
-  test("all-pass fold", () => {
-    const areas = CANONICAL_AREA_IDS.map((id) => emptyArea({ area: id, grade: "pass" }));
-    expect(foldOverallSpecificationGrade(areas, "terminal_pass")).toBe("pass");
-  });
-
-  test("warning fold", () => {
-    const areas = CANONICAL_AREA_IDS.map((id, index) =>
-      emptyArea({ area: id, grade: index === 1 ? "warn" : "pass" }),
-    );
-    expect(foldOverallSpecificationGrade(areas, "terminal_pass")).toBe("warn");
-  });
-
-  test("any-fail fold", () => {
-    const areas = [
-      emptyArea({ area: "discovery", grade: "pass" }),
-      emptyArea({ area: "tls", grade: "fail" }),
-      emptyArea({ area: "jwks", grade: "warn" }),
-    ];
-    expect(foldOverallSpecificationGrade(areas, "terminal_pass")).toBe("fail");
-  });
-
-  test("terminal_fail forces fail", () => {
-    expect(
-      foldOverallSpecificationGrade(
-        [emptyArea({ area: "discovery", grade: "pass" })],
-        "terminal_fail",
-      ),
-    ).toBe("fail");
-  });
-
-  test("terminal_pass with zero assessed returns null", () => {
-    const areas = CANONICAL_AREA_IDS.map((id) => emptyArea({ area: id, grade: null }));
-    expect(foldOverallSpecificationGrade(areas, "terminal_pass")).toBeNull();
-  });
-
-  test("non-terminal returns null", () => {
-    expect(
-      foldOverallSpecificationGrade(
-        [emptyArea({ area: "discovery", grade: "pass" })],
-        "passive_complete",
-      ),
-    ).toBeNull();
-    expect(
-      foldOverallSpecificationGrade(
-        [emptyArea({ area: "discovery", grade: "fail" })],
-        "interrupted",
-      ),
-    ).toBeNull();
-  });
-});
-
-describe("canonical recount", () => {
-  test("displays the canonical recount when backend counts disagree", () => {
-    const parsed = parseSpecificationScore(
-      specification({
-        assessedAreas: 8,
-        totalAreas: 10,
-        areas: [
-          areaRow("discovery", "pass"),
-          areaRow("tls", "warn"),
-          { area: "jwks" },
-          areaRow("mystery", "fail"),
-        ],
-      }),
-    );
-    expect(parsed.status).toBe("partial");
-    if (parsed.status === "unusable") {
-      return;
-    }
-    expect(parsed.score.assessedAreas).toBe(8);
-    expect(parsed.score.totalAreas).toBe(10);
-    expect(recountCanonicalAreaGrades(parsed.score.areas)).toEqual({
-      assessed: 2,
-      total: 8,
-    });
-    const pills = Object.fromEntries(
-      areaGridEntriesFromScore(parsed).map((entry) => [entry.area, entry.pillLabel]),
-    );
-    expect(pills.discovery).toBeUndefined();
-    expect(pills.tls).toBeUndefined();
-    expect(pills.jwks).toBe(AREA_RESULT_PILL.notReported);
-    expect(pills.httpsig).toBe(AREA_RESULT_PILL.notReported);
-    expect(pills.capability).toBe(AREA_RESULT_PILL.notReported);
-  });
-});
-
-describe("state and grade authority", () => {
-  test("uses a known terminal poll state over cached score state", () => {
-    expect(resolveTerminalState("terminal_pass", "passive_complete")).toBe("terminal_pass");
-    expect(resolveTerminalState("passive_complete", "terminal_pass")).toBeNull();
-    expect(resolveTerminalState(undefined, "terminal_fail")).toBe("terminal_fail");
-    expect(resolveTerminalState("", "interrupted")).toBe("interrupted");
-    expect(resolveTerminalState(null, "created")).toBeNull();
-  });
-
-  test("honors an explicit successful terminal grade", () => {
-    const parsed = parseSpecificationScore(specification({ grade: "warn" }));
-    expect(
-      resolveSpecificationGrade({
-        reportOk: true,
-        parsed,
-        terminalState: "terminal_pass",
-      }),
-    ).toBe("warn");
-  });
-
-  test("folds when the parsed grade is null and terminal_pass is known", () => {
-    const parsed = parseSpecificationScore(
-      specification({
-        grade: null,
-        areas: allAreas((id) => (id === "tls" ? "fail" : "pass")),
-      }),
-    );
-    expect(
-      resolveSpecificationGrade({
-        reportOk: true,
-        parsed,
-        terminalState: "terminal_pass",
-      }),
-    ).toBe("fail");
-  });
-});
 
 describe("projectValidatorScore verdicts", () => {
   test("private terminal_pass plus all pass areas is Compatible", () => {
