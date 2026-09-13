@@ -1,21 +1,23 @@
 import { describe, expect, test } from "bun:test";
 
+import { parseSpecificationScore } from "./parse";
 import {
   AREA_RESULT_PILL,
+  RESULT_HEADLINE,
+  areaGridEntriesFromScore,
+  projectValidatorScore,
+} from "./project";
+import {
   CANONICAL_AREA_IDS,
   CANONICAL_AREA_LABELS,
   CANONICAL_AREA_TOTAL,
-  RESULT_HEADLINE,
-  areaGridEntriesFromScore,
-  parseSpecificationScore,
-  projectValidatorScore,
-} from "./validatorScore";
+} from "./areas";
 import {
   allAreas,
   areaRow,
   completeAreaRow,
   specification,
-} from "./score/test-helpers";
+} from "./test-helpers";
 
 describe("projectValidatorScore verdicts", () => {
   test("private terminal_pass plus all pass areas is Compatible", () => {
