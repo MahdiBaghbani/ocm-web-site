@@ -21,6 +21,7 @@ import {
   type ValidatorRuntimeConfig,
 } from "../lib/validatorConfig";
 import {
+  claimInvite,
   isReportNotPublicFailure,
   joinValidatorUrl,
   resolvePublicReportUrl,
@@ -38,7 +39,11 @@ import {
   type NextInstruction,
   type UserStep,
 } from "../lib/stateMachine";
-import { guidanceFor, type GuidanceRecord } from "../lib/validatorGuidance";
+import {
+  actionErrorCopy,
+  guidanceFor,
+  type GuidanceRecord,
+} from "../lib/validatorGuidance";
 import {
   normalizeHost,
   normalizeSessionId,
@@ -128,18 +133,70 @@ const ACTION_BTN =
 
 // AG-2.2 reserved the in-row `data-cta-slot` column StepRow already
 // renders for every row (sized for "Copy invitation", "Copy again", and
-// the secondary report link). AG-2.3 wires only the live "View report"
-// secondary link on the current row. Copy/paste actions stay unwired.
-// The reverse form slot is sized for a label, textarea, submit button,
-// and one alert line, so wiring those later does not shift this layout.
-// The form slot mounts inside the reverse row's own StepRow card (via
-// its formSlot prop), not as a sibling element.
+// the secondary report link). AG-2.3 wires the live "View report"
+// secondary link on the current row. AG-1.4 wires the primary
+// "Copy invitation" / "Copy again" claim CTA plus the cached-invite field on
+// the current paste_s1 row (see InvitePasteSlot). The reverse form slot is
+// sized for a label, textarea, submit button, and one alert line, so wiring
+// those later does not shift this layout. The form slot mounts inside the
+// reverse row's own StepRow card (via its formSlot prop), not as a sibling
+// element.
 const RESERVED_REVERSE_FORM_CLASS = "invisible min-h-56 w-full";
 
 function ReservedReverseForm(): React.ReactElement {
   return (
     <div data-reserved-form-slot="" aria-hidden="true" className={RESERVED_REVERSE_FORM_CLASS}>
       <div data-reserved-alert-slot="" />
+    </div>
+  );
+}
+
+// AG-1.4 invite paste slot. Mounts inside the current invite row's card via
+// StepRow's formSlot. Shows the locked claim error when a claim failed with no
+// usable cache, and the cached invitation in a labeled, read-only, selectable
+// field that stays available even when the clipboard copy fails.
+function InvitePasteSlot({
+  invite,
+  error,
+}: {
+  invite: string | null;
+  error: string | null;
+}): React.ReactElement | null {
+  if (invite === null && error === null) {
+    return null;
+  }
+  return (
+    <div data-invite-slot="" className="mt-3 space-y-2">
+      {error !== null ? (
+        <p
+          data-claim-error=""
+          className="text-sm text-rose-200"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          {error}
+        </p>
+      ) : null}
+      {invite !== null ? (
+        <div className="space-y-1">
+          <label
+            htmlFor="results-invite-field"
+            className="block text-xs font-semibold text-zinc-300"
+          >
+            {INVITE_FIELD_LABEL}
+          </label>
+          <input
+            id="results-invite-field"
+            type="text"
+            readOnly
+            value={invite}
+            data-invite-field=""
+            data-invite-value={invite}
+            className="w-full select-all rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -901,6 +958,54 @@ export type CopyNotice = {
 export const EMPTY_COPY_NOTICE: CopyNotice = { ok: true, text: "" };
 export const COPY_SUCCESS_TEXT = "Copied";
 
+// AG-1.4 claim CTA copy and cached-invite field labels.
+export const COPY_INVITATION_LABEL = "Copy invitation";
+export const COPY_AGAIN_LABEL = "Copy again";
+export const INVITE_FIELD_LABEL = "Invitation";
+export const CLAIM_COPY_FAILURE_TEXT =
+  "Could not copy the invitation. Select and copy it from the field below.";
+
+const INVITE_STORAGE_PREFIX = "validator:invite:";
+
+function inviteStorageKey(sessionId: string): string {
+  return `${INVITE_STORAGE_PREFIX}${sessionId}`;
+}
+
+// SessionStorage is a best-effort durable backup of a claimed invitation for a
+// single session id. Access and read/write can throw (disabled storage, quota,
+// privacy mode); every path is guarded and non-fatal, so the in-memory cache
+// remains the source of truth.
+export function readStoredInvite(sessionId: string): string | null {
+  try {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const store: Storage | undefined = window.sessionStorage;
+    if (store === undefined || store === null) {
+      return null;
+    }
+    const raw = store.getItem(inviteStorageKey(sessionId));
+    return typeof raw === "string" && raw !== "" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredInvite(sessionId: string, value: string): void {
+  try {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const store: Storage | undefined = window.sessionStorage;
+    if (store === undefined || store === null) {
+      return;
+    }
+    store.setItem(inviteStorageKey(sessionId), value);
+  } catch {
+    // Storing the invite is best-effort; the in-memory cache stays valid.
+  }
+}
+
 function clipboardWriter(): Clipboard | undefined {
   if (
     typeof window === "undefined" ||
@@ -1055,6 +1160,21 @@ export default function ResultsShell({
   const [error, setError] = useState("");
   const [copyNotice, setCopyNotice] = useState<CopyNotice>(EMPTY_COPY_NOTICE);
   const [copyFallback, setCopyFallback] = useState<string | null>(null);
+  const [cachedInvite, setCachedInvite] = useState<string | null>(null);
+  const [claimBusy, setClaimBusy] = useState(false);
+  // Terminal lock. An uncached 410 means the invitation is already claimed and
+  // unrecoverable in this browser, so the CTA must stay disabled after the
+  // in-flight claimBusy clears. It persists until a session/navigation reset.
+  const [claimLocked, setClaimLocked] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  // Holds the session id of the in-flight claim, or null when idle. Using the
+  // id (not a bool) lets an old claim's finally avoid clearing a newer
+  // session's lock after a navigation reset cleared the shared ref.
+  const claimLockRef = useRef<string | null>(null);
+  // Mirrors the current session id every render so an async claim callback can
+  // compare the session it started in against the live session with no
+  // effect-timing gap.
+  const currentSessionIdRef = useRef<string | null>(null);
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
@@ -1107,6 +1227,11 @@ export default function ResultsShell({
     setSelectedArea(null);
     setCopyNotice(EMPTY_COPY_NOTICE);
     setCopyFallback(null);
+    setCachedInvite(null);
+    setClaimBusy(false);
+    setClaimLocked(false);
+    setClaimError(null);
+    claimLockRef.current = null;
     if (copyTimerRef.current !== null) {
       clearTimeout(copyTimerRef.current);
       copyTimerRef.current = null;
@@ -1219,6 +1344,8 @@ export default function ResultsShell({
     }
   }, [guidanceKey, view]);
 
+  currentSessionIdRef.current = session?.id ?? null;
+
   const projection = projectResultsPage({
     poll,
     view,
@@ -1281,6 +1408,97 @@ export default function ResultsShell({
       projection.reportUrl,
       "Could not copy the report link. Open the report and copy its address instead.",
     );
+  }
+
+  // AG-1.4 primary CTA for the paste_s1 step. First use claims the invitation
+  // (one POST), caches it before any clipboard access, then copies it. Once a
+  // cache exists, this is "Copy again": it copies the cached value only and
+  // never POSTs. A fast double click issues exactly one claim because the ref
+  // lock is acquired synchronously before the await.
+  async function handleClaimInvite(): Promise<void> {
+    if (session === null || config === null) {
+      return;
+    }
+    // An uncached 410 terminally locked this browser out of claiming; never
+    // re-POST even if a stray click reaches the disabled CTA.
+    if (claimLocked) {
+      return;
+    }
+    // Capture the session this claim belongs to. Every post-await write is
+    // guarded against it so a POST for session A that resolves after
+    // navigation to session B cannot touch B's cache, error, notice, or state.
+    const claimSessionId = session.id;
+    if (cachedInvite !== null) {
+      const ok = await copyText(cachedInvite);
+      // A copy that resolves after navigation must not re-announce for B.
+      if (claimSessionId !== currentSessionIdRef.current) {
+        return;
+      }
+      settleCopyOutcome(ok, cachedInvite, CLAIM_COPY_FAILURE_TEXT);
+      return;
+    }
+    if (claimLockRef.current !== null) {
+      return;
+    }
+    claimLockRef.current = claimSessionId;
+    setClaimBusy(true);
+    setClaimError(null);
+    try {
+      const result = await claimInvite(claimSessionId, requestDeps(config));
+      // Ignore a stale resolution entirely once the session changed.
+      if (claimSessionId !== currentSessionIdRef.current) {
+        return;
+      }
+      if (result.ok) {
+        const invite = result.data.inviteString;
+        // Cache before clipboard so the invite survives a copy failure and
+        // later polls; sessionStorage is a best-effort durable backup.
+        setCachedInvite(invite);
+        writeStoredInvite(claimSessionId, invite);
+        const ok = await copyText(invite);
+        // Navigation during the copy await must not re-announce for B.
+        if (claimSessionId !== currentSessionIdRef.current) {
+          return;
+        }
+        settleCopyOutcome(ok, invite, CLAIM_COPY_FAILURE_TEXT);
+        return;
+      }
+      if (result.status === 410) {
+        const cached = readStoredInvite(claimSessionId);
+        if (cached !== null) {
+          setCachedInvite(cached);
+          const ok = await copyText(cached);
+          if (claimSessionId !== currentSessionIdRef.current) {
+            return;
+          }
+          settleCopyOutcome(ok, cached, CLAIM_COPY_FAILURE_TEXT);
+        } else {
+          // Already claimed and unrecoverable here: show locked copy and keep
+          // the CTA disabled permanently for this session.
+          setClaimError(actionErrorCopy("claim_410_no_cache"));
+          setClaimLocked(true);
+        }
+        return;
+      }
+      if (result.status === 409) {
+        setClaimError(actionErrorCopy("claim_409_session_not_ready"));
+        return;
+      }
+      setClaimError(
+        result.message !== "" ? result.message : "Could not claim the invitation.",
+      );
+    } finally {
+      // Only release the in-flight lock this claim actually still owns; a
+      // newer session may have reset the shared ref or acquired its own lock.
+      if (claimLockRef.current === claimSessionId) {
+        claimLockRef.current = null;
+      }
+      // Never clear a newer session's transient busy state. claimLocked is
+      // intentionally left untouched here so an uncached-410 lock persists.
+      if (claimSessionId === currentSessionIdRef.current) {
+        setClaimBusy(false);
+      }
+    }
   }
 
   if (session === null) {
@@ -1427,6 +1645,15 @@ export default function ResultsShell({
               return null;
             }
             const isCurrent = status === "current";
+            const isClaimRow = isCurrent && guidanceKey === "paste_s1";
+            const claimLabel =
+              cachedInvite !== null ? COPY_AGAIN_LABEL : COPY_INVITATION_LABEL;
+            const rowFormSlot =
+              step === "reverse" ? (
+                <ReservedReverseForm />
+              ) : isClaimRow ? (
+                <InvitePasteSlot invite={cachedInvite} error={claimError} />
+              ) : undefined;
             return (
               <StepRow
                 key={step}
@@ -1434,8 +1661,17 @@ export default function ResultsShell({
                 status={status}
                 index={visibleIndex(view.statuses, step)}
                 guidance={isCurrent ? currentRowGuidance : undefined}
+                ctaLabel={isClaimRow ? claimLabel : undefined}
+                onCta={
+                  isClaimRow
+                    ? () => {
+                        void handleClaimInvite();
+                      }
+                    : undefined
+                }
+                disabled={isClaimRow ? claimBusy || claimLocked : undefined}
                 ctaHref={isCurrent && liveReportHref !== null ? liveReportHref : undefined}
-                formSlot={step === "reverse" ? <ReservedReverseForm /> : undefined}
+                formSlot={rowFormSlot}
                 cardRef={isCurrent ? currentCardRef : undefined}
                 cardTabIndex={isCurrent && restoreCurrentCardFocus ? -1 : undefined}
               />
