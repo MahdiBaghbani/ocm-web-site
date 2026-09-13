@@ -61,6 +61,7 @@ import {
   progressAnnouncement,
   stripBracketedMarkers,
 } from "../lib/results/progress";
+import { projectActionable } from "../lib/results/actionable";
 import { projectActionRows } from "../lib/results/actionRows";
 import {
   evidenceModeFor,
@@ -1518,10 +1519,13 @@ export default function ResultsShell({
     guidanceKey,
   });
   const resultAreas = collections.areas;
-  const selectedEntry =
-    selectedArea === null
-      ? null
-      : resultAreas.find((entry) => entry.area === selectedArea) ?? null;
+  const actionable = projectActionable({
+    status: projection.status,
+    hasSourceReport: projection.sourceReport !== null,
+    selectedArea,
+    areas: resultAreas,
+  });
+  const selectedEntry = actionable.areaModal.selectedEntry;
   const statusText = collections.progress;
   const transportFailure = projectTransportFailure(
     error,
@@ -1562,11 +1566,11 @@ export default function ResultsShell({
     sourceKind: projection.sourceKind,
     hasSourceReport: projection.sourceReport !== null,
   });
-  const rawJsonLabel = "View full report JSON";
+  const rawJsonLabel = actionable.rawJson.label;
   // Normal ready/live results surface the full report JSON as a low-emphasis
   // footer action; the malformed terminal keeps a prominent action button.
   const readyRawJsonTrigger =
-    projection.sourceReport !== null ? (
+    actionable.rawJson.hasSourceReport ? (
       <button
         type="button"
         className="text-sm text-zinc-400 underline hover:text-zinc-200"
@@ -1577,18 +1581,17 @@ export default function ResultsShell({
         {rawJsonLabel}
       </button>
     ) : null;
-  const malformedRawJsonTrigger =
-    projection.sourceReport !== null ? (
-      <button
-        type="button"
-        className={ACTION_BTN}
-        aria-haspopup="dialog"
-        aria-expanded={rawJsonOpen}
-        onClick={() => setRawJsonOpen(true)}
-      >
-        {rawJsonLabel}
-      </button>
-    ) : null;
+  const malformedRawJsonTrigger = actionable.rawJson.showMalformedTrigger ? (
+    <button
+      type="button"
+      className={ACTION_BTN}
+      aria-haspopup="dialog"
+      aria-expanded={rawJsonOpen}
+      onClick={() => setRawJsonOpen(true)}
+    >
+      {rawJsonLabel}
+    </button>
+  ) : null;
 
   return (
     <div className="space-y-6">
@@ -1853,8 +1856,8 @@ export default function ResultsShell({
           {readyRawJsonTrigger}
         </div>
       ) : null}
-      {projection.status === "malformed" ? malformedRawJsonTrigger : null}
-      {rawJsonOpen && projection.sourceReport !== null ? (
+      {malformedRawJsonTrigger}
+      {rawJsonOpen && actionable.rawJson.hasSourceReport && projection.sourceReport !== null ? (
         <ReportJsonModal
           title={projection.rawJsonTitle}
           sourceReport={projection.sourceReport}
@@ -1863,10 +1866,10 @@ export default function ResultsShell({
           onClose={() => setRawJsonOpen(false)}
         />
       ) : null}
-      {selectedArea !== null &&
+      {actionable.areaModal.showModal &&
+      selectedArea !== null &&
       selectedEntry !== null &&
-      projection.sourceReport !== null &&
-      (projection.status === "ready" || projection.status === "live") ? (
+      projection.sourceReport !== null ? (
         <AreaModal
           area={selectedArea}
           areaLabel={selectedEntry.label}
