@@ -52,6 +52,8 @@ import {
   ShimEvent,
   ShimNode,
 } from "../test-helpers/domShim";
+import { requestUrl, jsonResponse } from "../test-helpers/fetchStub";
+import { waitForText } from "../test-helpers/wait";
 import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
@@ -745,37 +747,6 @@ describe("evidenceMode discloses anonymous and terminal-session evidence", () =>
     expect(result.evidenceMode).toBe("none");
   });
 });
-
-function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === "string") {
-    return input;
-  }
-  if (input instanceof URL) {
-    return input.href;
-  }
-  return input.url;
-}
-
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-async function waitForText(container: ShimNode, needle: string): Promise<void> {
-  const deadline = Date.now() + 2000;
-  while (!container.textContent.includes(needle)) {
-    if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${JSON.stringify(needle)} in: ${container.textContent}`);
-    }
-    await act(async () => {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 5);
-      });
-    });
-  }
-}
 
 describe("ResultsShell session change reset", () => {
   test("drops session A cache, failure, and view when the session id changes", async () => {

@@ -13,6 +13,8 @@ import {
   reactDomContainerOf,
   ShimNode,
 } from "../test-helpers/domShim";
+import { requestUrl, jsonResponse } from "../test-helpers/fetchStub";
+import { waitForText } from "../test-helpers/wait";
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);
@@ -61,23 +63,6 @@ describe("StatisticsShell selector", () => {
 const TEXT_NODE = 3;
 const DOCUMENT_NODE = 9;
 
-function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === "string") {
-    return input;
-  }
-  if (input instanceof URL) {
-    return input.href;
-  }
-  return input.url;
-}
-
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
 function walk(node: ShimNode, visit: (current: ShimNode) => void): void {
   visit(node);
   for (const child of node.childNodes) {
@@ -110,20 +95,6 @@ function findByTag(root: ShimNode, tagName: string): ShimNode {
     throw new Error(`missing <${tagName}>`);
   }
   return found;
-}
-
-async function waitForText(container: ShimNode, needle: string): Promise<void> {
-  const deadline = Date.now() + 2000;
-  while (!container.textContent.includes(needle)) {
-    if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${JSON.stringify(needle)} in: ${container.textContent}`);
-    }
-    await act(async () => {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 5);
-      });
-    });
-  }
 }
 
 const CONFIG_BODY = {
