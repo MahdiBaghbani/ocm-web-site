@@ -11,19 +11,7 @@ import RawJsonPanel from "./RawJsonPanel";
 import type { EvidenceItem } from "../lib/evidence/types";
 import { reasonCopyFor, selectPrimaryReasonItem } from "../lib/validatorReasons";
 import type { CanonicalAreaId } from "../lib/validatorScore";
-
-// Short plain-language question shown beside each area label. Kept local so the
-// atom does not depend on the ResultsShell island.
-const AREA_QUESTIONS: Record<CanonicalAreaId, string> = {
-  discovery: "Can other servers find this server's OCM endpoint?",
-  tls: "Can the validator connect securely over HTTPS?",
-  jwks: "Does the server publish a usable JWKS document?",
-  httpsig: "Do HTTP signatures validate as the specification requires?",
-  sharing: "Does it expose the expected remote sharing operations?",
-  notification: "Does it send and accept the required notifications?",
-  token: "Can it issue and accept the required access tokens?",
-  capability: "Does the server advertise the required sharing features?",
-};
+import { AREA_DESCRIPTIONS as AREA_QUESTIONS } from "../lib/score/areas";
 
 const REDACTED_NOTE = "Supporting details were redacted from this report.";
 

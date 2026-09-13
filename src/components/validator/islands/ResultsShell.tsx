@@ -64,6 +64,9 @@ import {
   type ValidatorScoreOutcomeKind,
   type ValidatorScoreProjection,
 } from "../lib/validatorScore";
+import { AREA_DESCRIPTIONS } from "../lib/score/areas";
+
+export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 
 export interface ResultsShellProps {
   host?: string;
@@ -72,17 +75,6 @@ export interface ResultsShellProps {
 }
 
 export const TEST_HREF = "/validator/";
-
-export const AREA_DESCRIPTIONS: Record<CanonicalAreaId, string> = {
-  discovery: "Can other servers find this server's OCM endpoint?",
-  tls: "Can the validator connect securely over HTTPS?",
-  jwks: "Does the server publish a usable JWKS document?",
-  httpsig: "Do HTTP signatures validate as the specification requires?",
-  sharing: "Does it expose the expected remote sharing operations?",
-  notification: "Does it send and accept the required notifications?",
-  token: "Can it issue and accept the required access tokens?",
-  capability: "Does the server advertise the required sharing features?",
-};
 
 export const VISIBILITY_NOTICE: Record<ReportVisibility, string> = {
   session: "Live session. This is not a public report.",
