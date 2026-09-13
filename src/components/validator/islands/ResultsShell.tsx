@@ -3,7 +3,7 @@
  * a private or public terminal result without treating report_not_public as a
  * load error.
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CircleCheck, CircleMinus, CircleX, TriangleAlert } from "lucide-react";
 import AreaGrid from "../atoms/AreaGrid";
 import AreaModal from "../atoms/AreaModal";
@@ -138,8 +138,30 @@ const RESERVED_REVERSE_FORM_CLASS = "invisible min-h-56 w-full";
 
 function ReservedReverseForm(): React.ReactElement {
   return (
-    <div data-reserved-form-slot="" aria-hidden="true" className={RESERVED_REVERSE_FORM_CLASS} />
+    <div data-reserved-form-slot="" aria-hidden="true" className={RESERVED_REVERSE_FORM_CLASS}>
+      <div data-reserved-alert-slot="" />
+    </div>
   );
+}
+
+function liveViewSignature(step: UserStep, guidanceKey: string | null): string {
+  return `${step}:${guidanceKey ?? ""}`;
+}
+
+function isFocusLossControl(node: Element | null): node is HTMLElement {
+  if (node === null) {
+    return false;
+  }
+  const tag = typeof node.tagName === "string" ? node.tagName.toUpperCase() : "";
+  return tag === "BUTTON" || tag === "A" || tag === "TEXTAREA" || tag === "FORM";
+}
+
+function snapshotFocusLossControl(): Element | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const active = document.activeElement;
+  return isFocusLossControl(active) ? active : null;
 }
 
 // Defensive strip for any bracketed planning marker (for example "[wip]")
@@ -1037,6 +1059,11 @@ export default function ResultsShell({
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
   const liveHoldRef = useRef<LiveInstructionHold>(INITIAL_LIVE_INSTRUCTION_HOLD);
+  const currentCardRef = useRef<HTMLDivElement | null>(null);
+  const liveViewSeededRef = useRef(false);
+  const lastLiveSignatureRef = useRef<string | null>(null);
+  const pendingFocusLossElRef = useRef<Element | null>(null);
+  const [restoreCurrentCardFocus, setRestoreCurrentCardFocus] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyMountedRef = useRef(true);
   // Live trigger buttons keyed by canonical area id, plus a grid-heading
@@ -1065,6 +1092,10 @@ export default function ResultsShell({
   useEffect(() => {
     viewRef.current = null;
     liveHoldRef.current = INITIAL_LIVE_INSTRUCTION_HOLD;
+    liveViewSeededRef.current = false;
+    lastLiveSignatureRef.current = null;
+    pendingFocusLossElRef.current = null;
+    setRestoreCurrentCardFocus(false);
     setPoll(null);
     setView(null);
     setGuidanceKey(null);
@@ -1138,6 +1169,16 @@ export default function ResultsShell({
           );
           liveHoldRef.current = hold;
           viewRef.current = stabilized.view;
+          const signature = liveViewSignature(stabilized.view.step, stabilized.guidanceKey);
+          const seeded = liveViewSeededRef.current;
+          const previous = lastLiveSignatureRef.current;
+          lastLiveSignatureRef.current = signature;
+          liveViewSeededRef.current = true;
+          if (seeded && previous !== signature) {
+            pendingFocusLossElRef.current = snapshotFocusLossControl();
+          } else {
+            pendingFocusLossElRef.current = null;
+          }
           setView(stabilized.view);
           setGuidanceKey(stabilized.guidanceKey);
         },
@@ -1154,6 +1195,29 @@ export default function ResultsShell({
     );
     return () => controller.abort();
   }, [config, session]);
+
+  useLayoutEffect(() => {
+    const pending = pendingFocusLossElRef.current;
+    if (pending === null) {
+      return;
+    }
+    pendingFocusLossElRef.current = null;
+    if (pending.isConnected) {
+      setRestoreCurrentCardFocus(false);
+      return;
+    }
+    setRestoreCurrentCardFocus(true);
+    const card = currentCardRef.current;
+    if (card === null) {
+      return;
+    }
+    card.tabIndex = -1;
+    try {
+      card.focus({ preventScroll: true });
+    } catch {
+      // Focus restore is best-effort.
+    }
+  }, [guidanceKey, view]);
 
   const projection = projectResultsPage({
     poll,
@@ -1331,7 +1395,13 @@ export default function ResultsShell({
         </div>
       ) : null}
       {statusText !== null ? (
-        <p role="status" aria-live="polite" aria-atomic="true" className="text-sm text-zinc-400">
+        <p
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-step-status=""
+          className="text-sm text-zinc-400"
+        >
           {statusText}
         </p>
       ) : null}
@@ -1350,7 +1420,7 @@ export default function ResultsShell({
       {view === null ? (
         <p className="text-sm text-zinc-400">Loading session...</p>
       ) : projection.status === "live" ? (
-        <div className="space-y-3">
+        <div className="space-y-3" data-step-list="">
           {USER_STEPS.map((step) => {
             const status = view.statuses[step];
             if (status === "hidden") {
@@ -1366,6 +1436,8 @@ export default function ResultsShell({
                 guidance={isCurrent ? currentRowGuidance : undefined}
                 ctaHref={isCurrent && liveReportHref !== null ? liveReportHref : undefined}
                 formSlot={step === "reverse" ? <ReservedReverseForm /> : undefined}
+                cardRef={isCurrent ? currentCardRef : undefined}
+                cardTabIndex={isCurrent && restoreCurrentCardFocus ? -1 : undefined}
               />
             );
           })}

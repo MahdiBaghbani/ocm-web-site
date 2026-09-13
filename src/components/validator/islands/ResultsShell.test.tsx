@@ -29,7 +29,7 @@ import ResultsShell, {
 import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
 import type { EvidenceItem } from "../atoms/EvidenceDisclosure";
 import { resolveValidatorMachine } from "../lib/stateMachine";
-import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "../lib/validatorGuidance";
+import { ACTION_ERROR_COPY, UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "../lib/validatorGuidance";
 import {
   joinValidatorUrl,
   resolvePublicReportUrl,
@@ -5239,6 +5239,280 @@ describe("ResultsShell current-row guidance, announce, and reserved slots", () =
       await act(() => {
         root.unmount();
       });
+      restoreFetch();
+    }
+  });
+});
+
+function viewReportLink(): HTMLAnchorElement {
+  const link = Array.from(document.querySelectorAll("a")).find(
+    (node) => node.textContent === "View report",
+  );
+  if (link === undefined) {
+    throw new Error("missing View report link");
+  }
+  return link;
+}
+
+function reservedSlotCounts(): {
+  guidance: number;
+  form: number;
+  alert: number;
+  cta: number;
+} {
+  return {
+    guidance: document.querySelectorAll("[data-guidance-slot]").length,
+    form: document.querySelectorAll("[data-reserved-form-slot]").length,
+    alert: document.querySelectorAll("[data-reserved-alert-slot]").length,
+    cta: document.querySelectorAll("[data-cta-slot]").length,
+  };
+}
+
+function installGatedSessionFetch(gate: SessionPollGate): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return gate.request();
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(200, liveReport(specification(() => "pass")));
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+describe("ResultsShell focus order, live regions, and reserved layout", () => {
+  let registrator: HappyDomRegistrator | null = null;
+
+  beforeAll(async () => {
+    const specifier: string = "@happy-dom/global-registrator";
+    const mod = (await import(specifier)) as {
+      GlobalRegistrator?: HappyDomRegistrator;
+    };
+    if (mod.GlobalRegistrator === undefined) {
+      throw new Error(
+        "ResultsShell.test.tsx focus-order tests need a DOM environment. " +
+          "Install the dev-only harness with " +
+          "`bun add -d happy-dom @happy-dom/global-registrator`.",
+      );
+    }
+    registrator = mod.GlobalRegistrator;
+    registrator.register({ url: "http://localhost/?host=peer.example&id=" + SESSION_ID });
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  });
+
+  afterAll(() => {
+    registrator?.unregister();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+    document.body.removeAttribute("style");
+  });
+
+  test("does not autofocus the current card on the first poll or a repeat poll", async () => {
+    const gate = new SessionPollGate();
+    const restoreFetch = installGatedSessionFetch(gate);
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}`);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      const firstCard = document.querySelector('[aria-current="step"]');
+      expect(firstCard).not.toBeNull();
+      expect(firstCard?.getAttribute("tabindex")).toBeNull();
+      expect(document.activeElement === firstCard).toBe(false);
+      expect(document.querySelector("[data-step-list]")?.hasAttribute("aria-live")).toBe(false);
+
+      const copyButton = pageLinkButton();
+      copyButton.focus();
+      expect(document.activeElement).toBe(copyButton);
+
+      await releasePoll(gate, 2, {
+        state: "invite_minted",
+        ts: 2,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      expect(document.activeElement).toBe(copyButton);
+      const repeatCard = document.querySelector('[aria-current="step"]');
+      expect(repeatCard?.getAttribute("tabindex")).toBeNull();
+      expect(document.activeElement === repeatCard).toBe(false);
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      restoreFetch();
+    }
+  });
+
+  test("moves focus to the new current card only when an instruction change unmounts the focused control", async () => {
+    const gate = new SessionPollGate();
+    const restoreFetch = installGatedSessionFetch(gate);
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}`);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      const reportLink = viewReportLink();
+      reportLink.focus();
+      expect(document.activeElement).toBe(reportLink);
+
+      await releasePoll(gate, 2, {
+        state: "reverse_awaiting_invite",
+        ts: 2,
+        optInActive: true,
+        nextInstruction: "paste_s2",
+      });
+      const currentCard = document.querySelector('[aria-current="step"]');
+      expect(currentCard).not.toBeNull();
+      expect(currentCard?.textContent).toContain("Accept return invitation");
+      expect(currentCard?.getAttribute("tabindex")).toBe("-1");
+      expect(currentCard?.getAttribute("tabindex")).not.toBe("0");
+      expect(document.activeElement).toBe(currentCard);
+      expect(document.querySelectorAll('[aria-current="step"]').length).toBe(1);
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      restoreFetch();
+    }
+  });
+
+  test("does not move focus when an instruction change leaves the focused control mounted", async () => {
+    const gate = new SessionPollGate();
+    const restoreFetch = installGatedSessionFetch(gate);
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}`);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      const copyButton = pageLinkButton();
+      copyButton.focus();
+      expect(document.activeElement).toBe(copyButton);
+
+      await releasePoll(gate, 2, {
+        state: "reverse_awaiting_invite",
+        ts: 2,
+        optInActive: true,
+        nextInstruction: "paste_s2",
+      });
+      expect(document.activeElement).toBe(copyButton);
+      const currentCard = document.querySelector('[aria-current="step"]');
+      expect(currentCard).not.toBeNull();
+      expect(currentCard?.getAttribute("tabindex")).toBeNull();
+      expect(document.activeElement === currentCard).toBe(false);
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      restoreFetch();
+    }
+  });
+
+  test("exposes one polite atomic step status, keeps guidance outside live regions, and keeps reserved slots mounted", async () => {
+    const gate = new SessionPollGate();
+    const restoreFetch = installGatedSessionFetch(gate);
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}`);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      const firstAnnounce = document.querySelector("[data-step-status]");
+      expect(firstAnnounce).not.toBeNull();
+      expect(firstAnnounce?.getAttribute("role")).toBe("status");
+      expect(firstAnnounce?.getAttribute("aria-live")).toBe("polite");
+      expect(firstAnnounce?.getAttribute("aria-atomic")).toBe("true");
+      expect(firstAnnounce?.textContent).toBe("Step 3 of 6: Paste the outgoing invite");
+      expect(firstAnnounce?.textContent).not.toContain("Use Copy invitation");
+      expect(document.querySelectorAll("[data-step-status]").length).toBe(1);
+      expect(document.querySelector("[data-step-list]")?.closest("[aria-live]")).toBeNull();
+      for (const slot of Array.from(document.querySelectorAll("[data-guidance-slot]"))) {
+        expect(slot.closest("[aria-live]")).toBeNull();
+      }
+      for (const copy of Object.values(ACTION_ERROR_COPY)) {
+        expect(firstAnnounce?.textContent).not.toContain(copy);
+      }
+      expect(document.querySelectorAll("textarea").length).toBe(0);
+      const reservedBefore = reservedSlotCounts();
+      expect(reservedBefore).toEqual({ guidance: 6, form: 1, alert: 1, cta: 6 });
+      expect(document.querySelector("[data-reserved-alert-slot]")?.getAttribute("role")).toBeNull();
+      expect(document.querySelector("[data-reserved-form-slot]")?.contains(
+        document.querySelector("[data-reserved-alert-slot]") as Node,
+      )).toBe(true);
+
+      await releasePoll(gate, 2, {
+        state: "reverse_awaiting_invite",
+        ts: 2,
+        optInActive: true,
+        nextInstruction: "paste_s2",
+      });
+      const secondAnnounce = document.querySelector("[data-step-status]");
+      expect(secondAnnounce?.textContent).toBe("Step 4 of 6: Paste the reverse invite");
+      expect(reservedSlotCounts()).toEqual(reservedBefore);
+      expect(document.querySelectorAll('[role="alert"]').length).toBe(0);
+      expect(secondAnnounce?.textContent).not.toContain("We could not");
+      for (const copy of Object.values(ACTION_ERROR_COPY)) {
+        expect(secondAnnounce?.textContent).not.toContain(copy);
+      }
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      gate.settleRemaining();
       restoreFetch();
     }
   });

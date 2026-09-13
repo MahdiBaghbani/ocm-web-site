@@ -25,6 +25,12 @@ export interface StepRowProps {
   /** Extra content mounted inside this row's card, for example a reserved
    * or live reverse-invite form. Rendered regardless of row status. */
   formSlot?: React.ReactNode;
+  /** Card root ref. ResultsShell uses this to restore focus after a
+   * focus-loss instruction change. */
+  cardRef?: React.Ref<HTMLDivElement>;
+  /** Programmatic focus target after a focus-loss instruction change.
+   * Applied only on the current card; not a normal tab stop. */
+  cardTabIndex?: -1;
 }
 
 const STATUS_LABEL: Record<Exclude<StepStatus, "hidden">, string> = {
@@ -52,6 +58,8 @@ export default function StepRow({
   ctaHref,
   guidance,
   formSlot,
+  cardRef,
+  cardTabIndex,
 }: StepRowProps): React.ReactElement | null {
   if (status === "hidden") {
     return null;
@@ -69,8 +77,10 @@ export default function StepRow({
 
   return (
     <div
+      ref={cardRef}
       className={`rounded-2xl border border-zinc-800 bg-zinc-900/20 px-5 py-4 ${FOCUS_RING}`}
       aria-current={status === "current" ? "step" : undefined}
+      tabIndex={status === "current" && cardTabIndex === -1 ? -1 : undefined}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">

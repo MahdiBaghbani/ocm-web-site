@@ -718,6 +718,25 @@ describe("StepRow", () => {
     expect(pending).not.toContain('aria-current="step"');
     expect(complete).not.toContain('aria-current="step"');
   });
+
+  test("applies tabIndex=-1 on the current card only for the focus-loss restore path", () => {
+    const current = render(<StepRow step="probe" status="current" index={1} />);
+    const restoring = render(
+      <StepRow step="probe" status="current" index={1} cardTabIndex={-1} />,
+    );
+    const pending = render(
+      <StepRow step="probe" status="pending" index={1} cardTabIndex={-1} />,
+    );
+    const complete = render(
+      <StepRow step="probe" status="complete" index={1} cardTabIndex={-1} />,
+    );
+    expect(rootCardTag(current)).not.toContain("tabindex");
+    expect(rootCardTag(restoring)).toContain('tabindex="-1"');
+    expect(rootCardTag(restoring)).not.toContain('tabindex="0"');
+    expect(rootCardTag(pending)).not.toContain("tabindex");
+    expect(rootCardTag(complete)).not.toContain("tabindex");
+    expect(rootCardTag(restoring)).toContain('aria-current="step"');
+  });
 });
 describe("Pill", () => {
   test("renders every kind with its default label", () => {
