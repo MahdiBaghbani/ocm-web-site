@@ -46,12 +46,7 @@ import {
   guidanceFor,
   type GuidanceRecord,
 } from "../lib/validatorGuidance";
-import {
-  normalizeHost,
-  normalizeSessionId,
-  parseValidatorUrlState,
-  type ValidatorUrlState,
-} from "../lib/urlState";
+import type { ValidatorUrlState } from "../lib/urlState";
 import { isRecord } from "../lib/validatorShared";
 import {
   CANONICAL_AREA_IDS,
@@ -70,6 +65,12 @@ import {
   progressStatusText,
   stripBracketedMarkers,
 } from "../lib/results/progress";
+import {
+  projectSessionStart,
+  sessionFromLocation,
+  sessionFromProps,
+  SESSION_START_LOADING_TEXT,
+} from "../lib/results/sessionStart";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
@@ -458,48 +459,6 @@ function requestDeps(
     backoffMaxMs: config.backoffMaxMs,
     signal,
   };
-}
-
-function sessionFromProps(host?: string, id?: string): ValidatorUrlState | null {
-  if (host === undefined || id === undefined) {
-    return null;
-  }
-  const normalizedHost = normalizeHost(host);
-  const normalizedId = normalizeSessionId(id);
-  if (normalizedHost === null || normalizedId === null) {
-    return null;
-  }
-  return { host: normalizedHost, id: normalizedId };
-}
-
-function sessionFromLocation(host?: string, id?: string): ValidatorUrlState | null {
-  const fromProps = sessionFromProps(host, id);
-  if (fromProps !== null) {
-    return fromProps;
-  }
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const parsed = parseValidatorUrlState(window.location.href);
-  return parsed.ok ? parsed.state : null;
-}
-
-function sessionLinkErrorMessage(): string {
-  if (typeof window === "undefined") {
-    return "This result link is incomplete.";
-  }
-  const parsed = parseValidatorUrlState(window.location.href);
-  if (parsed.ok) {
-    return "This result link is incomplete.";
-  }
-  if (
-    parsed.reason === "invalid_host" ||
-    parsed.reason === "invalid_id" ||
-    parsed.reason === "invalid_url"
-  ) {
-    return "This result link has an invalid session ID.";
-  }
-  return "This result link is incomplete.";
 }
 
 function asGrade(value: unknown): GradeKind | null {
@@ -1292,7 +1251,13 @@ export default function ResultsShell({
 
   useEffect(() => {
     setMounted(true);
-    setSession(sessionFromLocation(host, id));
+    setSession(
+      sessionFromLocation(
+        host,
+        id,
+        typeof window === "undefined" ? null : window.location.href,
+      ),
+    );
   }, [host, id]);
 
   useEffect(() => {
@@ -1665,17 +1630,22 @@ export default function ResultsShell({
   }
 
   if (session === null) {
-    if (!mounted) {
-      return <p className="text-sm text-zinc-400">Loading session...</p>;
-    }
-    return (
-      <div className="space-y-4">
-        <BackToTest href={testHref} />
-        <p className="text-sm text-rose-200" role="alert">
-          {sessionLinkErrorMessage()}
-        </p>
-      </div>
+    const sessionStart = projectSessionStart(
+      null,
+      mounted,
+      typeof window === "undefined" ? null : window.location.href,
     );
+    if (sessionStart.kind === "failure") {
+      return (
+        <div className="space-y-4">
+          <BackToTest href={testHref} />
+          <p className="text-sm text-rose-200" role="alert">
+            {sessionStart.message}
+          </p>
+        </div>
+      );
+    }
+    return <p className="text-sm text-zinc-400">{SESSION_START_LOADING_TEXT}</p>;
   }
 
   const resultAreas = resultAreaEntries(projection.score.areas);
