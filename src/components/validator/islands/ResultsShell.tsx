@@ -24,6 +24,7 @@ import {
   claimInvite,
   isReportNotPublicFailure,
   joinValidatorUrl,
+  postReverseInvite,
   resolvePublicReportUrl,
   type ReportResponse,
   type ReportVisibility,
@@ -136,19 +137,123 @@ const ACTION_BTN =
 // the secondary report link). AG-2.3 wires the live "View report"
 // secondary link on the current row. AG-1.4 wires the primary
 // "Copy invitation" / "Copy again" claim CTA plus the cached-invite field on
-// the current paste_s1 row (see InvitePasteSlot). The reverse form slot is
-// sized for a label, textarea, submit button, and one alert line, so wiring
-// those later does not shift this layout. The form slot mounts inside the
+// the current paste_s1 row (see InvitePasteSlot). AG-1.5 wires the bounded
+// reverse-invite form into this same slot, but only while the displayed
+// instruction is exactly paste_s2; every other reverse-row state (pending,
+// complete, or current at wait_forward_share) keeps the invisible reserved
+// placeholder below so the layout never shifts. The slot mounts inside the
 // reverse row's own StepRow card (via its formSlot prop), not as a sibling
 // element.
 const RESERVED_REVERSE_FORM_CLASS = "invisible min-h-56 w-full";
+const REVERSE_FORM_CLASS = "mt-3 min-h-56 w-full space-y-3";
 
-function ReservedReverseForm(): React.ReactElement {
+// AG-1.5 bounded length for the unpadded base64url(token@fqdn) reverse
+// invite shape. A DNS fqdn is at most 253 ASCII characters; with a generous
+// allowance for the token half, unpadded base64url inflates plaintext by
+// roughly 4/3. 512 covers that with headroom without accepting arbitrary
+// pasted text.
+export const MAX_REVERSE_INVITE_LENGTH = 512;
+
+export const REVERSE_INVITE_FIELD_LABEL = "Return invitation";
+export const REVERSE_INVITE_SUBMIT_LABEL = "Submit return invitation";
+export const REVERSE_INVITE_TOO_LONG_TEXT =
+  "That return invitation is too long. Paste the invitation issued by the target server.";
+
+/**
+ * AG-1.5 reverse-invite form slot. Renders the invisible reserved
+ * placeholder unless `active` is true (the displayed instruction is exactly
+ * paste_s2), in which case it renders the real, controlled textarea form.
+ * Both branches keep the same `data-reserved-form-slot` / `data-reserved
+ * -alert-slot` markers so the reserved-layout contract does not change
+ * shape when the form goes live.
+ */
+function ReverseFormSlot({
+  active,
+  value,
+  onChange,
+  busy,
+  error,
+  onSubmit,
+}: {
+  active: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  busy: boolean;
+  error: string | null;
+  onSubmit: () => void;
+}): React.ReactElement {
+  if (!active) {
+    return (
+      <div data-reserved-form-slot="" aria-hidden="true" className={RESERVED_REVERSE_FORM_CLASS}>
+        <div data-reserved-alert-slot="" />
+      </div>
+    );
+  }
   return (
-    <div data-reserved-form-slot="" aria-hidden="true" className={RESERVED_REVERSE_FORM_CLASS}>
-      <div data-reserved-alert-slot="" />
+    <div data-reserved-form-slot="" className={REVERSE_FORM_CLASS}>
+      <form
+        data-reverse-form=""
+        className="space-y-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <div className="space-y-1">
+          <label
+            htmlFor="results-reverse-invite-field"
+            className="block text-xs font-semibold text-zinc-300"
+          >
+            {REVERSE_INVITE_FIELD_LABEL}
+          </label>
+          <textarea
+            id="results-reverse-invite-field"
+            data-reverse-invite-field=""
+            rows={3}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          />
+        </div>
+        <button type="submit" className={ACTION_BTN} disabled={busy}>
+          {REVERSE_INVITE_SUBMIT_LABEL}
+        </button>
+      </form>
+      <div data-reserved-alert-slot="">
+        {error !== null ? (
+          <p
+            data-reverse-error=""
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+            className="text-sm text-rose-200"
+          >
+            {error}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
+}
+
+/**
+ * Pure mapping from a postReverseInvite failure to operator-facing copy.
+ * The known backend reasonCodes reuse the shared paste_* guidance strings;
+ * anything else (peer_unreachable, not_found, internal_error, or an
+ * unrecognized envelope) falls back to the backend message, and finally to
+ * a generic string when even that is empty.
+ */
+export function reverseInviteErrorCopy(failure: ValidatorFailure): string {
+  if (failure.error === "wrong_target_host") {
+    return actionErrorCopy("paste_422_wrong_target_host");
+  }
+  if (failure.error === "conflict") {
+    return actionErrorCopy("paste_409_conflict");
+  }
+  if (failure.error === "missing_field") {
+    return actionErrorCopy("paste_400_invalid_invitation");
+  }
+  return failure.message !== "" ? failure.message : "Could not import the return invitation.";
 }
 
 // AG-1.4 invite paste slot. Mounts inside the current invite row's card via
@@ -1175,6 +1280,19 @@ export default function ResultsShell({
   // compare the session it started in against the live session with no
   // effect-timing gap.
   const currentSessionIdRef = useRef<string | null>(null);
+  // AG-1.5 reverse-invite form state. The textarea stays controlled and its
+  // busy/error/lock trio mirrors the AG-1.4 claim race-safety shape.
+  const [reverseValue, setReverseValue] = useState("");
+  const [reverseBusy, setReverseBusy] = useState(false);
+  const [reverseError, setReverseError] = useState<string | null>(null);
+  // Holds the session id of the in-flight reverse POST, or null when idle.
+  // Reverse POST is not cached, so unlike claimLockRef this only guards
+  // against a double submit while one request is outstanding.
+  const reverseLockRef = useRef<string | null>(null);
+  // Mirrors the current guidanceKey every render so an async reverse-invite
+  // callback can tell whether polling already left paste_s2 while its POST
+  // was in flight, with no effect-timing gap.
+  const guidanceKeyRef = useRef<string | null>(null);
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
@@ -1232,6 +1350,10 @@ export default function ResultsShell({
     setClaimLocked(false);
     setClaimError(null);
     claimLockRef.current = null;
+    setReverseValue("");
+    setReverseBusy(false);
+    setReverseError(null);
+    reverseLockRef.current = null;
     if (copyTimerRef.current !== null) {
       clearTimeout(copyTimerRef.current);
       copyTimerRef.current = null;
@@ -1345,6 +1467,7 @@ export default function ResultsShell({
   }, [guidanceKey, view]);
 
   currentSessionIdRef.current = session?.id ?? null;
+  guidanceKeyRef.current = guidanceKey;
 
   const projection = projectResultsPage({
     poll,
@@ -1501,6 +1624,62 @@ export default function ResultsShell({
     }
   }
 
+  // AG-1.5 submit for the paste_s2 reverse-invite form. Reuses AG-1.4's ref
+  // lock plus busy state so a fast double click issues exactly one POST, but
+  // unlike the claim CTA the reverse POST result is never cached: each
+  // submit from paste_s2 can post again once the prior request settles. A
+  // 200 never advances the UI on its own (only the poll leaving paste_s2
+  // does that), and any write after this POST settles is dropped once either
+  // the session changed or polling already left paste_s2 while it was in
+  // flight.
+  async function handleReverseInvite(): Promise<void> {
+    if (session === null || config === null) {
+      return;
+    }
+    // Trim only the surrounding whitespace; inner whitespace/content is part
+    // of the invite string and must reach the backend unchanged.
+    const trimmed = reverseValue.trim();
+    if (trimmed.length > MAX_REVERSE_INVITE_LENGTH) {
+      setReverseError(REVERSE_INVITE_TOO_LONG_TEXT);
+      return;
+    }
+    if (reverseLockRef.current !== null) {
+      return;
+    }
+    const reverseSessionId = session.id;
+    reverseLockRef.current = reverseSessionId;
+    setReverseBusy(true);
+    setReverseError(null);
+    try {
+      const result = await postReverseInvite(reverseSessionId, trimmed, requestDeps(config));
+      // Ignore a stale resolution: either the session changed, or polling
+      // already left paste_s2 while this POST was in flight. Neither the
+      // 200 nor the error is state truth; only the poll loop is.
+      if (
+        reverseSessionId !== currentSessionIdRef.current ||
+        guidanceKeyRef.current !== "paste_s2"
+      ) {
+        return;
+      }
+      if (result.ok) {
+        setReverseError(null);
+        return;
+      }
+      setReverseError(reverseInviteErrorCopy(result));
+    } finally {
+      // Only release the in-flight lock this submit actually still owns.
+      if (reverseLockRef.current === reverseSessionId) {
+        reverseLockRef.current = null;
+      }
+      // Busy clears on session identity alone (matching AG-1.4): once this
+      // session's own POST settles, the submit button must re-enable even
+      // if polling already moved past paste_s2 and unmounted the form.
+      if (reverseSessionId === currentSessionIdRef.current) {
+        setReverseBusy(false);
+      }
+    }
+  }
+
   if (session === null) {
     if (!mounted) {
       return <p className="text-sm text-zinc-400">Loading session...</p>;
@@ -1648,9 +1827,19 @@ export default function ResultsShell({
             const isClaimRow = isCurrent && guidanceKey === "paste_s1";
             const claimLabel =
               cachedInvite !== null ? COPY_AGAIN_LABEL : COPY_INVITATION_LABEL;
+            const isReverseFormRow = isCurrent && guidanceKey === "paste_s2";
             const rowFormSlot =
               step === "reverse" ? (
-                <ReservedReverseForm />
+                <ReverseFormSlot
+                  active={isReverseFormRow}
+                  value={reverseValue}
+                  onChange={setReverseValue}
+                  busy={reverseBusy}
+                  error={reverseError}
+                  onSubmit={() => {
+                    void handleReverseInvite();
+                  }}
+                />
               ) : isClaimRow ? (
                 <InvitePasteSlot invite={cachedInvite} error={claimError} />
               ) : undefined;
