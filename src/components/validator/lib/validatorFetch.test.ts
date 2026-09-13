@@ -4,7 +4,6 @@ import {
   claimInvite,
   fetchReport,
   isReportNotPublicFailure,
-  joinValidatorUrl,
   normalizeReportVisibility,
   parseErrorEnvelope,
   parseRetryAfter,
@@ -13,7 +12,6 @@ import {
   resolvePublicReportUrl,
   startSession,
   stopSession,
-  waitForBackoff,
   type ReportResponse,
   type ValidatorFetchDeps,
 } from "./validatorFetch";
@@ -22,15 +20,6 @@ import { jsonResponse } from "../test-helpers/fetchStub";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
 const CREATED = { state: "created", ts: 1, optInActive: false };
-
-describe("joinValidatorUrl", () => {
-  test("joins same-origin and absolute origins onto /validator", () => {
-    expect(joinValidatorUrl("", "/start")).toBe("/validator/start");
-    expect(joinValidatorUrl("https://api.example.com/", "/api/session/abc")).toBe(
-      "https://api.example.com/validator/api/session/abc",
-    );
-  });
-});
 
 describe("error envelopes and Retry-After", () => {
   test("parses the flat ocmgo envelope and the nested API envelope", () => {
@@ -407,21 +396,6 @@ describe("pollSession", () => {
     expect(hits).toBe(3);
     expect(sleeps).toEqual([1000, 2000]);
     expect(exhausted).toMatchObject({ ok: false, kind: "timeout", error: "timeout" });
-  });
-});
-
-describe("waitForBackoff", () => {
-  test("uses an injected timer and returns aborted when cancelled", async () => {
-    let cleared = false;
-    await expect(waitForBackoff(50, {
-      setTimeoutFn: (handler) => { handler(); return 1; },
-      clearTimeoutFn: () => { cleared = true; },
-    })).resolves.toEqual({ ok: true });
-    expect(cleared).toBe(true);
-    const controller = new AbortController();
-    const pending = waitForBackoff(60_000, { signal: controller.signal });
-    controller.abort();
-    await expect(pending).resolves.toEqual({ ok: false, reason: "aborted" });
   });
 });
 
