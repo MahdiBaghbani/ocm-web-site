@@ -1,35 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  fetchManifest,
-  type FetchLike,
-  type ValidatorFetchDeps,
-} from "./validatorFetch";
+import { fetchManifest } from "./validatorFetch";
 import { parseValidatorManifest } from "./validatorManifest";
-
-const STORE_DOWN = { error: "store_error", message: "down" };
-
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function captureFetch(handler: (url: string, init: RequestInit) => Response | Promise<Response>) {
-  const calls: Array<{ url: string; init: RequestInit }> = [];
-  const fetchLike: FetchLike = async (input, init = {}) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    calls.push({ url, init });
-    return handler(url, init);
-  };
-  return { fetchLike, calls };
-}
-
-function trackedSleep(): { sleeps: number[]; sleep: NonNullable<ValidatorFetchDeps["sleep"]> } {
-  const sleeps: number[] = [];
-  return { sleeps, sleep: async (ms) => { sleeps.push(ms); } };
-}
+import { captureFetch, STORE_DOWN, trackedSleep } from "./fetch/test-helpers";
+import { jsonResponse } from "../test-helpers/fetchStub";
 
 function validManifest(): Record<string, unknown> {
   return {

@@ -14,47 +14,14 @@ import {
   startSession,
   stopSession,
   waitForBackoff,
-  type FetchLike,
   type ReportResponse,
   type ValidatorFetchDeps,
 } from "./validatorFetch";
+import { captureFetch, STORE_DOWN, trackedSleep, unreadResponse } from "./fetch/test-helpers";
+import { jsonResponse } from "../test-helpers/fetchStub";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
-const STORE_DOWN = { error: "store_error", message: "down" };
 const CREATED = { state: "created", ts: 1, optInActive: false };
-
-function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", ...headers },
-  });
-}
-
-function unreadResponse(status: number, onRead?: () => void): Response {
-  const response = new Response("{}", { status });
-  const fail = async (): Promise<string> => {
-    onRead?.();
-    throw new Error("body read failed");
-  };
-  Object.defineProperty(response, "text", { value: fail });
-  Object.defineProperty(response, "json", { value: fail });
-  return response;
-}
-
-function captureFetch(handler: (url: string, init: RequestInit) => Response | Promise<Response>) {
-  const calls: Array<{ url: string; init: RequestInit }> = [];
-  const fetchLike: FetchLike = async (input, init = {}) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    calls.push({ url, init });
-    return handler(url, init);
-  };
-  return { fetchLike, calls };
-}
-
-function trackedSleep(): { sleeps: number[]; sleep: NonNullable<ValidatorFetchDeps["sleep"]> } {
-  const sleeps: number[] = [];
-  return { sleeps, sleep: async (ms) => { sleeps.push(ms); } };
-}
 
 describe("joinValidatorUrl", () => {
   test("joins same-origin and absolute origins onto /validator", () => {
