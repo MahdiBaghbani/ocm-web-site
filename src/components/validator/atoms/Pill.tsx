@@ -4,6 +4,7 @@
  */
 import React from "react";
 import { statusToUi } from "../../observatory/lib/statusStyles";
+import { GRADE_KINDS, type GradeKind } from "../lib/results/verdict";
 
 export const PILL_KINDS = [
   "pass",
@@ -17,8 +18,7 @@ export const PILL_KINDS = [
 
 export type PillKind = (typeof PILL_KINDS)[number];
 
-export const GRADE_KINDS = ["pass", "fail", "warn"] as const;
-export type GradeKind = (typeof GRADE_KINDS)[number];
+export { GRADE_KINDS, type GradeKind };
 
 const KIND_TO_STATUS = {
   pass: "passed",

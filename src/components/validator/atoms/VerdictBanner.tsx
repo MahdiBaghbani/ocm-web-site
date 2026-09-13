@@ -5,18 +5,14 @@
 import React from "react";
 import { CircleCheck, CircleX, TriangleAlert, LoaderCircle, CircleStop, Info } from "lucide-react";
 import { statusToUi } from "../../observatory/lib/statusStyles";
-import Pill, { type GradeKind } from "./Pill";
+import Pill from "./Pill";
+import {
+  VERDICT_KINDS,
+  verdictKindFromScore,
+  type VerdictKind,
+} from "../lib/results/verdict";
 
-export const VERDICT_KINDS = [
-  "pass",
-  "fail",
-  "warn",
-  "running",
-  "interrupted",
-  "inconclusive",
-] as const;
-
-export type VerdictKind = (typeof VERDICT_KINDS)[number];
+export { VERDICT_KINDS, verdictKindFromScore, type VerdictKind };
 
 export interface VerdictBannerProps {
   verdict: VerdictKind;
@@ -68,35 +64,6 @@ const PILL_KIND = {
   interrupted: "notrun",
   inconclusive: "unassessed",
 } as const;
-
-/**
- * Map a validated grade plus poll/session state to a banner kind.
- * Interrupted and terminal_fail are keyed from state. Coverage is not inferred.
- */
-export function verdictKindFromScore(input: {
-  grade: GradeKind | null;
-  state: string;
-}): VerdictKind {
-  if (input.state === "interrupted") {
-    return "interrupted";
-  }
-  if (input.state === "terminal_fail") {
-    return "fail";
-  }
-  if (input.grade === "fail") {
-    return "fail";
-  }
-  if (input.grade === "warn") {
-    return "warn";
-  }
-  if (input.grade === "pass") {
-    return "pass";
-  }
-  if (input.state === "terminal_pass") {
-    return "inconclusive";
-  }
-  return "running";
-}
 
 export default function VerdictBanner({
   verdict,
