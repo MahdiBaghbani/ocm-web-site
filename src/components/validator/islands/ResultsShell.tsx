@@ -89,6 +89,10 @@ import {
   projectSessionFailure,
 } from "../lib/results/sessionFailures";
 import { isSameSessionId, isStaleSessionId } from "../lib/results/sessionIdentity";
+import {
+  selectTerminalReport,
+  type TerminalReportSourceKind,
+} from "../lib/results/terminalReport";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
@@ -369,7 +373,7 @@ export interface ResultsPageProjection {
   visibility: ReportVisibility;
   score: ValidatorScoreProjection;
   sourceReport: ReportResponse | null;
-  sourceKind: "terminal" | "cached_session" | "none";
+  sourceKind: TerminalReportSourceKind;
   showAreas: boolean;
   reportUrl: string | null;
   showPublicActions: boolean;
@@ -585,20 +589,12 @@ export function projectResultsPage(input: {
   const failure = input.reportFailure;
   const notPublic = failure !== null && isReportNotPublicFailure(failure);
   const expired = failure !== null && failure.kind === "expired";
-  const sourceReport =
-    !terminal
-      ? null
-      : input.terminalReport !== null
-        ? input.terminalReport
-        : notPublic
-          ? input.lastLiveReport
-          : null;
-  const sourceKind: ResultsPageProjection["sourceKind"] =
-    input.terminalReport !== null
-      ? "terminal"
-      : sourceReport !== null
-        ? "cached_session"
-        : "none";
+  const { sourceReport, sourceKind } = selectTerminalReport({
+    terminal,
+    terminalReport: input.terminalReport,
+    lastLiveReport: input.lastLiveReport,
+    notPublic,
+  });
   const evidence = evidenceItems(sourceReport?.evidence);
   const score = projectValidatorScore({
     pollState: pollState === "" ? null : pollState,
