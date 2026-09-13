@@ -3,7 +3,7 @@
  */
 import React from "react";
 import AreaGrid, { type AreaGridEntry } from "../atoms/AreaGrid";
-import type { ValidatorStatisticsArea } from "../lib/validatorFetch";
+import type { ValidatorStatisticsArea } from "../lib/validatorStatistics";
 
 export interface AreaPassRateGridProps {
   areas: readonly ValidatorStatisticsArea[];

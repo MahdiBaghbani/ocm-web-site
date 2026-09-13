@@ -1,28 +1,24 @@
 /**
- * Typed ocmgo validator transport. Thin barrel over the ./fetch modules;
- * see ./fetch/index for the transport kernel and endpoint split.
+ * Public barrel for the validator fetch modules. Named exports only.
  */
 
+export { parseErrorEnvelope, parseRetryAfter, waitForBackoff } from "./transport";
 export {
-  claimInvite,
-  fetchManifest,
-  fetchReport,
-  fetchStatistics,
   isReportNotPublicFailure,
   joinValidatorUrl,
   normalizeReportVisibility,
-  parseErrorEnvelope,
-  parseRetryAfter,
-  pollSession,
-  postReverseInvite,
+  resolvePublicReportUrl,
+} from "./urls";
+export { pollSession, startSession, stopSession } from "./session";
+export { claimInvite, postReverseInvite } from "./invite";
+export { fetchReport } from "./report";
+export { fetchManifest } from "./manifest";
+export { fetchStatistics } from "./statistics";
+export {
   REPORT_NOT_PUBLIC_ERROR,
   REPORT_VISIBILITY,
-  resolvePublicReportUrl,
-  startSession,
-  stopSession,
   VALIDATOR_SERVICE_PREFIX,
-  waitForBackoff,
-} from "./fetch/index";
+} from "./types";
 export type {
   ClaimInviteResponse,
   FetchLike,
@@ -40,4 +36,4 @@ export type {
   ValidatorResult,
   ValidatorSuccess,
   WaitResult,
-} from "./fetch/index";
+} from "./types";

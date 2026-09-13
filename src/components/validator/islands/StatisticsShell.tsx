@@ -13,9 +13,8 @@ import {
   fetchManifest,
   fetchStatistics,
   type ValidatorFetchDeps,
-  type ValidatorManifest,
-  type ValidatorStatistics,
 } from "../lib/validatorFetch";
+import type { ValidatorManifest } from "../lib/validatorManifest";
 import {
   DEFAULT_STATISTICS_DAYS,
   STATISTICS_WHY_LABEL,
@@ -28,6 +27,7 @@ import {
   statisticsPlatformsEmpty,
   statisticsSelectOptions,
   statisticsTimeframeOptions,
+  type ValidatorStatistics,
 } from "../lib/validatorStatistics";
 import AreaPassRateGrid from "./AreaPassRateGrid";
 import GradeDistribution from "./GradeDistribution";

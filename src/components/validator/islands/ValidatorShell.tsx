@@ -13,8 +13,8 @@ import {
   fetchManifest,
   startSession,
   type ValidatorFetchDeps,
-  type ValidatorManifest,
 } from "../lib/validatorFetch";
+import type { ValidatorManifest } from "../lib/validatorManifest";
 import { OPT_IN_MANIFEST_PATH } from "../lib/stateMachine";
 import { interpretHostInput, serializeValidatorUrlState } from "../lib/urlState";
 import { isRecord } from "../lib/validatorShared";
