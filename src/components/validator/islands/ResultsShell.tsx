@@ -36,7 +36,6 @@ import {
 import { selectPrimaryReasonItem, type ReasonSeverity } from "../lib/validatorReasons";
 import { runResultsPollLoop } from "../lib/resultsPoll";
 import {
-  USER_STEPS,
   type MachineView,
   type UserStep,
 } from "../lib/stateMachine";
@@ -61,9 +60,9 @@ import {
 import { AREA_DESCRIPTIONS } from "../lib/score/areas";
 import {
   progressAnnouncement,
-  progressStatusText,
   stripBracketedMarkers,
 } from "../lib/results/progress";
+import { projectProgressCollections } from "../lib/results/collections";
 import {
   projectSessionStart,
   sessionFromLocation,
@@ -85,6 +84,7 @@ import {
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
 export { INITIAL_LIVE_INSTRUCTION_HOLD, stabilizeLiveView };
+export { resultAreaEntries } from "../lib/results/collections";
 
 export interface ResultsShellProps {
   host?: string;
@@ -507,20 +507,6 @@ export function loadedEvidenceCountsByArea(
   return byArea;
 }
 
-function visibleIndex(statuses: MachineView["statuses"], step: UserStep): number {
-  let index = 0;
-  for (const item of USER_STEPS) {
-    if (statuses[item] === "hidden") {
-      continue;
-    }
-    index += 1;
-    if (item === step) {
-      return index;
-    }
-  }
-  return index;
-}
-
 /**
  * Live session report href. Shown only when origin is a normalized real
  * origin. An empty origin has no proxy-confirmation contract, so the link
@@ -544,26 +530,6 @@ export function specificationInputFromReport(report: ReportResponse | null): unk
   }
   const nested = specificationFromReport(report);
   return nested !== undefined ? nested : report.score;
-}
-
-export function resultAreaEntries(
-  areas: readonly SpecificationAreaGridEntry[],
-): SpecificationAreaGridEntry[] {
-  return areas.map((entry) => {
-    if (entry.pillLabel !== undefined) {
-      return entry;
-    }
-    if (entry.grade === "pass") {
-      return { ...entry, pillLabel: "Pass" };
-    }
-    if (entry.grade === "warn") {
-      return { ...entry, pillLabel: "Needs attention" };
-    }
-    if (entry.grade === "fail") {
-      return { ...entry, pillLabel: "Fail" };
-    }
-    return entry;
-  });
 }
 
 export function areaTotals(areas: readonly SpecificationAreaGridEntry[]): {
@@ -1577,12 +1543,19 @@ export default function ResultsShell({
     return <p className="text-sm text-zinc-400">{SESSION_START_LOADING_TEXT}</p>;
   }
 
-  const resultAreas = resultAreaEntries(projection.score.areas);
+  const collections = projectProgressCollections({
+    status: projection.status,
+    areas: projection.score.areas,
+    evidence: projection.evidence,
+    view,
+    guidanceKey,
+  });
+  const resultAreas = collections.areas;
   const selectedEntry =
     selectedArea === null
       ? null
       : resultAreas.find((entry) => entry.area === selectedArea) ?? null;
-  const statusText = progressStatusText(projection.status, view, guidanceKey);
+  const statusText = collections.progress;
   const transportFailure = projectTransportFailure(
     error,
     projection.status,
@@ -1700,12 +1673,8 @@ export default function ResultsShell({
         <p className="text-sm text-zinc-400">Loading session...</p>
       ) : projection.status === "live" ? (
         <div className="space-y-3" data-step-list="">
-          {USER_STEPS.map((step) => {
-            const status = view.statuses[step];
-            if (status === "hidden") {
-              return null;
-            }
-            const isCurrent = status === "current";
+          {collections.steps.map((row) => {
+            const { step, status, index, isCurrent } = row;
             const isClaimRow = isCurrent && guidanceKey === "paste_s1";
             const claimLabel =
               cachedInvite !== null ? COPY_AGAIN_LABEL : COPY_INVITATION_LABEL;
@@ -1730,7 +1699,7 @@ export default function ResultsShell({
                 key={step}
                 step={step}
                 status={status}
-                index={visibleIndex(view.statuses, step)}
+                index={index}
                 guidance={isCurrent ? currentRowGuidance : undefined}
                 ctaLabel={isClaimRow ? claimLabel : undefined}
                 onCta={
@@ -1870,8 +1839,8 @@ export default function ResultsShell({
           {projection.evidenceMode === "disclosure" ? (
             <EvidenceDisclosure
               title="Evidence"
-              items={projection.evidence}
-              defaultExpanded={projection.evidence.length > 0}
+              items={collections.evidence}
+              defaultExpanded={collections.evidence.length > 0}
             />
           ) : null}
           {projection.evidenceMode === "not_saved" ? (
@@ -1924,7 +1893,7 @@ export default function ResultsShell({
         <AreaModal
           area={selectedArea}
           areaLabel={selectedEntry.label}
-          items={projection.evidence}
+          items={collections.evidence}
           sourceReport={projection.sourceReport}
           grade={selectedEntry.grade}
           pillLabel={selectedEntry.pillLabel}
