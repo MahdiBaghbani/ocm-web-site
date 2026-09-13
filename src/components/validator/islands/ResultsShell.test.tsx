@@ -5276,6 +5276,44 @@ function installClaimFetch(handleInvite: () => Promise<Response> | Response): {
   };
 }
 
+function installGatedClaimFetch(
+  gate: SessionPollGate,
+  handleInvite: () => Promise<Response> | Response,
+): { restore: () => void; inviteCalls: () => number } {
+  let inviteCalls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}/invite`)) {
+      inviteCalls += 1;
+      return handleInvite();
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return gate.request();
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(200, liveReport(specification(() => "pass")));
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return {
+    restore: () => {
+      globalThis.fetch = previousFetch;
+    },
+    inviteCalls: () => inviteCalls,
+  };
+}
+
 function claimButton(label: string): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll("button")).find(
     (node) => node.textContent === label,
@@ -5470,7 +5508,7 @@ describe("ResultsShell paste_s1 claim invitation", () => {
     const copied: string[] = [];
     window.sessionStorage.setItem(`validator:invite:${SESSION_ID}`, STORED_INVITE);
     const claim = installClaimFetch(() =>
-      jsonResponse(410, { error: "gone", message: "invite already claimed" }),
+      jsonResponse(410, { error: "INVITE_ALREADY_CLAIMED", message: "invite already claimed" }),
     );
     const restoreSecure = installIsSecureContext(true);
     const restoreClipboard = installClipboardWriteText(async (value: string) => {
@@ -5510,7 +5548,7 @@ describe("ResultsShell paste_s1 claim invitation", () => {
 
   test("a 410 without a cached invite shows the locked claim_410_no_cache copy", async () => {
     const claim = installClaimFetch(() =>
-      jsonResponse(410, { error: "gone", message: "invite already claimed" }),
+      jsonResponse(410, { error: "INVITE_ALREADY_CLAIMED", message: "invite already claimed" }),
     );
     const restoreSecure = installIsSecureContext(true);
     const restoreClipboard = installClipboardWriteText(async () => {});
@@ -5533,7 +5571,7 @@ describe("ResultsShell paste_s1 claim invitation", () => {
 
       expect(claim.inviteCalls()).toBe(1);
       expect(inviteField()).toBeNull();
-      const alert = document.querySelector("[data-claim-error]");
+      const alert = document.querySelector("[data-post-error]");
       expect(alert?.getAttribute("role")).toBe("alert");
       expect(alert?.textContent).toBe(ACTION_ERROR_COPY.claim_410_no_cache);
       // Still on the claim CTA; no cache means no "Copy again".
@@ -5550,7 +5588,7 @@ describe("ResultsShell paste_s1 claim invitation", () => {
 
   test("a 409 session-not-ready claim shows the locked claim_409_session_not_ready copy", async () => {
     const claim = installClaimFetch(() =>
-      jsonResponse(409, { error: "conflict", message: "session not ready" }),
+      jsonResponse(409, { error: "SESSION_NOT_READY", message: "session not ready" }),
     );
     const restoreSecure = installIsSecureContext(true);
     const restoreClipboard = installClipboardWriteText(async () => {});
@@ -5575,7 +5613,7 @@ describe("ResultsShell paste_s1 claim invitation", () => {
 
       expect(claim.inviteCalls()).toBe(1);
       expect(inviteField()).toBeNull();
-      expect(document.querySelector("[data-claim-error]")?.textContent).toBe(
+      expect(document.querySelector("[data-post-error]")?.textContent).toBe(
         ACTION_ERROR_COPY.claim_409_session_not_ready,
       );
     } finally {
@@ -5826,7 +5864,7 @@ describe("ResultsShell paste_s1 claim invitation", () => {
 
   test("an uncached 410 lock survives a repeat click without issuing a second POST", async () => {
     const claim = installClaimFetch(() =>
-      jsonResponse(410, { error: "gone", message: "invite already claimed" }),
+      jsonResponse(410, { error: "INVITE_ALREADY_CLAIMED", message: "invite already claimed" }),
     );
     const restoreSecure = installIsSecureContext(true);
     const restoreClipboard = installClipboardWriteText(async () => {});
@@ -5863,7 +5901,7 @@ describe("ResultsShell paste_s1 claim invitation", () => {
       expect(claim.inviteCalls()).toBe(1);
       expect(claimButton(COPY_INVITATION_LABEL).disabled).toBe(true);
       expect(hasClaimButton(COPY_AGAIN_LABEL)).toBe(false);
-      expect(document.querySelector("[data-claim-error]")?.textContent).toBe(
+      expect(document.querySelector("[data-post-error]")?.textContent).toBe(
         ACTION_ERROR_COPY.claim_410_no_cache,
       );
     } finally {
@@ -5873,6 +5911,75 @@ describe("ResultsShell paste_s1 claim invitation", () => {
       restoreClipboard();
       restoreSecure();
       claim.restore();
+    }
+  });
+
+  test("ignores a late claim POST result once polling has left paste_s1, and a 410 INVITE_ALREADY_CLAIMED does not write the shared post-error channel", async () => {
+    const gate = new SessionPollGate();
+    let releaseClaim: (response: Response) => void = () => {};
+    const claimPending = new Promise<Response>((resolve) => {
+      releaseClaim = resolve;
+    });
+    const claim = installGatedClaimFetch(gate, () => claimPending);
+    const restoreSecure = installIsSecureContext(true);
+    const restoreClipboard = installClipboardWriteText(async () => {});
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      await waitForDom(() => hasClaimButton(COPY_INVITATION_LABEL));
+
+      await act(() => {
+        claimButton(COPY_INVITATION_LABEL).dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      });
+      expect(claim.inviteCalls()).toBe(1);
+
+      // Poll moves past paste_s1 while the claim POST is still pending.
+      await releasePoll(gate, 2, {
+        state: "reverse_awaiting_invite",
+        ts: 2,
+        optInActive: true,
+        nextInstruction: "paste_s2",
+      });
+      expect(hasClaimButton(COPY_INVITATION_LABEL)).toBe(false);
+
+      // The pending claim POST now resolves with a 410 INVITE_ALREADY_CLAIMED;
+      // it must not write the shared post-error channel on the new instruction.
+      await act(async () => {
+        releaseClaim(
+          jsonResponse(410, { error: "INVITE_ALREADY_CLAIMED", message: "invite already claimed" }),
+        );
+        await claimPending;
+      });
+      expect(document.querySelector("[data-post-error]")).toBeNull();
+      expect(document.body.textContent).not.toContain(ACTION_ERROR_COPY.claim_410_no_cache);
+
+      await releasePoll(gate, 3, {
+        state: "reverse_awaiting_invite",
+        ts: 3,
+        optInActive: true,
+        nextInstruction: "paste_s2",
+      });
+      expect(reverseTextarea()).not.toBeNull();
+    } finally {
+      await act(() => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      claim.restore();
+      restoreClipboard();
+      restoreSecure();
     }
   });
 
@@ -5921,7 +6028,7 @@ describe("ResultsShell paste_s1 claim invitation", () => {
       expect(label?.getAttribute("for")).toBe(field?.getAttribute("id"));
       expect(copied).toEqual([INVITE_STRING]);
       // No fatal error surfaced.
-      expect(document.querySelector("[data-claim-error]")).toBeNull();
+      expect(document.querySelector("[data-post-error]")).toBeNull();
 
       // Restore storage availability; the in-memory cache remains usable and a
       // Copy again still reads it without a second POST.
@@ -6012,7 +6119,7 @@ function reverseSubmitButton(): HTMLButtonElement {
 }
 
 function reverseErrorEl(): HTMLElement | null {
-  return document.querySelector("[data-reverse-error]");
+  return document.querySelector("[data-post-error]");
 }
 
 // React tracks a controlled textarea's DOM value on the node instance to

@@ -215,7 +215,7 @@ function ReverseFormSlot({
       <div data-reserved-alert-slot="">
         {error !== null ? (
           <p
-            data-reverse-error=""
+            data-post-error=""
             role="alert"
             aria-live="assertive"
             aria-atomic="true"
@@ -267,7 +267,7 @@ function InvitePasteSlot({
     <div data-invite-slot="" className="mt-3 space-y-2">
       {error !== null ? (
         <p
-          data-claim-error=""
+          data-post-error=""
           className="text-sm text-rose-200"
           role="alert"
           aria-live="assertive"
@@ -1264,7 +1264,10 @@ export default function ResultsShell({
   // unrecoverable in this browser, so the CTA must stay disabled after the
   // in-flight claimBusy clears. It persists until a session/navigation reset.
   const [claimLocked, setClaimLocked] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
+  // AG-2.4 sole POST-error channel for the current row. The claim CTA and
+  // the reverse-invite form both write here; only one of them can be the
+  // active row at a time, so the two failure paths never collide.
+  const [postError, setPostError] = useState<string | null>(null);
   // Holds the session id of the in-flight claim, or null when idle. Using the
   // id (not a bool) lets an old claim's finally avoid clearing a newer
   // session's lock after a navigation reset cleared the shared ref.
@@ -1274,10 +1277,10 @@ export default function ResultsShell({
   // effect-timing gap.
   const currentSessionIdRef = useRef<string | null>(null);
   // AG-1.5 reverse-invite form state. The textarea stays controlled and its
-  // busy/error/lock trio mirrors the AG-1.4 claim race-safety shape.
+  // busy/lock pair mirrors the AG-1.4 claim race-safety shape; its error now
+  // shares the postError channel above.
   const [reverseValue, setReverseValue] = useState("");
   const [reverseBusy, setReverseBusy] = useState(false);
-  const [reverseError, setReverseError] = useState<string | null>(null);
   // Holds the session id of the in-flight reverse POST, or null when idle.
   // Reverse POST is not cached, so unlike claimLockRef this only guards
   // against a double submit while one request is outstanding.
@@ -1286,6 +1289,14 @@ export default function ResultsShell({
   // callback can tell whether polling already left paste_s2 while its POST
   // was in flight, with no effect-timing gap.
   const guidanceKeyRef = useRef<string | null>(null);
+  // AG-2.4 sole POST-error channel. Cleared synchronously during render
+  // (see the guidanceKeyRef assignment below) whenever the displayed
+  // instruction changes, so a stale claim or reverse failure never survives
+  // past the row it happened on, not even for one committed frame. A fresh
+  // POST attempt clears it directly (see handleClaimInvite /
+  // handleReverseInvite), and a repeat poll of the same instruction leaves
+  // guidanceKey unchanged, so this does not fire on every poll.
+  const prevGuidanceKeyRef = useRef(guidanceKey);
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
@@ -1341,11 +1352,10 @@ export default function ResultsShell({
     setCachedInvite(null);
     setClaimBusy(false);
     setClaimLocked(false);
-    setClaimError(null);
+    setPostError(null);
     claimLockRef.current = null;
     setReverseValue("");
     setReverseBusy(false);
-    setReverseError(null);
     reverseLockRef.current = null;
     if (copyTimerRef.current !== null) {
       clearTimeout(copyTimerRef.current);
@@ -1461,6 +1471,10 @@ export default function ResultsShell({
 
   currentSessionIdRef.current = session?.id ?? null;
   guidanceKeyRef.current = guidanceKey;
+  if (prevGuidanceKeyRef.current !== guidanceKey) {
+    prevGuidanceKeyRef.current = guidanceKey;
+    setPostError(null);
+  }
 
   const projection = projectResultsPage({
     poll,
@@ -1558,7 +1572,7 @@ export default function ResultsShell({
     }
     claimLockRef.current = claimSessionId;
     setClaimBusy(true);
-    setClaimError(null);
+    setPostError(null);
     try {
       const result = await claimInvite(claimSessionId, requestDeps(config));
       // Ignore a stale resolution entirely once the session changed.
@@ -1579,28 +1593,41 @@ export default function ResultsShell({
         settleCopyOutcome(ok, invite, CLAIM_COPY_FAILURE_TEXT);
         return;
       }
-      if (result.status === 410) {
+      // A late failure response must not overwrite postError once the
+      // instruction has already advanced past paste_s1 for this session.
+      // Caching above is unaffected: only these announcement writes guard on
+      // guidanceKey, matching AG-1.5's reverse-handler pattern.
+      if (
+        claimSessionId !== currentSessionIdRef.current
+        || guidanceKeyRef.current !== "paste_s1"
+      ) {
+        return;
+      }
+      if (result.error === "INVITE_ALREADY_CLAIMED") {
         const cached = readStoredInvite(claimSessionId);
         if (cached !== null) {
           setCachedInvite(cached);
           const ok = await copyText(cached);
-          if (claimSessionId !== currentSessionIdRef.current) {
+          if (
+            claimSessionId !== currentSessionIdRef.current
+            || guidanceKeyRef.current !== "paste_s1"
+          ) {
             return;
           }
           settleCopyOutcome(ok, cached, CLAIM_COPY_FAILURE_TEXT);
         } else {
           // Already claimed and unrecoverable here: show locked copy and keep
           // the CTA disabled permanently for this session.
-          setClaimError(actionErrorCopy("claim_410_no_cache"));
+          setPostError(actionErrorCopy("claim_410_no_cache"));
           setClaimLocked(true);
         }
         return;
       }
-      if (result.status === 409) {
-        setClaimError(actionErrorCopy("claim_409_session_not_ready"));
+      if (result.error === "SESSION_NOT_READY") {
+        setPostError(actionErrorCopy("claim_409_session_not_ready"));
         return;
       }
-      setClaimError(
+      setPostError(
         result.message !== "" ? result.message : "Could not claim the invitation.",
       );
     } finally {
@@ -1633,7 +1660,7 @@ export default function ResultsShell({
     // of the invite string and must reach the backend unchanged.
     const trimmed = reverseValue.trim();
     if (trimmed.length > MAX_REVERSE_INVITE_LENGTH) {
-      setReverseError(REVERSE_INVITE_TOO_LONG_TEXT);
+      setPostError(REVERSE_INVITE_TOO_LONG_TEXT);
       return;
     }
     if (reverseLockRef.current !== null) {
@@ -1642,7 +1669,7 @@ export default function ResultsShell({
     const reverseSessionId = session.id;
     reverseLockRef.current = reverseSessionId;
     setReverseBusy(true);
-    setReverseError(null);
+    setPostError(null);
     try {
       const result = await postReverseInvite(reverseSessionId, trimmed, requestDeps(config));
       // Ignore a stale resolution: either the session changed, or polling
@@ -1655,10 +1682,10 @@ export default function ResultsShell({
         return;
       }
       if (result.ok) {
-        setReverseError(null);
+        setPostError(null);
         return;
       }
-      setReverseError(reverseInviteErrorCopy(result));
+      setPostError(reverseInviteErrorCopy(result));
     } finally {
       // Only release the in-flight lock this submit actually still owns.
       if (reverseLockRef.current === reverseSessionId) {
@@ -1828,13 +1855,13 @@ export default function ResultsShell({
                   value={reverseValue}
                   onChange={setReverseValue}
                   busy={reverseBusy}
-                  error={reverseError}
+                  error={postError}
                   onSubmit={() => {
                     void handleReverseInvite();
                   }}
                 />
               ) : isClaimRow ? (
-                <InvitePasteSlot invite={cachedInvite} error={claimError} />
+                <InvitePasteSlot invite={cachedInvite} error={postError} />
               ) : undefined;
             return (
               <StepRow
