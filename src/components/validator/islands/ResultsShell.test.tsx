@@ -36,7 +36,7 @@ import ResultsShell, {
   stripBracketedMarkers,
 } from "./ResultsShell";
 import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
-import type { EvidenceItem } from "../atoms/EvidenceDisclosure";
+import type { EvidenceItem } from "../lib/evidence/types";
 import { resolveValidatorMachine } from "../lib/stateMachine";
 import { ACTION_ERROR_COPY, UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "../lib/validatorGuidance";
 import {

@@ -6,20 +6,10 @@ import React, { useId, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import FieldRow from "../../observatory/stack/cards/FieldRow";
 import Pill, { type GradeKind } from "./Pill";
+import type { EvidenceGrade, EvidenceItem } from "../lib/evidence/types";
 import { reasonCopyFor } from "../lib/validatorReasons";
 
-export interface EvidenceItem {
-  area?: string;
-  scoreArea?: string;
-  leg?: string;
-  step?: string;
-  reasonCode?: string;
-  severity?: string;
-  grade?: GradeKind | null;
-  affectsGrade?: boolean;
-  payloadRedacted?: boolean;
-  createdAt?: string;
-}
+export type { EvidenceGrade, EvidenceItem };
 
 export interface EvidenceDisclosureProps {
   title: string;

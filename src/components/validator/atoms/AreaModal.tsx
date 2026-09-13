@@ -5,9 +5,10 @@
  */
 import React, { useId, useRef, useState } from "react";
 import { OverlayFrame } from "../../observatory/modal/OverlayFrame";
-import EvidenceDisclosure, { type EvidenceItem } from "./EvidenceDisclosure";
+import EvidenceDisclosure from "./EvidenceDisclosure";
 import Pill, { type GradeKind } from "./Pill";
 import RawJsonPanel from "./RawJsonPanel";
+import type { EvidenceItem } from "../lib/evidence/types";
 import { reasonCopyFor, selectPrimaryReasonItem } from "../lib/validatorReasons";
 import type { CanonicalAreaId } from "../lib/validatorScore";
 

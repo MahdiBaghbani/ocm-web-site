@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { CircleCheck, CircleMinus, CircleX, TriangleAlert } from "lucide-react";
 import AreaGrid from "../atoms/AreaGrid";
 import AreaModal from "../atoms/AreaModal";
-import EvidenceDisclosure, { type EvidenceItem } from "../atoms/EvidenceDisclosure";
+import EvidenceDisclosure from "../atoms/EvidenceDisclosure";
 import ReportJsonModal from "../atoms/ReportJsonModal";
 import StepRow from "../atoms/StepRow";
 import VerdictBanner, {
@@ -15,6 +15,7 @@ import VerdictBanner, {
   type VerdictKind,
 } from "../atoms/VerdictBanner";
 import type { GradeKind } from "../atoms/Pill";
+import type { EvidenceItem } from "../lib/evidence/types";
 import {
   fetchConfigSource,
   loadValidatorConfig,
