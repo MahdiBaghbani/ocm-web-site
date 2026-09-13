@@ -88,6 +88,7 @@ import {
   EXPIRED_EVIDENCE_NOTE,
   projectSessionFailure,
 } from "../lib/results/sessionFailures";
+import { isSameSessionId, isStaleSessionId } from "../lib/results/sessionIdentity";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
@@ -1353,7 +1354,7 @@ export default function ResultsShell({
     if (cachedInvite !== null) {
       const ok = await copyText(cachedInvite);
       // A copy that resolves after navigation must not re-announce for B.
-      if (claimSessionId !== currentSessionIdRef.current) {
+      if (isStaleSessionId(claimSessionId, currentSessionIdRef.current)) {
         return;
       }
       settleCopyOutcome(ok, cachedInvite, CLAIM_COPY_FAILURE_TEXT);
@@ -1368,7 +1369,7 @@ export default function ResultsShell({
     try {
       const result = await claimInvite(claimSessionId, requestDeps(config));
       // Ignore a stale resolution entirely once the session changed.
-      if (claimSessionId !== currentSessionIdRef.current) {
+      if (isStaleSessionId(claimSessionId, currentSessionIdRef.current)) {
         return;
       }
       if (result.ok) {
@@ -1379,7 +1380,7 @@ export default function ResultsShell({
         writeStoredInvite(claimSessionId, invite);
         const ok = await copyText(invite);
         // Navigation during the copy await must not re-announce for B.
-        if (claimSessionId !== currentSessionIdRef.current) {
+        if (isStaleSessionId(claimSessionId, currentSessionIdRef.current)) {
           return;
         }
         settleCopyOutcome(ok, invite, CLAIM_COPY_FAILURE_TEXT);
@@ -1390,7 +1391,7 @@ export default function ResultsShell({
       // Caching above is unaffected: only these announcement writes guard on
       // guidanceKey, matching AG-1.5's reverse-handler pattern.
       if (
-        claimSessionId !== currentSessionIdRef.current
+        isStaleSessionId(claimSessionId, currentSessionIdRef.current)
         || guidanceKeyRef.current !== "paste_s1"
       ) {
         return;
@@ -1401,7 +1402,7 @@ export default function ResultsShell({
           setCachedInvite(cached);
           const ok = await copyText(cached);
           if (
-            claimSessionId !== currentSessionIdRef.current
+            isStaleSessionId(claimSessionId, currentSessionIdRef.current)
             || guidanceKeyRef.current !== "paste_s1"
           ) {
             return;
@@ -1425,12 +1426,12 @@ export default function ResultsShell({
     } finally {
       // Only release the in-flight lock this claim actually still owns; a
       // newer session may have reset the shared ref or acquired its own lock.
-      if (claimLockRef.current === claimSessionId) {
+      if (isSameSessionId(claimLockRef.current, claimSessionId)) {
         claimLockRef.current = null;
       }
       // Never clear a newer session's transient busy state. claimLocked is
       // intentionally left untouched here so an uncached-410 lock persists.
-      if (claimSessionId === currentSessionIdRef.current) {
+      if (isSameSessionId(claimSessionId, currentSessionIdRef.current)) {
         setClaimBusy(false);
       }
     }
@@ -1468,7 +1469,7 @@ export default function ResultsShell({
       // already left paste_s2 while this POST was in flight. Neither the
       // 200 nor the error is state truth; only the poll loop is.
       if (
-        reverseSessionId !== currentSessionIdRef.current ||
+        isStaleSessionId(reverseSessionId, currentSessionIdRef.current) ||
         guidanceKeyRef.current !== "paste_s2"
       ) {
         return;
@@ -1480,13 +1481,13 @@ export default function ResultsShell({
       setPostError(reverseInviteErrorCopy(result));
     } finally {
       // Only release the in-flight lock this submit actually still owns.
-      if (reverseLockRef.current === reverseSessionId) {
+      if (isSameSessionId(reverseLockRef.current, reverseSessionId)) {
         reverseLockRef.current = null;
       }
       // Busy clears on session identity alone (matching AG-1.4): once this
       // session's own POST settles, the submit button must re-enable even
       // if polling already moved past paste_s2 and unmounted the form.
-      if (reverseSessionId === currentSessionIdRef.current) {
+      if (isSameSessionId(reverseSessionId, currentSessionIdRef.current)) {
         setReverseBusy(false);
       }
     }
