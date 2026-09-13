@@ -62,6 +62,7 @@ import {
   progressAnnouncement,
   stripBracketedMarkers,
 } from "../lib/results/progress";
+import { projectActionRows } from "../lib/results/actionRows";
 import { projectProgressCollections } from "../lib/results/collections";
 import {
   projectSessionStart,
@@ -85,6 +86,10 @@ export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
 export { INITIAL_LIVE_INSTRUCTION_HOLD, stabilizeLiveView };
 export { resultAreaEntries } from "../lib/results/collections";
+export {
+  COPY_AGAIN_LABEL,
+  COPY_INVITATION_LABEL,
+} from "../lib/results/actionRows";
 
 export interface ResultsShellProps {
   host?: string;
@@ -874,9 +879,7 @@ export type CopyNotice = {
 export const EMPTY_COPY_NOTICE: CopyNotice = { ok: true, text: "" };
 export const COPY_SUCCESS_TEXT = "Copied";
 
-// AG-1.4 claim CTA copy and cached-invite field labels.
-export const COPY_INVITATION_LABEL = "Copy invitation";
-export const COPY_AGAIN_LABEL = "Copy again";
+// AG-1.4 cached-invite field label. Claim CTA labels live in actionRows.
 export const INVITE_FIELD_LABEL = "Invitation";
 export const CLAIM_COPY_FAILURE_TEXT =
   "Could not copy the invitation. Select and copy it from the field below.";
@@ -1573,6 +1576,21 @@ export default function ResultsShell({
     projection.status === "live"
       ? liveViewReportHref(config?.validatorApiOrigin ?? "", session.id)
       : null;
+  const actionRows = projectActionRows({
+    status: projection.status,
+    visibility: projection.visibility,
+    sourceKind: projection.sourceKind,
+    showPublicActions: projection.showPublicActions,
+    reportUrl: projection.reportUrl,
+    bannerVerdict: projection.bannerVerdict,
+    guidanceKey,
+    cachedInvite,
+    claimBusy,
+    claimLocked,
+    reverseBusy,
+    liveReportHref,
+    steps: collections.steps,
+  });
   const rawJsonLabel = "View full report JSON";
   // Normal ready/live results surface the full report JSON as a low-emphasis
   // footer action; the malformed terminal keeps a prominent action button.
@@ -1611,7 +1629,7 @@ export default function ResultsShell({
           <p className="mt-1 break-all text-sm text-zinc-400">
             Session {session.id}
           </p>
-          {projection.status !== "not_saved_empty" ? (
+          {actionRows.pageLink.visible ? (
             <>
               <button
                 type="button"
@@ -1620,11 +1638,9 @@ export default function ResultsShell({
                   void handleCopyPageLink();
                 }}
               >
-                Copy page link
+                {actionRows.pageLink.label}
               </button>
-              {projection.status === "ready" &&
-              projection.visibility === "not_saved" &&
-              projection.sourceKind === "cached_session" ? (
+              {actionRows.pageLink.showNotSavedNotice ? (
                 <p className="mt-2 text-sm text-zinc-400">
                   {PAGE_LINK_NOT_SAVED_NOTICE}
                 </p>
@@ -1673,47 +1689,42 @@ export default function ResultsShell({
         <p className="text-sm text-zinc-400">Loading session...</p>
       ) : projection.status === "live" ? (
         <div className="space-y-3" data-step-list="">
-          {collections.steps.map((row) => {
-            const { step, status, index, isCurrent } = row;
-            const isClaimRow = isCurrent && guidanceKey === "paste_s1";
-            const claimLabel =
-              cachedInvite !== null ? COPY_AGAIN_LABEL : COPY_INVITATION_LABEL;
-            const isReverseFormRow = isCurrent && guidanceKey === "paste_s2";
+          {actionRows.liveRows.map((row) => {
             const rowFormSlot =
-              step === "reverse" ? (
+              row.reverseMounted ? (
                 <ReverseFormSlot
-                  active={isReverseFormRow}
+                  active={row.reverseActive}
                   value={reverseValue}
                   onChange={setReverseValue}
-                  busy={reverseBusy}
+                  busy={row.reverseBusy}
                   error={postError}
                   onSubmit={() => {
                     void handleReverseInvite();
                   }}
                 />
-              ) : isClaimRow ? (
+              ) : row.showInviteSlot ? (
                 <InvitePasteSlot invite={cachedInvite} error={postError} />
               ) : undefined;
             return (
               <StepRow
-                key={step}
-                step={step}
-                status={status}
-                index={index}
-                guidance={isCurrent ? currentRowGuidance : undefined}
-                ctaLabel={isClaimRow ? claimLabel : undefined}
+                key={row.step}
+                step={row.step}
+                status={row.status}
+                index={row.index}
+                guidance={row.isCurrent ? currentRowGuidance : undefined}
+                ctaLabel={row.claimLabel}
                 onCta={
-                  isClaimRow
+                  row.isClaimRow
                     ? () => {
                         void handleClaimInvite();
                       }
                     : undefined
                 }
-                disabled={isClaimRow ? claimBusy || claimLocked : undefined}
-                ctaHref={isCurrent && liveReportHref !== null ? liveReportHref : undefined}
+                disabled={row.claimDisabled}
+                ctaHref={row.liveReportHref}
                 formSlot={rowFormSlot}
-                cardRef={isCurrent ? currentCardRef : undefined}
-                cardTabIndex={isCurrent && restoreCurrentCardFocus ? -1 : undefined}
+                cardRef={row.isCurrent ? currentCardRef : undefined}
+                cardTabIndex={row.isCurrent && restoreCurrentCardFocus ? -1 : undefined}
               />
             );
           })}
@@ -1807,18 +1818,15 @@ export default function ResultsShell({
           ) : null}
         </div>
       ) : null}
-      {projection.status === "ready" &&
-      projection.showPublicActions &&
-      projection.reportUrl !== null &&
-      projection.bannerVerdict !== "interrupted" ? (
+      {actionRows.publicReport.visible ? (
         <div className="flex flex-col gap-2 sm:flex-row">
           <a
-            href={projection.reportUrl}
+            href={actionRows.publicReport.reportUrl}
             className={ACTION_BTN}
             target="_blank"
             rel="noreferrer"
           >
-            Open public report
+            {actionRows.publicReport.openLabel}
           </a>
           <button
             type="button"
@@ -1827,11 +1835,11 @@ export default function ResultsShell({
               void handleCopyReport();
             }}
           >
-            Copy public report link
+            {actionRows.publicReport.copyLabel}
           </button>
         </div>
       ) : null}
-      {projection.bannerVerdict === "interrupted" ? (
+      {actionRows.interruptedRecovery.visible ? (
         <div className="flex flex-wrap gap-2"><RunNewCheck href={testHref} /></div>
       ) : null}
       {projection.status === "ready" || projection.status === "live" ? (
