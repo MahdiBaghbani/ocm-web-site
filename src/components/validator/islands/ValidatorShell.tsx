@@ -215,7 +215,7 @@ export function ValidatorEntryForm({
         <OptInRow
           id="validator-opt-in-active"
           label="Run active validation"
-          hint="Tests live sharing steps and may ask you to complete actions during the scan. Off runs passive checks only."
+          hint="Active test: you will accept an OCM invitation on the target server, paste its return invitation here, open a shared test file there, and share a file back. You need an account on the target server. Only one active test can run on that target at a time."
           checked={optInActive}
           disabled={activeDisabled}
           statusText={activeStatus}

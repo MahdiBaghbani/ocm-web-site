@@ -71,7 +71,7 @@ describe("ValidatorShell entry form", () => {
     expect(html).toContain("Saves the result after this session so anyone with the link can view it. The validator retention policy applies.");
     expect(html).toContain("Run active validation");
     expect(html).toContain(
-      "Tests live sharing steps and may ask you to complete actions during the scan. Off runs passive checks only.",
+      "Active test: you will accept an OCM invitation on the target server, paste its return invitation here, open a shared test file there, and share a file back. You need an account on the target server. Only one active test can run on that target at a time.",
     );
     expect(html).toContain("Contribute to public statistics");
     expect(html).toContain("Adds aggregate data after enough unique hosts are in the public window. It does not create a public report for this server.");
@@ -108,7 +108,7 @@ describe("ValidatorShell entry form", () => {
     );
     expect(html).toContain("Run active validation");
     expect(html).toContain(
-      "Tests live sharing steps and may ask you to complete actions during the scan. Off runs passive checks only.",
+      "Active test: you will accept an OCM invitation on the target server, paste its return invitation here, open a shared test file there, and share a file back. You need an account on the target server. Only one active test can run on that target at a time.",
     );
     expect(isDisabled(html, "validator-opt-in-active")).toBe(true);
     expect(html).toContain("Extra scan options are unavailable. You can still run a basic check.");
