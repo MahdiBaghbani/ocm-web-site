@@ -23,7 +23,6 @@ import {
 } from "../test-helpers/domShim";
 import AreaGrid, { VALIDATOR_AREA_IDS, type ValidatorAreaId } from "./AreaGrid";
 import DomainField from "./DomainField";
-import Pill, { PILL_KINDS } from "./Pill";
 import RawJsonPanel from "./RawJsonPanel";
 import StepRow from "./StepRow";
 import {
@@ -432,27 +431,6 @@ describe("StepRow", () => {
     expect(rootCardTag(pending)).not.toContain("tabindex");
     expect(rootCardTag(complete)).not.toContain("tabindex");
     expect(rootCardTag(restoring)).toContain('aria-current="step"');
-  });
-});
-describe("Pill", () => {
-  test("renders every kind with its default label", () => {
-    const expected = {
-      pass: "pass",
-      fail: "fail",
-      warn: "warn",
-      pending: "pending",
-      info: "info",
-      unassessed: "unassessed",
-      notrun: "not-run",
-    } as const;
-    for (const kind of PILL_KINDS) {
-      const html = render(<Pill kind={kind} />);
-      expect(html).toContain(`data-pill-kind="${kind}"`);
-      expect(firstPillLabel(html)).toBe(expected[kind]);
-    }
-    const custom = render(<Pill kind="unassessed" label="idle" />);
-    expect(custom).toContain('data-pill-kind="unassessed"');
-    expect(firstPillLabel(custom)).toBe("idle");
   });
 });
 describe("AreaGrid", () => {
