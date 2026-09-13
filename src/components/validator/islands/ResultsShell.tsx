@@ -75,6 +75,7 @@ import {
   stabilizeLiveView,
   type LiveInstructionHold,
 } from "../lib/results/stabilizeLiveView";
+import { projectTransportFailure } from "../lib/results/transportFailure";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
@@ -1578,6 +1579,11 @@ export default function ResultsShell({
       ? null
       : resultAreas.find((entry) => entry.area === selectedArea) ?? null;
   const statusText = progressStatusText(projection.status, view, guidanceKey);
+  const transportFailure = projectTransportFailure(
+    error,
+    projection.status,
+    projection.reportFailure,
+  );
   const currentRowGuidance: GuidanceRecord | null = sanitizeGuidanceRecord(
     guidanceFor(guidanceKey),
   );
@@ -1677,13 +1683,15 @@ export default function ResultsShell({
         </p>
       ) : null}
       <CopyNoticeRegion notice={copyNotice} fallbackValue={copyFallback} />
-      {error !== "" ? (
+      {transportFailure.poll !== null ? (
         <div className="space-y-3">
           <p className="text-sm text-rose-200" role="alert">
-            We could not update this scan. {error}
+            {transportFailure.poll.message}
           </p>
           <div className="flex flex-wrap gap-2">
-            <ReloadButton label="Try again" />
+            {transportFailure.poll.showRetry ? (
+              <ReloadButton label={transportFailure.poll.retryLabel} />
+            ) : null}
             <RunNewCheck href={testHref} />
           </div>
         </div>
@@ -1787,16 +1795,15 @@ export default function ResultsShell({
           <RunNewCheck href={testHref} />
         </div>
       ) : null}
-      {projection.status === "report_error" ? (
+      {transportFailure.report !== null ? (
         <div className="space-y-3">
           <p className="text-sm text-rose-200" role="alert">
-            We could not load this report.
-            {projection.reportFailure !== null && projection.reportFailure.message !== ""
-              ? ` ${projection.reportFailure.message}`
-              : ""}
+            {transportFailure.report.message}
           </p>
           <div className="flex flex-wrap gap-2">
-            <ReloadButton label="Try loading again" />
+            {transportFailure.report.showRetry ? (
+              <ReloadButton label={transportFailure.report.retryLabel} />
+            ) : null}
             <RunNewCheck href={testHref} />
           </div>
         </div>
