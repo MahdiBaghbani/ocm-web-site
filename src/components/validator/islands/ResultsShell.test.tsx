@@ -46,6 +46,13 @@ import {
   type SessionPollResponse,
   type ValidatorFailure,
 } from "../lib/validatorFetch";
+import {
+  installDomShim,
+  reactDomContainerOf,
+  ShimEvent,
+  ShimNode,
+} from "../test-helpers/domShim";
+import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
 const API_ORIGIN = "https://validator.example.com";
@@ -738,207 +745,6 @@ describe("evidenceMode discloses anonymous and terminal-session evidence", () =>
     expect(result.evidenceMode).toBe("none");
   });
 });
-
-const ELEMENT_NODE = 1;
-const TEXT_NODE = 3;
-const DOCUMENT_NODE = 9;
-type ShimFn = (event: ShimEvent) => void;
-type ShimRec = { fn: ShimFn; capture: boolean };
-type ShimFnArg = ShimFn | Record<string, unknown>;
-type ShimOpts = boolean | { capture?: boolean };
-function captureOf(options?: ShimOpts): boolean {
-  return typeof options === "boolean" ? options : options?.capture === true;
-}
-
-class ShimEvent {
-  type: string; bubbles: boolean; target: ShimNode | null = null; currentTarget: ShimNode | null = null;
-  cancelable = true; defaultPrevented = false; isTrusted = false; timeStamp = Date.now(); stopped = false;
-  constructor(type: string, bubbles = true) { this.type = type; this.bubbles = bubbles; }
-  preventDefault(): void { this.defaultPrevented = true; }
-  stopPropagation(): void { this.stopped = true; }
-  stopImmediatePropagation(): void { this.stopped = true; }
-}
-
-class ShimNode {
-  nodeType: number; nodeName: string; tagName: string; ownerDocument!: ShimDocument;
-  parentNode: ShimNode | null = null; childNodes: ShimNode[] = []; nodeValue = "";
-  style: Record<string, string> = {}; attrs = new Map<string, string>(); listeners = new Map<string, ShimRec[]>();
-  constructor(doc: ShimDocument | null, nodeType: number, name: string) {
-    this.nodeType = nodeType; this.nodeName = name; this.tagName = name;
-    if (doc !== null) this.ownerDocument = doc;
-  }
-  get firstChild(): ShimNode | null { return this.childNodes[0] ?? null; }
-  get lastChild(): ShimNode | null { return this.childNodes.at(-1) ?? null; }
-  get nextSibling(): ShimNode | null {
-    const parent = this.parentNode;
-    return parent === null ? null : (parent.childNodes[parent.childNodes.indexOf(this) + 1] ?? null);
-  }
-  get textContent(): string {
-    return this.nodeType === TEXT_NODE ? this.nodeValue : this.childNodes.map((child) => child.textContent).join("");
-  }
-  set textContent(value: string) {
-    this.childNodes = [];
-    if (value === "") return;
-    const text = new ShimNode(this.ownerDocument, TEXT_NODE, "#text");
-    text.nodeValue = value; text.parentNode = this; this.childNodes.push(text);
-  }
-  contains(other: ShimNode): boolean {
-    for (let node: ShimNode | null = other; node !== null; node = node.parentNode) {
-      if (node === this) return true;
-    }
-    return false;
-  }
-  appendChild(node: ShimNode): ShimNode {
-    node.parentNode?.removeChild(node);
-    node.parentNode = this; this.childNodes.push(node); return node;
-  }
-  removeChild(node: ShimNode): ShimNode {
-    const index = this.childNodes.indexOf(node);
-    if (index !== -1) { this.childNodes.splice(index, 1); node.parentNode = null; }
-    return node;
-  }
-  insertBefore(node: ShimNode, before: ShimNode | null): ShimNode {
-    if (before === null) return this.appendChild(node);
-    node.parentNode?.removeChild(node);
-    const index = this.childNodes.indexOf(before);
-    node.parentNode = this;
-    this.childNodes.splice(index === -1 ? this.childNodes.length : index, 0, node);
-    return node;
-  }
-  get children(): ShimNode[] {
-    return this.childNodes.filter((child) => child.nodeType === ELEMENT_NODE);
-  }
-  get isConnected(): boolean {
-    let node: ShimNode | null = this;
-    while (node !== null) {
-      if (node.nodeType === DOCUMENT_NODE) return true;
-      node = node.parentNode;
-    }
-    return false;
-  }
-  setAttribute(name: string, value: string): void { this.attrs.set(name, String(value)); }
-  setAttributeNS(_ns: string, name: string, value: string): void { this.setAttribute(name, value); }
-  getAttribute(name: string): string | null {
-    return this.attrs.has(name) ? (this.attrs.get(name) ?? "") : null;
-  }
-  hasAttribute(name: string): boolean { return this.attrs.has(name); }
-  removeAttribute(name: string): void { this.attrs.delete(name); }
-  querySelectorAll(_selector: string): ShimNode[] { return []; }
-  querySelector(_selector: string): ShimNode | null { return null; }
-  closest(_selector: string): ShimNode | null { return null; }
-  focus(): void { this.ownerDocument.activeElement = this; }
-  addEventListener(type: string, listener: ShimFnArg, options?: ShimOpts): void {
-    if (typeof listener !== "function") return;
-    const list = this.listeners.get(type) ?? [];
-    list.push({ fn: listener, capture: captureOf(options) }); this.listeners.set(type, list);
-  }
-  removeEventListener(type: string, listener: ShimFnArg, options?: ShimOpts): void {
-    if (typeof listener !== "function") return;
-    const capture = captureOf(options);
-    const list = this.listeners.get(type);
-    if (list === undefined) return;
-    this.listeners.set(type, list.filter((entry) => entry.fn !== listener || entry.capture !== capture));
-  }
-  dispatchEvent(event: ShimEvent): boolean {
-    event.target = this;
-    const path: ShimNode[] = [];
-    for (let node: ShimNode | null = this; node !== null; node = node.parentNode) path.push(node);
-    for (let i = path.length - 1; i >= 0 && !event.stopped; i -= 1) path[i]?.emit(event, true);
-    for (const node of path) { if (event.stopped) break; node.emit(event, false); }
-    return !event.defaultPrevented;
-  }
-  emit(event: ShimEvent, capture: boolean): void {
-    event.currentTarget = this;
-    for (const rec of this.listeners.get(event.type) ?? []) { if (rec.capture === capture) rec.fn(event); }
-  }
-}
-
-class ShimDocument extends ShimNode {
-  defaultView: ShimWindow | null = null;
-  documentElement: ShimNode; head: ShimNode; body: ShimNode; activeElement: ShimNode | null;
-  constructor() {
-    super(null, DOCUMENT_NODE, "#document");
-    this.ownerDocument = this;
-    this.documentElement = new ShimNode(this, ELEMENT_NODE, "HTML");
-    this.head = new ShimNode(this, ELEMENT_NODE, "HEAD");
-    this.body = new ShimNode(this, ELEMENT_NODE, "BODY");
-    this.activeElement = this.body;
-    this.appendChild(this.documentElement);
-    this.documentElement.appendChild(this.head);
-    this.documentElement.appendChild(this.body);
-  }
-  createElement(name: string): ShimNode { return new ShimNode(this, ELEMENT_NODE, name.toUpperCase()); }
-  createElementNS(_ns: string, name: string): ShimNode { return this.createElement(name); }
-  createTextNode(value: string): ShimNode {
-    const text = new ShimNode(this, TEXT_NODE, "#text");
-    text.nodeValue = value;
-    return text;
-  }
-}
-
-class HTMLIFrameElement {}
-
-class ShimWindow {
-  document: ShimDocument; event: undefined = undefined; navigator = { userAgent: "shim" };
-  location = { protocol: "https:", href: "https://localhost/" };
-  top: ShimWindow; self: ShimWindow; HTMLIFrameElement = HTMLIFrameElement; host: ShimNode;
-  constructor(doc: ShimDocument) {
-    this.document = doc; this.top = this; this.self = this;
-    this.host = new ShimNode(doc, ELEMENT_NODE, "WINDOW");
-  }
-  addEventListener(type: string, listener: ShimFnArg, options?: ShimOpts): void {
-    this.host.addEventListener(type, listener, options);
-  }
-  removeEventListener(type: string, listener: ShimFnArg, options?: ShimOpts): void {
-    this.host.removeEventListener(type, listener, options);
-  }
-}
-
-type ShimGlobalSlots = {
-  window?: ShimWindow;
-  document?: ShimDocument;
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-
-function shimGlobalSlots(): ShimGlobalSlots {
-  return globalThis as unknown as ShimGlobalSlots;
-}
-
-function reactDomContainerOf(node: ShimNode): Element {
-  return node as unknown as Element;
-}
-
-function installDomShim(): { document: ShimDocument; restore: () => void } {
-  const globals = shimGlobalSlots();
-  const htmlHost = globalThis as { HTMLElement?: unknown };
-  const owned = {
-    window: Object.prototype.hasOwnProperty.call(globals, "window"),
-    document: Object.prototype.hasOwnProperty.call(globals, "document"),
-    act: Object.prototype.hasOwnProperty.call(globals, "IS_REACT_ACT_ENVIRONMENT"),
-    html: Object.prototype.hasOwnProperty.call(htmlHost, "HTMLElement"),
-  };
-  const prev = {
-    window: globals.window,
-    document: globals.document,
-    act: globals.IS_REACT_ACT_ENVIRONMENT,
-    html: htmlHost.HTMLElement,
-  };
-  const doc = new ShimDocument();
-  const win = new ShimWindow(doc);
-  doc.defaultView = win; globals.window = win; globals.document = doc; globals.IS_REACT_ACT_ENVIRONMENT = true;
-  if (typeof htmlHost.HTMLElement === "undefined") {
-    htmlHost.HTMLElement = class HTMLElement {};
-  }
-  return {
-    document: doc,
-    restore: () => {
-      if (owned.window) globals.window = prev.window; else delete globals.window;
-      if (owned.document) globals.document = prev.document; else delete globals.document;
-      if (owned.act) globals.IS_REACT_ACT_ENVIRONMENT = prev.act; else delete globals.IS_REACT_ACT_ENVIRONMENT;
-      if (owned.html) htmlHost.HTMLElement = prev.html; else delete htmlHost.HTMLElement;
-    },
-  };
-}
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") {
@@ -2541,27 +2347,12 @@ describe("ResultsShell ready results IA", () => {
 });
 
 describe("ResultsShell public action row ready/live guard", () => {
-  let registrator: HappyDomRegistrator | null = null;
-
   beforeAll(async () => {
-    const specifier: string = "@happy-dom/global-registrator";
-    const mod = (await import(specifier)) as {
-      GlobalRegistrator?: HappyDomRegistrator;
-    };
-    if (mod.GlobalRegistrator === undefined) {
-      throw new Error(
-        "ResultsShell.test.tsx public-action tests need a DOM environment. " +
-          "Install the dev-only harness with " +
-          "`bun add -d happy-dom @happy-dom/global-registrator`.",
-      );
-    }
-    registrator = mod.GlobalRegistrator;
-    registrator.register({ url: "http://localhost/" });
-    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    await registerHappyDom();
   });
 
   afterAll(() => {
-    registrator?.unregister();
+    teardownHappyDom();
   });
 
   afterEach(() => {
@@ -3179,11 +2970,6 @@ describe("ResultsShell report-link visibility", () => {
   });
 });
 
-interface HappyDomRegistrator {
-  register: (options?: { url?: string }) => void;
-  unregister: () => void;
-}
-
 async function waitForDom(predicate: () => boolean): Promise<void> {
   const deadline = Date.now() + 2000;
   while (!predicate()) {
@@ -3199,26 +2985,12 @@ async function waitForDom(predicate: () => boolean): Promise<void> {
 }
 
 describe("ResultsShell area detail modal focus restoration", () => {
-  let registrator: HappyDomRegistrator | null = null;
-
   beforeAll(async () => {
-    const specifier: string = "@happy-dom/global-registrator";
-    const mod = (await import(specifier)) as {
-      GlobalRegistrator?: HappyDomRegistrator;
-    };
-    if (mod.GlobalRegistrator === undefined) {
-      throw new Error(
-        "ResultsShell.test.tsx focus tests need a DOM environment. Install the " +
-          "dev-only harness with `bun add -d happy-dom @happy-dom/global-registrator`.",
-      );
-    }
-    registrator = mod.GlobalRegistrator;
-    registrator.register({ url: "http://localhost/" });
-    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    await registerHappyDom();
   });
 
   afterAll(() => {
-    registrator?.unregister();
+    teardownHappyDom();
   });
 
   // Test-only focus harness for the deferred-restore ordering.
@@ -3543,27 +3315,12 @@ describe("ResultsShell area detail modal focus restoration", () => {
 });
 
 describe("ResultsShell loaded-evidence projection", () => {
-  let registrator: HappyDomRegistrator | null = null;
-
   beforeAll(async () => {
-    const specifier: string = "@happy-dom/global-registrator";
-    const mod = (await import(specifier)) as {
-      GlobalRegistrator?: HappyDomRegistrator;
-    };
-    if (mod.GlobalRegistrator === undefined) {
-      throw new Error(
-        "ResultsShell.test.tsx loaded-evidence tests need a DOM environment. " +
-          "Install the dev-only harness with " +
-          "`bun add -d happy-dom @happy-dom/global-registrator`.",
-      );
-    }
-    registrator = mod.GlobalRegistrator;
-    registrator.register({ url: "http://localhost/" });
-    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    await registerHappyDom();
   });
 
   afterAll(() => {
-    registrator?.unregister();
+    teardownHappyDom();
   });
 
   afterEach(() => {
@@ -3639,27 +3396,12 @@ function pageLinkButton(): HTMLButtonElement {
 }
 
 describe("ResultsShell page-link clipboard", () => {
-  let registrator: HappyDomRegistrator | null = null;
-
   beforeAll(async () => {
-    const specifier: string = "@happy-dom/global-registrator";
-    const mod = (await import(specifier)) as {
-      GlobalRegistrator?: HappyDomRegistrator;
-    };
-    if (mod.GlobalRegistrator === undefined) {
-      throw new Error(
-        "ResultsShell.test.tsx page-link clipboard tests need a DOM environment. " +
-          "Install the dev-only harness with " +
-          "`bun add -d happy-dom @happy-dom/global-registrator`.",
-      );
-    }
-    registrator = mod.GlobalRegistrator;
-    registrator.register({ url: "http://localhost/?host=peer.example&id=" + SESSION_ID });
-    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
   afterAll(() => {
-    registrator?.unregister();
+    teardownHappyDom();
   });
 
   afterEach(() => {
@@ -4608,27 +4350,12 @@ function findAnnouncement(): Element | undefined {
 }
 
 describe("ResultsShell current-row guidance, announce, and reserved slots", () => {
-  let registrator: HappyDomRegistrator | null = null;
-
   beforeAll(async () => {
-    const specifier: string = "@happy-dom/global-registrator";
-    const mod = (await import(specifier)) as {
-      GlobalRegistrator?: HappyDomRegistrator;
-    };
-    if (mod.GlobalRegistrator === undefined) {
-      throw new Error(
-        "ResultsShell.test.tsx current-row guidance tests need a DOM environment. " +
-          "Install the dev-only harness with " +
-          "`bun add -d happy-dom @happy-dom/global-registrator`.",
-      );
-    }
-    registrator = mod.GlobalRegistrator;
-    registrator.register({ url: "http://localhost/?host=peer.example&id=" + SESSION_ID });
-    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
   afterAll(() => {
-    registrator?.unregister();
+    teardownHappyDom();
   });
 
   afterEach(() => {
@@ -5312,27 +5039,12 @@ function installGatedSessionFetch(gate: SessionPollGate): () => void {
 }
 
 describe("ResultsShell focus order, live regions, and reserved layout", () => {
-  let registrator: HappyDomRegistrator | null = null;
-
   beforeAll(async () => {
-    const specifier: string = "@happy-dom/global-registrator";
-    const mod = (await import(specifier)) as {
-      GlobalRegistrator?: HappyDomRegistrator;
-    };
-    if (mod.GlobalRegistrator === undefined) {
-      throw new Error(
-        "ResultsShell.test.tsx focus-order tests need a DOM environment. " +
-          "Install the dev-only harness with " +
-          "`bun add -d happy-dom @happy-dom/global-registrator`.",
-      );
-    }
-    registrator = mod.GlobalRegistrator;
-    registrator.register({ url: "http://localhost/?host=peer.example&id=" + SESSION_ID });
-    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
   afterAll(() => {
-    registrator?.unregister();
+    teardownHappyDom();
   });
 
   afterEach(() => {
@@ -5614,26 +5326,12 @@ function inviteField(): HTMLInputElement | null {
 }
 
 describe("ResultsShell paste_s1 claim invitation", () => {
-  let registrator: HappyDomRegistrator | null = null;
-
   beforeAll(async () => {
-    const specifier: string = "@happy-dom/global-registrator";
-    const mod = (await import(specifier)) as {
-      GlobalRegistrator?: HappyDomRegistrator;
-    };
-    if (mod.GlobalRegistrator === undefined) {
-      throw new Error(
-        "ResultsShell.test.tsx claim tests need a DOM environment. Install the " +
-          "dev-only harness with `bun add -d happy-dom @happy-dom/global-registrator`.",
-      );
-    }
-    registrator = mod.GlobalRegistrator;
-    registrator.register({ url: "http://localhost/?host=peer.example&id=" + SESSION_ID });
-    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
   afterAll(() => {
-    registrator?.unregister();
+    teardownHappyDom();
   });
 
   afterEach(() => {
@@ -6497,26 +6195,12 @@ function installGatedReverseFetch(
 const VALID_REVERSE_INVITE = "dG9rZW5AcGVlci5leGFtcGxl";
 
 describe("ResultsShell paste_s2 reverse invite", () => {
-  let registrator: HappyDomRegistrator | null = null;
-
   beforeAll(async () => {
-    const specifier: string = "@happy-dom/global-registrator";
-    const mod = (await import(specifier)) as {
-      GlobalRegistrator?: HappyDomRegistrator;
-    };
-    if (mod.GlobalRegistrator === undefined) {
-      throw new Error(
-        "ResultsShell.test.tsx reverse-invite tests need a DOM environment. Install the " +
-          "dev-only harness with `bun add -d happy-dom @happy-dom/global-registrator`.",
-      );
-    }
-    registrator = mod.GlobalRegistrator;
-    registrator.register({ url: "http://localhost/?host=peer.example&id=" + SESSION_ID });
-    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+    await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
   afterAll(() => {
-    registrator?.unregister();
+    teardownHappyDom();
   });
 
   afterEach(() => {

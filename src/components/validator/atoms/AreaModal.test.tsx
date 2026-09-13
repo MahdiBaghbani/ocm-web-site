@@ -14,6 +14,7 @@ import AreaModal, { AreaModalContent } from "./AreaModal";
 import type { EvidenceItem } from "./EvidenceDisclosure";
 import type { CanonicalAreaId } from "../lib/validatorScore";
 import { VALIDATOR_REASONS } from "../lib/validatorReasons";
+import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
 
 const DISCOVERY: CanonicalAreaId = "discovery";
 
@@ -297,48 +298,12 @@ describe("AreaModalContent Summary reason copy", () => {
 
 let root: Root | null = null;
 
-interface DomRegistrator {
-  register: (options?: { url?: string }) => void;
-  unregister: () => void;
-}
-
-function isDomRegistrator(value: unknown): value is DomRegistrator {
-  if ((typeof value !== "object" && typeof value !== "function") || value === null) return false;
-  if (!("register" in value) || typeof value.register !== "function") return false;
-  if (!("unregister" in value) || typeof value.unregister !== "function") return false;
-  return true;
-}
-
-let registrator: DomRegistrator | null = null;
-
 beforeAll(async () => {
-  const specifier: string = "@happy-dom/global-registrator";
-  let mod: unknown;
-  try {
-    mod = await import(specifier);
-  } catch (cause) {
-    throw new Error(
-      "AreaModal.test.tsx needs a DOM environment. Install the dev-only " +
-        "harness with `bun add -d happy-dom @happy-dom/global-registrator` " +
-        "and re-run `bun test`.",
-      { cause },
-    );
-  }
-  if (
-    typeof mod !== "object" ||
-    mod === null ||
-    !("GlobalRegistrator" in mod) ||
-    !isDomRegistrator(mod.GlobalRegistrator)
-  ) {
-    throw new Error("happy-dom is installed but did not expose a GlobalRegistrator export.");
-  }
-  registrator = mod.GlobalRegistrator;
-  registrator.register({ url: "http://localhost/" });
-  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  await registerHappyDom("http://localhost/", "AreaModal.test.tsx");
 });
 
 afterAll(() => {
-  registrator?.unregister();
+  teardownHappyDom();
 });
 
 afterEach(() => {

@@ -10,6 +10,7 @@ import React, { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import ReportJsonModal from "./ReportJsonModal";
+import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
 
 const REPORT = {
   schema: "federation_tester_report.v1",
@@ -18,51 +19,14 @@ const REPORT = {
 };
 const NOTE = "This is the last live session snapshot.";
 
-interface DomRegistrator {
-  register: (options?: { url?: string }) => void;
-  unregister: () => void;
-}
-
-function isDomRegistrator(value: unknown): value is DomRegistrator {
-  if ((typeof value !== "object" && typeof value !== "function") || value === null) {
-    return false;
-  }
-  if (!("register" in value) || typeof value.register !== "function") return false;
-  if (!("unregister" in value) || typeof value.unregister !== "function") return false;
-  return true;
-}
-
-let registrator: DomRegistrator | null = null;
 let root: Root | null = null;
 
 beforeAll(async () => {
-  const specifier: string = "@happy-dom/global-registrator";
-  let mod: unknown;
-  try {
-    mod = await import(specifier);
-  } catch (cause) {
-    throw new Error(
-      "ReportJsonModal.test.tsx needs a DOM environment. Install the dev-only " +
-        "harness with `bun add -d happy-dom @happy-dom/global-registrator` " +
-        "and re-run `bun test`.",
-      { cause },
-    );
-  }
-  if (
-    typeof mod !== "object" ||
-    mod === null ||
-    !("GlobalRegistrator" in mod) ||
-    !isDomRegistrator(mod.GlobalRegistrator)
-  ) {
-    throw new Error("happy-dom is installed but did not expose a GlobalRegistrator export.");
-  }
-  registrator = mod.GlobalRegistrator;
-  registrator.register({ url: "http://localhost/" });
-  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  await registerHappyDom("http://localhost/", "ReportJsonModal.test.tsx");
 });
 
 afterAll(() => {
-  registrator?.unregister();
+  teardownHappyDom();
 });
 
 afterEach(() => {

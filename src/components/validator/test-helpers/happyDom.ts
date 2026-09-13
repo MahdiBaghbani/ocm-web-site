@@ -1,30 +1,55 @@
-// Shared happy-dom registration harness. Extracted from the repeated
-// dynamic-import blocks (currently duplicated across ResultsShell, AreaModal,
-// and ReportJsonModal tests) that register a real global document for tests
-// that need actual browser DOM behavior instead of the plain domShim.
+// Shared happy-dom registration harness. Extracted from the dynamic-import
+// blocks previously inlined in ResultsShell, AreaModal, and ReportJsonModal
+// tests; those tests now import this helper instead. Registers a real global
+// document for tests that need actual browser DOM behavior instead of the
+// plain domShim.
 
 export interface HappyDomRegistrator {
   register: (options?: { url?: string }) => void;
   unregister: () => void;
 }
 
+function isDomRegistrator(value: unknown): value is HappyDomRegistrator {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+    return false;
+  }
+  if (!("register" in value) || typeof value.register !== "function") return false;
+  if (!("unregister" in value) || typeof value.unregister !== "function") return false;
+  return true;
+}
+
 let registrator: HappyDomRegistrator | null = null;
 
 // Idempotent: a second call while already registered is a no-op, so nested
 // describe blocks can each call this in beforeAll without double-registering.
-export async function registerHappyDom(url = "http://localhost/"): Promise<void> {
+export async function registerHappyDom(
+  url = "http://localhost/",
+  label?: string,
+): Promise<void> {
   if (registrator !== null) {
     return;
   }
   const specifier: string = "@happy-dom/global-registrator";
-  const mod = (await import(specifier)) as {
-    GlobalRegistrator?: HappyDomRegistrator;
-  };
-  if (mod.GlobalRegistrator === undefined) {
+  let mod: unknown;
+  try {
+    mod = await import(specifier);
+  } catch (cause) {
+    const installHint =
+      "Install the dev-only harness with `bun add -d happy-dom @happy-dom/global-registrator` and re-run `bun test`.";
     throw new Error(
-      "happy-dom is installed but did not expose a GlobalRegistrator export. " +
-        "Install the dev-only harness with `bun add -d happy-dom @happy-dom/global-registrator`.",
+      label === undefined
+        ? `happy-dom global registrator failed to load. ${installHint}`
+        : `${label} needs a DOM environment. ${installHint}`,
+      { cause },
     );
+  }
+  if (
+    typeof mod !== "object" ||
+    mod === null ||
+    !("GlobalRegistrator" in mod) ||
+    !isDomRegistrator(mod.GlobalRegistrator)
+  ) {
+    throw new Error("happy-dom is installed but did not expose a GlobalRegistrator export.");
   }
   registrator = mod.GlobalRegistrator;
   registrator.register({ url });
