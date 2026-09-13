@@ -63,7 +63,10 @@ export function nextTransientPollDelayMs(
 
 export interface ResultsPollHooks {
   onPoll: (data: SessionPollResponse) => void;
-  onView: (view: MachineView) => void;
+  // The raw poll payload is passed alongside the resolved view so a
+  // consumer can read fields like nextInstruction directly, instead of
+  // reaching back into whatever onPoll last stashed.
+  onView: (view: MachineView, poll: SessionPollResponse) => void;
   onReport: (data: ReportResponse) => void;
   onReportFailure: (failure: ValidatorFailure | null) => void;
   onError: (message: string) => void;
@@ -116,6 +119,12 @@ export async function runResultsPollLoop(
   let lastState: string | undefined;
   let lastReportAt: number | undefined;
   let transientFailures = 0;
+  // Cadence from the last poll that carried a genuine (recognized,
+  // non-terminal) instruction. An omitted or unrecognized nextInstruction on
+  // a later poll has no cadence of its own; once we have a safe cadence on
+  // record we keep polling at it instead of halting on a transient bad
+  // payload.
+  let lastLiveCadenceMs: number | undefined;
 
   const maybeFetchReport = async (
     state: string,
@@ -175,7 +184,7 @@ export async function runResultsPollLoop(
     const data = result.data;
     const machine = machineFor(data, cadence);
     hooks.onPoll(data);
-    hooks.onView(machine);
+    hooks.onView(machine, data);
     await maybeFetchReport(data.state, machine);
     if (signal.aborted) {
       return;
@@ -198,22 +207,36 @@ export async function runResultsPollLoop(
       const next: SessionPollResponse = { ...data, state: stopped.data.state };
       const nextMachine = machineFor(next, cadence);
       hooks.onPoll(next);
-      hooks.onView(nextMachine);
+      hooks.onView(nextMachine, next);
       await maybeFetchReport(next.state, nextMachine);
       return;
     }
 
+    // Terminal always wins immediately and is never held on a stale cadence.
     if (machine.terminalize) {
       return;
     }
-    if (!readOnly && !machine.continuePolling) {
+
+    if (machine.continuePolling) {
+      lastLiveCadenceMs = machine.pollIntervalMs;
+    }
+
+    // Only halt outright when no safe cadence has ever been established; a
+    // persistent omitted/unrecognized instruction after a genuine one keeps
+    // polling below instead of stalling the session.
+    if (!readOnly && !machine.continuePolling && lastLiveCadenceMs === undefined) {
       return;
     }
 
-    // shouldPostStop keeps a non-zero cadence, but a null-instruction
-    // non-terminal read-only poll would be 0; fall back so we do not busy-loop.
+    // shouldPostStop keeps a non-zero cadence. A null-instruction non-terminal
+    // poll has pollIntervalMs 0: fall back to the last safe live cadence when
+    // one exists, otherwise the configured fallback, so we do not busy-loop.
     const waitMs =
-      readOnly && machine.pollIntervalMs === 0 ? fallbackMs : machine.pollIntervalMs;
+      machine.continuePolling || machine.shouldPostStop
+        ? readOnly && machine.pollIntervalMs === 0
+          ? fallbackMs
+          : machine.pollIntervalMs
+        : lastLiveCadenceMs ?? fallbackMs;
     const waited = await wait(waitMs, { signal });
     if (!waited.ok) {
       return;

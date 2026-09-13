@@ -1,5 +1,5 @@
 import React, { act } from "react";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import ResultsShell, {
@@ -8,6 +8,7 @@ import ResultsShell, {
   COPY_SUCCESS_TEXT,
   EVIDENCE_EMPTY_SNAPSHOT,
   EVIDENCE_NOT_SAVED,
+  INITIAL_LIVE_INSTRUCTION_HOLD,
   PAGE_LINK_NOT_SAVED_NOTICE,
   TEST_HREF,
   VISIBILITY_NOTICE,
@@ -16,13 +17,18 @@ import ResultsShell, {
   copyText,
   primaryReasonCodesByArea,
   primaryReasonsByArea,
+  progressAnnouncement,
   projectResultsPage,
   resultAreaEntries,
+  sanitizeGuidanceRecord,
   specificationInputFromReport,
+  stabilizeLiveView,
+  stripBracketedMarkers,
 } from "./ResultsShell";
 import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
 import type { EvidenceItem } from "../atoms/EvidenceDisclosure";
 import { resolveValidatorMachine } from "../lib/stateMachine";
+import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "../lib/validatorGuidance";
 import type {
   ReportResponse,
   SessionPollResponse,
@@ -3991,6 +3997,915 @@ describe("ResultsShell page-link clipboard", () => {
       restoreSecure();
       timers.restore();
       restoreFetch();
+    }
+  });
+});
+
+function activeViewOf(state: string, nextInstruction?: string): ReturnType<typeof resolveValidatorMachine> {
+  return resolveValidatorMachine({ state, optInActive: true, nextInstruction });
+}
+
+describe("stripBracketedMarkers", () => {
+  test("removes bracketed planning markers and collapses the surrounding whitespace", () => {
+    expect(stripBracketedMarkers("Paste the outgoing invite [wip]")).toBe(
+      "Paste the outgoing invite",
+    );
+    expect(stripBracketedMarkers("[todo] Wait for the reverse invite start")).toBe(
+      "Wait for the reverse invite start",
+    );
+    expect(stripBracketedMarkers("Keep [one] and [two] out")).toBe("Keep and out");
+  });
+
+  test("leaves marker-free copy exactly as-is", () => {
+    expect(stripBracketedMarkers("No markers here")).toBe("No markers here");
+  });
+});
+
+describe("sanitizeGuidanceRecord bracket stripping", () => {
+  test("returns null unchanged", () => {
+    expect(sanitizeGuidanceRecord(null)).toBeNull();
+  });
+
+  test("strips bracketed markers from an instruction record's title and body", () => {
+    const record = guidanceFor("paste_s1");
+    expect(record).not.toBeNull();
+    if (record === null || record.kind !== "instruction") {
+      throw new Error("expected paste_s1 instruction guidance");
+    }
+    const marked = {
+      ...record,
+      title: `[wip] ${record.title}`,
+      body: `${record.body} [todo]`,
+    };
+    const sanitized = sanitizeGuidanceRecord(marked);
+    expect(sanitized).not.toBeNull();
+    if (sanitized === null || sanitized.kind !== "instruction") {
+      throw new Error("expected a sanitized instruction guidance record");
+    }
+    expect(sanitized.title).toBe(record.title);
+    expect(sanitized.body).toBe(record.body);
+  });
+
+  test("strips bracketed markers from a terminal record's body, leaving other fields alone", () => {
+    const record = guidanceFor("terminal_pass");
+    expect(record).not.toBeNull();
+    if (record === null || record.kind !== "terminal") {
+      throw new Error("expected terminal_pass terminal guidance");
+    }
+    const marked = { ...record, body: `[wip] ${record.body}` };
+    const sanitized = sanitizeGuidanceRecord(marked);
+    expect(sanitized).not.toBeNull();
+    expect(sanitized?.kind).toBe("terminal");
+    expect(sanitized?.body).toBe(record.body);
+  });
+
+  test("leaves marker-free guidance exactly as-is", () => {
+    const record = guidanceFor("wait_probe");
+    expect(record).not.toBeNull();
+    expect(sanitizeGuidanceRecord(record)).toEqual(record);
+  });
+});
+
+describe("guidanceFor terminal-key disposition (out-of-scope finding 6 verification)", () => {
+  test("a raw key matching a known terminal key resolves to terminal guidance, not the unknown fallback", () => {
+    const record = guidanceFor("terminal_pass");
+    expect(record).not.toBeNull();
+    if (record === null || record.kind !== "terminal") {
+      throw new Error("expected terminal_pass to resolve to terminal guidance");
+    }
+    expect(record.mode).toBe("terminal");
+    expect(record.phase).toBe("result");
+  });
+
+  test("a truly unrecognized raw key resolves to the unknown-key fallback", () => {
+    const record = guidanceFor("not_a_real_step");
+    expect(record).not.toBeNull();
+    if (record === null || record.kind !== "instruction") {
+      throw new Error("expected an unknown-key instruction fallback");
+    }
+    expect(record.title).toBe(UNKNOWN_GUIDANCE_TITLE);
+    expect(record.phase).toBe("unknown");
+  });
+});
+
+describe("progressAnnouncement title selection", () => {
+  test("uses the guidance title for a known current instruction, not its body", () => {
+    const view = activeViewOf("invite_minted", "paste_s1");
+    const text = progressAnnouncement(view, "paste_s1");
+    expect(text).toBe("Step 3 of 6: Paste the outgoing invite");
+    expect(text).not.toContain("Use Copy invitation");
+  });
+
+  test("falls back to STEP_ANNOUNCE when there is no guidance for an omitted key", () => {
+    const view = resolveValidatorMachine({ state: "created", optInActive: false });
+    const text = progressAnnouncement(view, null);
+    expect(text).toBe("Step 1 of 3: Checking server capabilities.");
+  });
+
+  test("uses the unknown-key title for a persistent raw unknown key", () => {
+    const view = activeViewOf("invite_minted", "paste_s1");
+    const text = progressAnnouncement(view, "not_a_real_step");
+    expect(text).toBe(`Step 3 of 6: ${UNKNOWN_GUIDANCE_TITLE}`);
+  });
+});
+
+describe("stabilizeLiveView one-poll hold", () => {
+  test("a genuine instruction passes through as-is and becomes the new hold anchor", () => {
+    const view = activeViewOf("invite_minted", "paste_s1");
+    const { stabilized, hold } = stabilizeLiveView(view, "paste_s1", INITIAL_LIVE_INSTRUCTION_HOLD);
+    expect(stabilized.view).toBe(view);
+    expect(stabilized.guidanceKey).toBe("paste_s1");
+    expect(hold).toEqual({ lastValidView: view, lastValidKey: "paste_s1", held: false });
+  });
+
+  test("the first omitted instruction after a genuine one holds the last valid view and key for one poll", () => {
+    const validView = activeViewOf("invite_minted", "paste_s1");
+    const seeded = stabilizeLiveView(validView, "paste_s1", INITIAL_LIVE_INSTRUCTION_HOLD).hold;
+    const omittedView = activeViewOf("invite_minted");
+    const { stabilized, hold } = stabilizeLiveView(omittedView, undefined, seeded);
+    expect(stabilized.view).toBe(validView);
+    expect(stabilized.guidanceKey).toBe("paste_s1");
+    expect(hold.held).toBe(true);
+    expect(hold.lastValidView).toBe(validView);
+  });
+
+  test("the first unknown instruction after a genuine one holds the same way", () => {
+    const validView = activeViewOf("invite_minted", "paste_s1");
+    const seeded = stabilizeLiveView(validView, "paste_s1", INITIAL_LIVE_INSTRUCTION_HOLD).hold;
+    const unknownView = activeViewOf("invite_minted", "not_a_real_step");
+    const { stabilized, hold } = stabilizeLiveView(unknownView, "not_a_real_step", seeded);
+    expect(stabilized.view).toBe(validView);
+    expect(stabilized.guidanceKey).toBe("paste_s1");
+    expect(hold.held).toBe(true);
+  });
+
+  test("a following valid instruction after the hold replaces it normally instead of extending the hold", () => {
+    const validView = activeViewOf("invite_minted", "paste_s1");
+    const seeded = stabilizeLiveView(validView, "paste_s1", INITIAL_LIVE_INSTRUCTION_HOLD).hold;
+    const held = stabilizeLiveView(activeViewOf("invite_minted"), undefined, seeded).hold;
+    const nextValidView = activeViewOf("invite_accepted", "wait_reverse_start");
+    const { stabilized, hold } = stabilizeLiveView(nextValidView, "wait_reverse_start", held);
+    expect(stabilized.view).toBe(nextValidView);
+    expect(stabilized.guidanceKey).toBe("wait_reverse_start");
+    expect(hold).toEqual({
+      lastValidView: nextValidView,
+      lastValidKey: "wait_reverse_start",
+      held: false,
+    });
+  });
+
+  test("a persistent unknown string after the hold is spent shows the unknown-key fallback but keeps the last safe view and cadence", () => {
+    const validView = activeViewOf("invite_minted", "paste_s1");
+    const seeded = stabilizeLiveView(validView, "paste_s1", INITIAL_LIVE_INSTRUCTION_HOLD).hold;
+    const unknownView = activeViewOf("invite_minted", "not_a_real_step");
+    const heldOnce = stabilizeLiveView(unknownView, "not_a_real_step", seeded);
+    expect(heldOnce.hold.held).toBe(true);
+    const persistent = stabilizeLiveView(unknownView, "not_a_real_step", heldOnce.hold);
+    expect(persistent.stabilized.view).toBe(validView);
+    expect(persistent.stabilized.view.pollIntervalMs).toBe(validView.pollIntervalMs);
+    expect(persistent.stabilized.guidanceKey).toBe("not_a_real_step");
+    const unknownRecord = guidanceFor(persistent.stabilized.guidanceKey);
+    expect(unknownRecord).not.toBeNull();
+    if (unknownRecord === null || unknownRecord.kind !== "instruction") {
+      throw new Error("expected the unknown-key fallback to be instruction guidance");
+    }
+    expect(unknownRecord.title).toBe(UNKNOWN_GUIDANCE_TITLE);
+  });
+
+  test("a persistent omitted instruction after the hold is spent has no guidance key left for STEP_ANNOUNCE to fall back on", () => {
+    const validView = activeViewOf("invite_minted", "paste_s1");
+    const seeded = stabilizeLiveView(validView, "paste_s1", INITIAL_LIVE_INSTRUCTION_HOLD).hold;
+    const omittedView = activeViewOf("invite_minted");
+    const heldOnce = stabilizeLiveView(omittedView, undefined, seeded);
+    const persistent = stabilizeLiveView(omittedView, undefined, heldOnce.hold);
+    expect(persistent.stabilized.view).toBe(validView);
+    expect(persistent.stabilized.guidanceKey).toBeNull();
+  });
+
+  test("a terminal poll always wins immediately, even mid-hold, and clears the hold state", () => {
+    const validView = activeViewOf("invite_minted", "paste_s1");
+    const seeded = stabilizeLiveView(validView, "paste_s1", INITIAL_LIVE_INSTRUCTION_HOLD).hold;
+    const heldOnce = stabilizeLiveView(activeViewOf("invite_minted"), undefined, seeded).hold;
+    const terminalView = resolveValidatorMachine({ state: "terminal_pass", optInActive: true });
+    const { stabilized, hold } = stabilizeLiveView(terminalView, undefined, heldOnce);
+    expect(stabilized.view).toBe(terminalView);
+    expect(stabilized.guidanceKey).toBeNull();
+    expect(hold).toEqual(INITIAL_LIVE_INSTRUCTION_HOLD);
+  });
+
+  test("an omitted or unknown instruction with no prior valid instruction cannot hold and is exposed as-is", () => {
+    const view = resolveValidatorMachine({ state: "created", optInActive: false });
+    const { stabilized, hold } = stabilizeLiveView(view, undefined, INITIAL_LIVE_INSTRUCTION_HOLD);
+    expect(stabilized.view).toBe(view);
+    expect(stabilized.guidanceKey).toBeNull();
+    expect(hold).toBe(INITIAL_LIVE_INSTRUCTION_HOLD);
+  });
+
+  test("keeps the raw unknown key separate from the machine view's narrowed null instruction", () => {
+    const view = activeViewOf("invite_minted", "not_a_real_step");
+    expect(view.instruction).toBeNull();
+    const { stabilized } = stabilizeLiveView(view, "not_a_real_step", INITIAL_LIVE_INSTRUCTION_HOLD);
+    expect(stabilized.guidanceKey).toBe("not_a_real_step");
+    expect(stabilized.guidanceKey).not.toBe(view.instruction);
+  });
+});
+
+function installActiveInviteFetch(): () => void {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = requestUrl(input);
+    if (url.includes("config.json")) {
+      return jsonResponse(200, {
+        poll_interval_ms: 1,
+        active_poll_interval_ms: 1,
+        backoff_initial_ms: 1,
+        backoff_max_ms: 1,
+        request_timeout_ms: 5000,
+        validator_api_origin: API_ORIGIN,
+      });
+    }
+    if (url.includes(`/api/session/${SESSION_ID}`)) {
+      return jsonResponse(200, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+    }
+    if (url.includes(`/api/report/${SESSION_ID}`)) {
+      return jsonResponse(200, liveReport(specification(() => "pass")));
+    }
+    return jsonResponse(404, { error: "missing", message: "missing" });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = previousFetch;
+  };
+}
+
+/**
+ * Deterministic poll-tick queue for the session polling endpoint. Each call
+ * from the mocked fetch registers a pending resolver instead of returning a
+ * response immediately, so the test controls exactly when each poll's data
+ * is delivered. This replaces wall-clock-dependent pollCount windows and
+ * waitForDom sampling with an explicit "poll tick" the test drives directly:
+ * a call cannot resolve until the test releases it, so no later poll can
+ * ever race ahead of an assertion about an earlier one.
+ */
+class SessionPollGate {
+  private callCount = 0;
+  private readonly pendingResolvers = new Map<number, (response: Response) => void>();
+  private readonly callWaiters = new Map<number, () => void>();
+
+  request(): Promise<Response> {
+    this.callCount += 1;
+    const call = this.callCount;
+    return new Promise<Response>((resolve) => {
+      this.pendingResolvers.set(call, resolve);
+      const waiter = this.callWaiters.get(call);
+      if (waiter !== undefined) {
+        this.callWaiters.delete(call);
+        waiter();
+      }
+    });
+  }
+
+  async awaitCall(n: number): Promise<void> {
+    if (this.callCount >= n) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      this.callWaiters.set(n, resolve);
+    });
+  }
+
+  respond(n: number, body: unknown, status = 200): void {
+    const resolve = this.pendingResolvers.get(n);
+    if (resolve === undefined) {
+      throw new Error(`SessionPollGate: poll call ${n} is not pending yet`);
+    }
+    this.pendingResolvers.delete(n);
+    resolve(jsonResponse(status, body));
+  }
+
+  /** Settle any still-pending call harmlessly so nothing is left dangling
+   * after a test unmounts (and aborts the loop) with a call still gated. */
+  settleRemaining(): void {
+    for (const [call, resolve] of this.pendingResolvers) {
+      resolve(jsonResponse(200, { state: "terminal_pass", ts: call, optInActive: false }));
+    }
+    this.pendingResolvers.clear();
+  }
+
+  get calls(): number {
+    return this.callCount;
+  }
+}
+
+/**
+ * Release poll call `callNumber` with `body`, then wait for the loop to
+ * reach call `callNumber + 1` before returning. Because the next call only
+ * happens after this poll's state updates, any due report fetch, and the
+ * cadence wait have all completed, the DOM is guaranteed settled for call
+ * `callNumber` by the time this resolves (no arbitrary poll or deadline).
+ */
+async function releasePoll(gate: SessionPollGate, callNumber: number, body: unknown): Promise<void> {
+  await act(async () => {
+    await gate.awaitCall(callNumber);
+    gate.respond(callNumber, body);
+    await gate.awaitCall(callNumber + 1);
+  });
+}
+
+/**
+ * Release a poll that ends the loop (typically terminal) and that makes no
+ * further session poll call. There is no next call to await, so this flushes
+ * a bounded number of microtask and macrotask turns instead, giving the
+ * terminal report fetch and resulting state commits room to settle. The
+ * bound is a fixed step count, not a wall-clock deadline, so it cannot pass
+ * or fail depending on how fast the machine is.
+ */
+async function releaseFinalPoll(gate: SessionPollGate, callNumber: number, body: unknown): Promise<void> {
+  await act(async () => {
+    await gate.awaitCall(callNumber);
+    gate.respond(callNumber, body);
+    for (let i = 0; i < 25; i += 1) {
+      await Promise.resolve();
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    for (let i = 0; i < 25; i += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
+/**
+ * Locate the single live status announcement by its exact role and
+ * aria-live pairing, isolated from aggregate body text so an assertion here
+ * can never accidentally pass because a guidance row happens to contain the
+ * same words.
+ */
+function findAnnouncement(): Element | undefined {
+  return Array.from(document.querySelectorAll('p[role="status"][aria-live="polite"]')).find(
+    (el) => /^Step \d+ of \d+: /.test(el.textContent ?? ""),
+  );
+}
+
+describe("ResultsShell current-row guidance, announce, and reserved slots", () => {
+  let registrator: HappyDomRegistrator | null = null;
+
+  beforeAll(async () => {
+    const specifier: string = "@happy-dom/global-registrator";
+    const mod = (await import(specifier)) as {
+      GlobalRegistrator?: HappyDomRegistrator;
+    };
+    if (mod.GlobalRegistrator === undefined) {
+      throw new Error(
+        "ResultsShell.test.tsx current-row guidance tests need a DOM environment. " +
+          "Install the dev-only harness with " +
+          "`bun add -d happy-dom @happy-dom/global-registrator`.",
+      );
+    }
+    registrator = mod.GlobalRegistrator;
+    registrator.register({ url: "http://localhost/?host=peer.example&id=" + SESSION_ID });
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  });
+
+  afterAll(() => {
+    registrator?.unregister();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+    document.body.removeAttribute("style");
+  });
+
+  test("renders guidance title and body only on the current row, and nothing on the others", async () => {
+    const restoreFetch = installActiveInviteFetch();
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes("Paste the outgoing invite") === true,
+      );
+
+      const slots = Array.from(document.querySelectorAll("[data-guidance-slot]"));
+      expect(slots.length).toBe(6);
+      const currentSlot = slots.find((el) =>
+        el.textContent?.includes("Paste the outgoing invite"),
+      );
+      expect(currentSlot).toBeDefined();
+      expect(currentSlot?.textContent).toContain(
+        "Use Copy invitation, then accept that invitation on the target server under test.",
+      );
+      const otherSlots = slots.filter((el) => el !== currentSlot);
+      expect(otherSlots.length).toBe(5);
+      for (const slot of otherSlots) {
+        expect(slot.textContent).toBe("");
+      }
+    } finally {
+      // Always unmount, even if an assertion above throws, so a failing run
+      // cannot leave the root mounted or a poll loop running past this test.
+      await act(() => {
+        root.unmount();
+      });
+      restoreFetch();
+    }
+  });
+
+  test("the single announcement renders Step N of M with the guidance title only, no body", async () => {
+    const restoreFetch = installActiveInviteFetch();
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes("Paste the outgoing invite") === true,
+      );
+
+      const announce = Array.from(document.querySelectorAll('p[role="status"]')).find((el) =>
+        /^Step \d+ of \d+: /.test(el.textContent ?? ""),
+      );
+      expect(announce).toBeDefined();
+      expect(announce?.textContent).toBe("Step 3 of 6: Paste the outgoing invite");
+      expect(announce?.getAttribute("aria-live")).toBe("polite");
+      expect(announce?.textContent).not.toContain("Use Copy invitation");
+    } finally {
+      // Always unmount, even if an assertion above throws, so a failing run
+      // cannot leave the root mounted or a poll loop running past this test.
+      await act(() => {
+        root.unmount();
+      });
+      restoreFetch();
+    }
+  });
+
+  test("reserves the CTA column inside StepRow's own in-row slot, not a ResultsShell sibling", async () => {
+    const restoreFetch = installActiveInviteFetch();
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes("Paste the outgoing invite") === true,
+      );
+
+      // No vertical CTA sibling exists; the reservation lives inside
+      // StepRow's own horizontal data-cta-slot column instead.
+      expect(document.querySelector("[data-reserved-cta-slot]")).toBeNull();
+
+      const ctaSlots = Array.from(document.querySelectorAll("[data-cta-slot]"));
+      expect(ctaSlots.length).toBe(6);
+      const currentCard = document.querySelector('[aria-current="step"]');
+      expect(currentCard).not.toBeNull();
+      const currentCtaSlot = currentCard?.querySelector("[data-cta-slot]");
+      expect(currentCtaSlot).not.toBeNull();
+      expect(currentCtaSlot?.className).toContain("min-w-[10rem]");
+      // No copy/paste actions are wired yet in this task, so the slot stays
+      // reserved but hidden from accessibility APIs.
+      expect(currentCtaSlot?.getAttribute("aria-hidden")).toBe("true");
+    } finally {
+      // Always unmount, even if an assertion above throws, so a failing run
+      // cannot leave the root mounted or a poll loop running past this test.
+      await act(() => {
+        root.unmount();
+      });
+      restoreFetch();
+    }
+  });
+
+  test("always mounts a reserved form slot on the reverse card while live and active steps are visible, sized beyond min-h-10", async () => {
+    const restoreFetch = installActiveInviteFetch();
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes("Paste the outgoing invite") === true,
+      );
+
+      // The invite row is current, not reverse, so this confirms the form
+      // slot is mounted for the whole active phase, not only when reverse
+      // itself is the current row.
+      const formSlot = document.querySelector("[data-reserved-form-slot]");
+      expect(formSlot).not.toBeNull();
+      expect(formSlot?.getAttribute("aria-hidden")).toBe("true");
+      expect(formSlot?.className).toContain("min-h-56");
+      expect(formSlot?.className).not.toContain("min-h-10 ");
+      expect(formSlot?.className).not.toBe("min-h-10");
+
+      // The form slot must be mounted inside the reverse row's own card, not
+      // merely present somewhere in the tree. StepRow renders formSlot as a
+      // direct child of its own root card, alongside that row's
+      // data-guidance-slot, so the parent of one is the parent of the other.
+      const guidanceSlots = Array.from(document.querySelectorAll("[data-guidance-slot]"));
+      const reverseCard = guidanceSlots
+        .map((slot) => slot.parentElement)
+        .find((card) => card?.textContent?.includes("Accept return invitation") === true);
+      expect(reverseCard).toBeDefined();
+      expect(reverseCard).not.toBeNull();
+      expect(formSlot?.parentElement).toBe(reverseCard);
+      expect(reverseCard?.contains(formSlot as Node)).toBe(true);
+
+      // No other row's card mounts the form slot: it is reverse-only.
+      const otherCards = guidanceSlots
+        .map((slot) => slot.parentElement)
+        .filter((card) => card !== reverseCard);
+      expect(otherCards.length).toBe(5);
+      for (const card of otherCards) {
+        expect(card?.contains(formSlot as Node)).toBe(false);
+      }
+    } finally {
+      // Always unmount, even if an assertion above throws, so a failing run
+      // cannot leave the root mounted or a poll loop running past this test.
+      await act(() => {
+        root.unmount();
+      });
+      restoreFetch();
+    }
+  });
+
+  test("mounts no reserved form slot or CTA slot once the result reaches a terminal state", async () => {
+    const restoreFetch = installTerminalReportFetch(permanentReport(specification(() => "pass")));
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(() => document.body.textContent?.includes(RESULT_HEADLINE.compatible) === true);
+      expect(document.querySelector("[data-reserved-form-slot]")).toBeNull();
+      expect(document.querySelector("[data-reserved-cta-slot]")).toBeNull();
+      expect(document.querySelector("[data-cta-slot]")).toBeNull();
+    } finally {
+      // Always unmount, even if an assertion above throws, so a failing run
+      // cannot leave the root mounted or a poll loop running past this test.
+      await act(() => {
+        root.unmount();
+      });
+      restoreFetch();
+    }
+  });
+
+  test("holds the current-row title for one poll on an omitted instruction, falls back to the unknown-key title if it persists, resumes normally, and lets terminal win immediately even mid-hold", async () => {
+    const gate = new SessionPollGate();
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+          validator_api_origin: API_ORIGIN,
+        });
+      }
+      if (url.includes(`/api/session/${SESSION_ID}`)) {
+        return gate.request();
+      }
+      if (url.includes(`/api/report/${SESSION_ID}`)) {
+        return jsonResponse(200, liveReport(specification(() => "pass")));
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}&ro=1`);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      // Poll 1: a genuine instruction seeds the hold with a real title.
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      const announceAfterPoll1 = findAnnouncement();
+      expect(announceAfterPoll1).toBeDefined();
+      expect(announceAfterPoll1?.textContent).toBe("Step 3 of 6: Paste the outgoing invite");
+      expect(announceAfterPoll1?.textContent).not.toContain("Use Copy invitation");
+      expect(document.body.textContent).not.toContain(UNKNOWN_GUIDANCE_TITLE);
+
+      // Poll 2: omitted nextInstruction. Held for exactly this one poll: the
+      // title must still read the last valid instruction, not fall back yet.
+      await releasePoll(gate, 2, { state: "invite_minted", ts: 2, optInActive: true });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+      expect(document.body.textContent).not.toContain(UNKNOWN_GUIDANCE_TITLE);
+
+      // Poll 3: the one-poll grace is already spent, and this poll is now an
+      // unrecognized key, so the current row falls back to the unknown-key
+      // title while still anchored on the invite row (not reset to probe).
+      await releasePoll(gate, 3, {
+        state: "invite_minted",
+        ts: 3,
+        optInActive: true,
+        nextInstruction: "not_a_real_step",
+      });
+      expect(document.body.textContent).toContain(UNKNOWN_GUIDANCE_TITLE);
+      const slotsDuringFallback = Array.from(document.querySelectorAll("[data-guidance-slot]"));
+      const activeSlot = slotsDuringFallback.find((el) =>
+        el.textContent?.includes(UNKNOWN_GUIDANCE_TITLE),
+      );
+      expect(activeSlot).toBeDefined();
+
+      // Poll 4: a following valid instruction replaces the fallback normally.
+      await releasePoll(gate, 4, {
+        state: "invite_minted",
+        ts: 4,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+      expect(document.body.textContent).not.toContain(UNKNOWN_GUIDANCE_TITLE);
+
+      // Poll 5: omitted again, starting a fresh one-poll hold anchored on
+      // poll 4's instruction.
+      await releasePoll(gate, 5, { state: "invite_minted", ts: 5, optInActive: true });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+
+      // Poll 6: terminal wins immediately even mid-hold (held is true from
+      // poll 5) and is never held behind the stale invite guidance.
+      await releaseFinalPoll(gate, 6, { state: "terminal_pass", ts: 6, optInActive: true });
+      expect(document.body.textContent).not.toContain("Paste the outgoing invite");
+      expect(document.body.textContent).not.toContain(UNKNOWN_GUIDANCE_TITLE);
+      expect(document.body.textContent).toContain(RESULT_HEADLINE.compatible);
+      expect(gate.calls).toBe(6);
+    } finally {
+      // Always unmount (aborting the poll loop), settle any still-gated
+      // poll call, and restore fetch, even if an assertion above throws, so
+      // a failing run cannot leave the loop or a dangling fetch mock running
+      // past this test.
+      await act(async () => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      globalThis.fetch = previousFetch;
+    }
+  });
+
+  test("a live (non-read-only) session keeps polling at the last safe cadence through a persistent unknown instruction instead of halting", async () => {
+    const gate = new SessionPollGate();
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+          validator_api_origin: API_ORIGIN,
+        });
+      }
+      if (url.includes(`/api/session/${SESSION_ID}`)) {
+        return gate.request();
+      }
+      if (url.includes(`/api/report/${SESSION_ID}`)) {
+        return jsonResponse(200, liveReport(specification(() => "pass")));
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+
+    // No ?ro=1: this is the normal, non-read-only polling path.
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}`);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      // Poll 1: a genuine instruction establishes a safe live cadence.
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+
+      // Poll 2: omitted. Spends the one-poll hold (title stays put).
+      await releasePoll(gate, 2, { state: "invite_minted", ts: 2, optInActive: true });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+
+      // Polls 3 and 4: a persistent unrecognized instruction. The loop must
+      // keep polling through this stretch instead of halting once
+      // continuePolling turns false; this alone is unreachable on a loop
+      // that stops instead of falling back to the last safe live cadence.
+      await releasePoll(gate, 3, {
+        state: "invite_minted",
+        ts: 3,
+        optInActive: true,
+        nextInstruction: "not_a_real_step",
+      });
+      const announceAfterPoll3 = findAnnouncement();
+      expect(announceAfterPoll3).toBeDefined();
+      expect(announceAfterPoll3?.textContent).toBe(`Step 3 of 6: ${UNKNOWN_GUIDANCE_TITLE}`);
+      const currentSlotAfterPoll3 = Array.from(
+        document.querySelectorAll("[data-guidance-slot]"),
+      ).find((el) => el.textContent?.includes(UNKNOWN_GUIDANCE_TITLE));
+      expect(currentSlotAfterPoll3).toBeDefined();
+      expect(currentSlotAfterPoll3?.textContent).toContain("not recognized by this page");
+
+      await releasePoll(gate, 4, {
+        state: "invite_minted",
+        ts: 4,
+        optInActive: true,
+        nextInstruction: "not_a_real_step",
+      });
+      const announceAfterPoll4 = findAnnouncement();
+      expect(announceAfterPoll4).toBeDefined();
+      expect(announceAfterPoll4?.textContent).toBe(`Step 3 of 6: ${UNKNOWN_GUIDANCE_TITLE}`);
+      const currentSlotAfterPoll4 = Array.from(
+        document.querySelectorAll("[data-guidance-slot]"),
+      ).find((el) => el.textContent?.includes(UNKNOWN_GUIDANCE_TITLE));
+      expect(currentSlotAfterPoll4).toBeDefined();
+      expect(currentSlotAfterPoll4?.textContent).toContain("not recognized by this page");
+
+      // Poll 5: it resumes the known instruction once the server sends one
+      // again.
+      await releasePoll(gate, 5, {
+        state: "invite_minted",
+        ts: 5,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+      expect(document.body.textContent).not.toContain(UNKNOWN_GUIDANCE_TITLE);
+      // releasePoll(gate, 5, ...) already confirmed the loop reached call 6
+      // (poll 5's processing is fully settled); that next poll is still
+      // gated and unreleased here.
+      expect(gate.calls).toBe(6);
+    } finally {
+      // Always unmount (aborting the poll loop), settle any still-gated
+      // poll call, and restore fetch, even if an assertion above throws, so
+      // a failing run cannot leave the loop or a dangling fetch mock running
+      // past this test.
+      await act(async () => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      globalThis.fetch = previousFetch;
+    }
+  });
+
+  test("a persistent omission (as opposed to an unknown key) shows no guidance and falls back to the step announcement", async () => {
+    const gate = new SessionPollGate();
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("config.json")) {
+        return jsonResponse(200, {
+          poll_interval_ms: 1,
+          active_poll_interval_ms: 1,
+          backoff_initial_ms: 1,
+          backoff_max_ms: 1,
+          request_timeout_ms: 5000,
+          validator_api_origin: API_ORIGIN,
+        });
+      }
+      if (url.includes(`/api/session/${SESSION_ID}`)) {
+        return gate.request();
+      }
+      if (url.includes(`/api/report/${SESSION_ID}`)) {
+        return jsonResponse(200, liveReport(specification(() => "pass")));
+      }
+      return jsonResponse(404, { error: "missing", message: "missing" });
+    }) as typeof fetch;
+
+    setWindowHref(`https://localhost/?host=peer.example&id=${SESSION_ID}&ro=1`);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+
+      // Poll 1: a genuine instruction seeds the hold.
+      await releasePoll(gate, 1, {
+        state: "invite_minted",
+        ts: 1,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+
+      // Poll 2: first omission. Held for exactly this one poll.
+      await releasePoll(gate, 2, { state: "invite_minted", ts: 2, optInActive: true });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+
+      // Poll 3: persistent omission (not an unknown key). Unlike the
+      // persistent-unknown case, an omitted instruction resolves to a null
+      // guidance key once the one-poll grace is spent, so the current row's
+      // guidance slot is empty and the announcement falls back to
+      // STEP_ANNOUNCE for the invite step, not the unknown-key title.
+      await releasePoll(gate, 3, { state: "invite_minted", ts: 3, optInActive: true });
+      expect(document.body.textContent).not.toContain("Paste the outgoing invite");
+      expect(document.body.textContent).not.toContain(UNKNOWN_GUIDANCE_TITLE);
+      const guidanceSlots = Array.from(document.querySelectorAll("[data-guidance-slot]"));
+      for (const slot of guidanceSlots) {
+        expect(slot.textContent).toBe("");
+      }
+      const announce = Array.from(document.querySelectorAll('p[role="status"]')).find((el) =>
+        /^Step \d+ of \d+: /.test(el.textContent ?? ""),
+      );
+      expect(announce).toBeDefined();
+      expect(announce?.textContent).toBe("Step 3 of 6: Waiting for invitation steps.");
+
+      // Poll 4: a following valid instruction replaces the fallback normally.
+      await releasePoll(gate, 4, {
+        state: "invite_minted",
+        ts: 4,
+        optInActive: true,
+        nextInstruction: "paste_s1",
+      });
+      expect(document.body.textContent).toContain("Paste the outgoing invite");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      gate.settleRemaining();
+      globalThis.fetch = previousFetch;
+    }
+  });
+
+  test("strips bracketed markers from the visible current-row guidance and the step announcement", async () => {
+    const guidanceModule = await import("../lib/validatorGuidance");
+    const originalGuidanceFor = guidanceModule.guidanceFor;
+    // Defensive stripping in ResultsShell exists for guidance content that
+    // should never carry a bracketed planning marker, even though the real
+    // guidance table never does. Inject one marked-up record for paste_s1
+    // through a scoped module mock (restored in finally) so this proves the
+    // real render path strips it, instead of only unit-testing the pure
+    // stripBracketedMarkers/sanitizeGuidanceRecord helpers in isolation.
+    mock.module("../lib/validatorGuidance", () => ({
+      ...guidanceModule,
+      guidanceFor: (key: string | null | undefined) => {
+        const record = originalGuidanceFor(key);
+        if (record === null || record.kind !== "instruction" || key !== "paste_s1") {
+          return record;
+        }
+        return {
+          ...record,
+          title: `[wip] ${record.title}`,
+          body: `${record.body} [todo-followup]`,
+        };
+      },
+    }));
+    const restoreFetch = installActiveInviteFetch();
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.body);
+    try {
+      await act(() => {
+        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
+      });
+      await waitForDom(
+        () => document.body.textContent?.includes("Paste the outgoing invite") === true,
+      );
+
+      const currentSlot = Array.from(document.querySelectorAll("[data-guidance-slot]")).find(
+        (el) => el.textContent?.includes("Paste the outgoing invite"),
+      );
+      expect(currentSlot).toBeDefined();
+      expect(currentSlot?.textContent).not.toContain("[");
+      expect(currentSlot?.textContent).not.toContain("]");
+      expect(currentSlot?.textContent).toContain(
+        "Use Copy invitation, then accept that invitation on the target server under test.",
+      );
+
+      const announce = Array.from(document.querySelectorAll('p[role="status"]')).find((el) =>
+        /^Step \d+ of \d+: /.test(el.textContent ?? ""),
+      );
+      expect(announce).toBeDefined();
+      expect(announce?.textContent).toBe("Step 3 of 6: Paste the outgoing invite");
+      expect(announce?.textContent).not.toContain("[");
+    } finally {
+      // Unmount, restore fetch, and restore the guidance module mock even
+      // if an assertion above throws, so a failing run cannot leave the
+      // loop, a dangling fetch mock, or the module mock active afterward.
+      await act(() => {
+        root.unmount();
+      });
+      restoreFetch();
+      mock.module("../lib/validatorGuidance", () => ({
+        ...guidanceModule,
+        guidanceFor: originalGuidanceFor,
+      }));
     }
   });
 });

@@ -34,8 +34,10 @@ import { runResultsPollLoop } from "../lib/resultsPoll";
 import {
   USER_STEPS,
   type MachineView,
+  type NextInstruction,
   type UserStep,
 } from "../lib/stateMachine";
+import { guidanceFor, type GuidanceRecord } from "../lib/validatorGuidance";
 import {
   normalizeHost,
   normalizeSessionId,
@@ -122,6 +124,134 @@ const STEP_ANNOUNCE: Record<UserStep, string> = {
 
 const ACTION_BTN =
   "inline-flex min-h-11 items-center rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800";
+
+// AG-2.2 mounts reserved layout slots only; the copy/paste actions and the
+// report link are wired in a later task. The CTA reservation is the
+// in-row `data-cta-slot` column StepRow already renders for every row
+// (sized for "Copy invitation", "Copy again", and the secondary report
+// link), not a separate element here. The reverse form slot is sized for
+// a label, textarea, submit button, and one alert line, so wiring those in
+// later does not shift this layout. The form slot mounts inside the
+// reverse row's own StepRow card (via its formSlot prop), not as a
+// sibling element.
+const RESERVED_REVERSE_FORM_CLASS = "invisible min-h-56 w-full";
+
+function ReservedReverseForm(): React.ReactElement {
+  return (
+    <div data-reserved-form-slot="" aria-hidden="true" className={RESERVED_REVERSE_FORM_CLASS} />
+  );
+}
+
+// Defensive strip for any bracketed planning marker (for example "[wip]")
+// that should never reach a screen reader, even though locked copy has none.
+const BRACKET_MARKER_PATTERN = /\[[^\]]*\]/g;
+
+export function stripBracketedMarkers(value: string): string {
+  return value.replace(BRACKET_MARKER_PATTERN, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Defensive bracket stripping for a guidance record's title and body, not
+ * just the single-line announcement. Applies to whatever guidance record is
+ * handed to the current row, so any bracketed planning marker never reaches
+ * the visible guidance slot (which is also what a screen reader announces).
+ */
+export function sanitizeGuidanceRecord(
+  record: GuidanceRecord | null,
+): GuidanceRecord | null {
+  if (record === null) {
+    return null;
+  }
+  if (record.kind === "instruction") {
+    return {
+      ...record,
+      title: stripBracketedMarkers(record.title),
+      body: stripBracketedMarkers(record.body),
+    };
+  }
+  return { ...record, body: stripBracketedMarkers(record.body) };
+}
+
+/**
+ * One-poll hold for a nonterminal instruction that comes back omitted or
+ * unknown. `lastValidKey` and `lastValidView` retain the last genuine
+ * instruction so the row list and cadence do not flicker back to "probe" for
+ * a single bad poll; `held` marks that the one-poll grace period was already
+ * spent so a persistent unknown state falls back to the unknown-key title
+ * instead of holding forever.
+ */
+export interface LiveInstructionHold {
+  lastValidView: MachineView | null;
+  lastValidKey: NextInstruction | null;
+  held: boolean;
+}
+
+export const INITIAL_LIVE_INSTRUCTION_HOLD: LiveInstructionHold = {
+  lastValidView: null,
+  lastValidKey: null,
+  held: false,
+};
+
+export interface StabilizedLiveView {
+  view: MachineView;
+  /** Raw guidance lookup key: a known/unknown instruction string, or null. */
+  guidanceKey: string | null;
+}
+
+function rawInstructionKey(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * Stabilize one poll's resolved view against the previous hold state. A
+ * terminal poll always wins immediately. A genuine instruction replaces the
+ * hold normally. The first omitted/unknown instruction after a genuine one
+ * holds the last valid view and instruction for one poll; a persistent
+ * omitted/unknown instruction keeps that last safe view (and its cadence)
+ * but exposes the current raw key so the caller can fall back to the
+ * unknown-key guidance instead of the stale title.
+ */
+export function stabilizeLiveView(
+  view: MachineView,
+  rawInstruction: string | null | undefined,
+  hold: LiveInstructionHold,
+): { stabilized: StabilizedLiveView; hold: LiveInstructionHold } {
+  const raw = rawInstructionKey(rawInstruction);
+
+  if (view.terminalize) {
+    return {
+      stabilized: { view, guidanceKey: null },
+      hold: INITIAL_LIVE_INSTRUCTION_HOLD,
+    };
+  }
+
+  if (view.instruction !== null) {
+    return {
+      stabilized: { view, guidanceKey: view.instruction },
+      hold: { lastValidView: view, lastValidKey: view.instruction, held: false },
+    };
+  }
+
+  if (hold.lastValidView === null) {
+    return { stabilized: { view, guidanceKey: raw }, hold };
+  }
+
+  if (!hold.held) {
+    return {
+      stabilized: { view: hold.lastValidView, guidanceKey: hold.lastValidKey },
+      hold: { ...hold, held: true },
+    };
+  }
+
+  return {
+    stabilized: { view: hold.lastValidView, guidanceKey: raw },
+    hold,
+  };
+}
 
 export type ResultsPageStatus =
   | "live"
@@ -399,7 +529,10 @@ export function bannerBody(score: ValidatorScoreProjection): string {
   return DEFAULT_BANNER_BODY[score.outcome];
 }
 
-export function progressAnnouncement(view: MachineView): string {
+export function progressAnnouncement(
+  view: MachineView,
+  guidanceKey: string | null,
+): string {
   let visible = 0;
   let current = 1;
   for (const step of USER_STEPS) {
@@ -411,7 +544,14 @@ export function progressAnnouncement(view: MachineView): string {
       current = visible;
     }
   }
-  return `Step ${current} of ${visible}: ${STEP_ANNOUNCE[view.step]}`;
+  const guidanceRecord = guidanceFor(guidanceKey);
+  const guidanceTitle =
+    guidanceRecord !== null && guidanceRecord.kind === "instruction"
+      ? guidanceRecord.title
+      : undefined;
+  const shortTitle =
+    guidanceTitle !== undefined && guidanceTitle !== "" ? guidanceTitle : STEP_ANNOUNCE[view.step];
+  return `Step ${current} of ${visible}: ${stripBracketedMarkers(shortTitle)}`;
 }
 
 function evidenceModeFor(
@@ -869,6 +1009,7 @@ export default function ResultsShell({
   const [config, setConfig] = useState<ValidatorRuntimeConfig | null>(null);
   const [poll, setPoll] = useState<SessionPollResponse | null>(null);
   const [view, setView] = useState<MachineView | null>(null);
+  const [guidanceKey, setGuidanceKey] = useState<string | null>(null);
   const [lastLiveReport, setLastLiveReport] = useState<ReportResponse | null>(null);
   const [terminalReport, setTerminalReport] = useState<ReportResponse | null>(null);
   const [reportFailure, setReportFailure] = useState<ValidatorFailure | null>(null);
@@ -878,6 +1019,7 @@ export default function ResultsShell({
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
   const viewRef = useRef<MachineView | null>(null);
+  const liveHoldRef = useRef<LiveInstructionHold>(INITIAL_LIVE_INSTRUCTION_HOLD);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyMountedRef = useRef(true);
   // Live trigger buttons keyed by canonical area id, plus a grid-heading
@@ -905,8 +1047,10 @@ export default function ResultsShell({
 
   useEffect(() => {
     viewRef.current = null;
+    liveHoldRef.current = INITIAL_LIVE_INSTRUCTION_HOLD;
     setPoll(null);
     setView(null);
+    setGuidanceKey(null);
     setLastLiveReport(null);
     setTerminalReport(null);
     setReportFailure(null);
@@ -966,10 +1110,19 @@ export default function ResultsShell({
         stop: readOnly ? readOnlyStop : undefined,
       },
       {
-        onPoll: setPoll,
-        onView: (machine) => {
-          viewRef.current = machine;
-          setView(machine);
+        onPoll: (data) => {
+          setPoll(data);
+        },
+        onView: (machine, pollData) => {
+          const { stabilized, hold } = stabilizeLiveView(
+            machine,
+            pollData.nextInstruction,
+            liveHoldRef.current,
+          );
+          liveHoldRef.current = hold;
+          viewRef.current = stabilized.view;
+          setView(stabilized.view);
+          setGuidanceKey(stabilized.guidanceKey);
         },
         onReport: (data) => {
           if (viewRef.current?.terminalize === true) {
@@ -1072,8 +1225,11 @@ export default function ResultsShell({
     projection.status === "live" || projection.status === "loading_report"
       ? view === null
         ? "Loading session..."
-        : progressAnnouncement(view)
+        : progressAnnouncement(view, guidanceKey)
       : null;
+  const currentRowGuidance: GuidanceRecord | null = sanitizeGuidanceRecord(
+    guidanceFor(guidanceKey),
+  );
   const rawJsonLabel = "View full report JSON";
   // Normal ready/live results surface the full report JSON as a low-emphasis
   // footer action; the malformed terminal keeps a prominent action button.
@@ -1170,12 +1326,15 @@ export default function ResultsShell({
             if (status === "hidden") {
               return null;
             }
+            const isCurrent = status === "current";
             return (
               <StepRow
                 key={step}
                 step={step}
                 status={status}
                 index={visibleIndex(view.statuses, step)}
+                guidance={isCurrent ? currentRowGuidance : undefined}
+                formSlot={step === "reverse" ? <ReservedReverseForm /> : undefined}
               />
             );
           })}

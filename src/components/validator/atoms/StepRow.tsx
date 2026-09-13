@@ -22,6 +22,9 @@ export interface StepRowProps {
   ctaHref?: string;
   /** Current-instruction guidance. Rendered only on the current row. */
   guidance?: GuidanceRecord | null;
+  /** Extra content mounted inside this row's card, for example a reserved
+   * or live reverse-invite form. Rendered regardless of row status. */
+  formSlot?: React.ReactNode;
 }
 
 const STATUS_LABEL: Record<Exclude<StepStatus, "hidden">, string> = {
@@ -48,6 +51,7 @@ export default function StepRow({
   disabled = false,
   ctaHref,
   guidance,
+  formSlot,
 }: StepRowProps): React.ReactElement | null {
   if (status === "hidden") {
     return null;
@@ -82,7 +86,7 @@ export default function StepRow({
         </div>
         <div
           data-cta-slot=""
-          className="flex min-h-11 min-w-[7rem] shrink-0 flex-col items-end gap-2"
+          className="flex min-h-11 min-w-[10rem] shrink-0 flex-col items-end gap-2"
           aria-hidden={showCta ? undefined : true}
         >
           {showPrimary ? (
@@ -109,7 +113,11 @@ export default function StepRow({
       </div>
       <div
         data-guidance-slot=""
-        className="min-h-10 pt-2 text-xs text-zinc-400"
+        // Sized for a title line plus the longest wrapped guidance body
+        // (see GuidancePhase bodies in validatorGuidance.ts) so the card does
+        // not resize when guidance appears; taller on mobile widths where the
+        // body wraps to more lines. Actionable guidance is never line-clamped.
+        className="min-h-28 pt-2 text-xs text-zinc-400 sm:min-h-20"
         aria-hidden={showGuidance ? undefined : true}
       >
         {guidanceTitle !== "" ? (
@@ -117,6 +125,7 @@ export default function StepRow({
         ) : null}
         {guidanceBody !== "" ? <p>{guidanceBody}</p> : null}
       </div>
+      {formSlot ?? null}
     </div>
   );
 }

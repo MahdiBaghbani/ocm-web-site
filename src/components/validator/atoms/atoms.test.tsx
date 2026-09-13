@@ -525,9 +525,12 @@ describe("StepRow", () => {
     expect(guidanceSlotTag(complete)).toContain('aria-hidden="true"');
   });
 
-  test("reserves an empty guidance slot hidden from accessibility APIs", () => {
+  test("reserves an empty guidance slot sized beyond min-h-10, hidden from accessibility APIs", () => {
     const html = render(<StepRow step="probe" status="current" index={1} />);
-    expect(html).toContain("min-h-10");
+    expect(guidanceSlotTag(html)).toContain("min-h-28");
+    expect(guidanceSlotTag(html)).toContain("sm:min-h-20");
+    expect(html).not.toContain("min-h-10 ");
+    expect(html).not.toContain('"min-h-10"');
     expect(html).toContain('data-guidance-slot=""');
     expect(guidanceSlotTag(html)).toContain('aria-hidden="true"');
     expect(html).not.toContain("Wait for the discovery probe");
@@ -637,12 +640,30 @@ describe("StepRow", () => {
     );
     expect(empty).toContain('data-cta-slot=""');
     expect(ctaSlotTag(empty)).toContain("min-h-11");
-    expect(ctaSlotTag(empty)).toContain("min-w-[7rem]");
+    expect(ctaSlotTag(empty)).toContain("min-w-[10rem]");
     expect(ctaSlotTag(empty)).toContain("shrink-0");
     expect(ctaSlotTag(empty)).toContain('aria-hidden="true"');
     expect(ctaSlotTag(filled)).toContain("min-h-11");
-    expect(ctaSlotTag(filled)).toContain("min-w-[7rem]");
+    expect(ctaSlotTag(filled)).toContain("min-w-[10rem]");
     expect(ctaSlotTag(filled)).not.toContain('aria-hidden="true"');
+  });
+
+  test("mounts an optional formSlot inside the card regardless of row status", () => {
+    const marker = <p data-testid="reverse-form-marker">form</p>;
+    const current = render(
+      <StepRow step="reverse" status="current" index={4} formSlot={marker} />,
+    );
+    const pending = render(
+      <StepRow step="reverse" status="pending" index={4} formSlot={marker} />,
+    );
+    const complete = render(
+      <StepRow step="reverse" status="complete" index={4} formSlot={marker} />,
+    );
+    const withoutSlot = render(<StepRow step="reverse" status="current" index={4} />);
+    expect(current).toContain('data-testid="reverse-form-marker"');
+    expect(pending).toContain('data-testid="reverse-form-marker"');
+    expect(complete).toContain('data-testid="reverse-form-marker"');
+    expect(withoutSlot).not.toContain('data-testid="reverse-form-marker"');
   });
 
   test("applies focus-ring classes on the root card and secondary link", () => {

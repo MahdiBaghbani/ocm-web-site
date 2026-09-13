@@ -337,4 +337,81 @@ describe("runResultsPollLoop", () => {
     expect(recorded.errors).toEqual([]);
     expect(recorded.terminal.at(-1)).toBe(true);
   });
+
+  test("a live (non-read-only) loop holds the last safe live cadence through omitted then unknown polls, never the fallback delay", async () => {
+    const ACTIVE_CADENCE_MS = 250;
+    const FALLBACK_MS = 5000;
+    const delays: number[] = [];
+    let polls = 0;
+    const recorded = hooks();
+    await runLoop(recorded, {
+      sessionId: SESSION_ID,
+      cadence: { pollIntervalMs: FALLBACK_MS, activePollIntervalMs: ACTIVE_CADENCE_MS },
+      deps: {},
+      signal: new AbortController().signal,
+      poll: async () => {
+        polls += 1;
+        if (polls === 1) {
+          // Genuine instruction: establishes the safe live cadence.
+          return okPoll({ state: "invite_minted", ts: 1, optInActive: true, nextInstruction: "paste_s1" });
+        }
+        if (polls === 2) {
+          // Omitted nextInstruction: no cadence of its own, so the loop must
+          // keep the cadence recorded from poll 1 instead of the fallback.
+          return okPoll({ state: "invite_minted", ts: 2, optInActive: true });
+        }
+        if (polls === 3) {
+          // Unrecognized nextInstruction behaves the same way as omitted.
+          return okPoll({
+            state: "invite_minted",
+            ts: 3,
+            optInActive: true,
+            nextInstruction: "not_a_real_step",
+          });
+        }
+        return okPoll({ state: "terminal_pass", ts: 4, optInActive: true });
+      },
+      report: async () => ({ ok: true, status: 200, data: REPORT }),
+      wait: async (ms) => {
+        delays.push(ms);
+        return { ok: true };
+      },
+    });
+    expect(polls).toBe(4);
+    expect(delays).toEqual([ACTIVE_CADENCE_MS, ACTIVE_CADENCE_MS, ACTIVE_CADENCE_MS]);
+    expect(delays).not.toContain(FALLBACK_MS);
+    expect(recorded.terminal.at(-1)).toBe(true);
+  });
+
+  test("a read-only loop with no genuine instruction ever recorded uses the configured fallback delay, not a busy loop", async () => {
+    const FALLBACK_MS = 5000;
+    const delays: number[] = [];
+    let polls = 0;
+    const recorded = hooks();
+    await runLoop(recorded, {
+      sessionId: SESSION_ID,
+      cadence: { pollIntervalMs: FALLBACK_MS, activePollIntervalMs: 250 },
+      deps: {},
+      signal: new AbortController().signal,
+      readOnly: true,
+      poll: async () => {
+        polls += 1;
+        if (polls === 1) {
+          // No safe live cadence was ever established: the null-instruction
+          // read-only fallback must use the configured fallback delay.
+          return okPoll({ state: "passive_running", ts: 1, optInActive: false });
+        }
+        return okPoll({ state: "terminal_pass", ts: 2, optInActive: false });
+      },
+      report: async () => ({ ok: true, status: 200, data: REPORT }),
+      wait: async (ms) => {
+        delays.push(ms);
+        return { ok: true };
+      },
+    });
+    expect(polls).toBe(2);
+    expect(delays).toEqual([FALLBACK_MS]);
+    expect(delays).not.toContain(0);
+    expect(recorded.terminal.at(-1)).toBe(true);
+  });
 });
