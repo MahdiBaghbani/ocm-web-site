@@ -76,6 +76,11 @@ import {
   type LiveInstructionHold,
 } from "../lib/results/stabilizeLiveView";
 import { projectTransportFailure } from "../lib/results/transportFailure";
+import {
+  EXPIRED_EVIDENCE_NOTE,
+  EXPIRED_NOTICE,
+  projectSessionFailure,
+} from "../lib/results/sessionFailures";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
@@ -93,7 +98,7 @@ export const VISIBILITY_NOTICE: Record<ReportVisibility, string> = {
   session: "Live session. This is not a public report.",
   permanent: "Public report. Anyone with the link can view it.",
   not_saved: "Not saved. No public report link exists.",
-  expired: "Report expired. The saved report is no longer available.",
+  expired: EXPIRED_NOTICE,
   unknown: "Report visibility is unavailable.",
 };
 
@@ -106,8 +111,7 @@ export const EVIDENCE_NOT_SAVED =
 export const EVIDENCE_EMPTY_SNAPSHOT =
   "No evidence items were included in this session snapshot.";
 
-export const EVIDENCE_EXPIRED =
-  "Evidence cannot be loaded because the saved report is no longer available.";
+export const EVIDENCE_EXPIRED = EXPIRED_EVIDENCE_NOTE;
 
 export const PAGE_LINK_NOT_SAVED_NOTICE =
   "Not saved. This result was not stored as a public report. A copied page link identifies the session but does not preserve these scores or evidence.";
@@ -1587,15 +1591,11 @@ export default function ResultsShell({
   const currentRowGuidance: GuidanceRecord | null = sanitizeGuidanceRecord(
     guidanceFor(guidanceKey),
   );
-  // Terminal live-row guidance is cleared (guidanceKey is null). The empty
-  // not-saved panel still uses the poll state so RESULT_GUIDANCE copy and
-  // the trimmed failModeLabel remain visible when report data did not
-  // survive. Use only poll.failModeLabel; do not substitute backend reason
-  // tokens.
-  const emptyStateGuidance: GuidanceRecord | null = sanitizeGuidanceRecord(
-    guidanceFor(poll?.state),
+  const sessionFailure = projectSessionFailure(
+    projection.status,
+    poll?.state,
+    poll?.failModeLabel,
   );
-  const emptyFailModeLabel = (poll?.failModeLabel ?? "").trim();
   const liveReportHref =
     projection.status === "live"
       ? liveViewReportHref(config?.validatorApiOrigin ?? "", session.id)
@@ -1753,45 +1753,41 @@ export default function ResultsShell({
       {projection.status === "loading_report" ? (
         <p className="text-sm text-zinc-400">Loading report...</p>
       ) : null}
-      {projection.status === "not_saved_empty" ? (
+      {sessionFailure?.kind === "not_saved_empty" ? (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-100">This scan was not saved</h2>
-          <p className="text-sm text-zinc-300">
-            The session finished without a saved public report, and result details
-            are not available from this link.
-          </p>
-          {emptyStateGuidance !== null && emptyStateGuidance.kind === "instruction" ? (
+          <h2 className="text-sm font-semibold text-zinc-100">{sessionFailure.title}</h2>
+          <p className="text-sm text-zinc-300">{sessionFailure.body}</p>
+          {sessionFailure.guidance !== null && sessionFailure.guidance.kind === "instruction" ? (
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-zinc-100">{emptyStateGuidance.title}</p>
-              <p className="text-sm text-zinc-300">{emptyStateGuidance.body}</p>
+              <p className="text-sm font-semibold text-zinc-100">{sessionFailure.guidance.title}</p>
+              <p className="text-sm text-zinc-300">{sessionFailure.guidance.body}</p>
             </div>
           ) : null}
-          {emptyStateGuidance !== null && emptyStateGuidance.kind === "terminal" ? (
-            <p className="text-sm text-zinc-300">{emptyStateGuidance.body}</p>
+          {sessionFailure.guidance !== null && sessionFailure.guidance.kind === "terminal" ? (
+            <p className="text-sm text-zinc-300">{sessionFailure.guidance.body}</p>
           ) : null}
-          {emptyFailModeLabel !== "" ? (
-            <p className="text-sm text-zinc-300">{emptyFailModeLabel}</p>
+          {sessionFailure.failModeLabel !== "" ? (
+            <p className="text-sm text-zinc-300">{sessionFailure.failModeLabel}</p>
           ) : null}
           <RunNewCheck href={testHref} />
         </div>
       ) : null}
-      {projection.status === "malformed" ? (
+      {sessionFailure?.kind === "malformed" ? (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-100">Result unavailable</h2>
-          <p className="text-sm text-zinc-300">
-            The scan finished, but the validator returned result data this page
-            could not read.
-          </p>
+          <h2 className="text-sm font-semibold text-zinc-100">{sessionFailure.title}</h2>
+          <p className="text-sm text-zinc-300">{sessionFailure.body}</p>
           <div className="flex flex-wrap gap-2">
-            <ReloadButton label="Try loading again" />
+            {sessionFailure.showRetry ? (
+              <ReloadButton label={sessionFailure.retryLabel} />
+            ) : null}
             <RunNewCheck href={testHref} />
           </div>
         </div>
       ) : null}
-      {projection.status === "expired" ? (
+      {sessionFailure?.kind === "expired" ? (
         <div className="space-y-3">
-          <p className="text-sm text-zinc-300">{VISIBILITY_NOTICE.expired}</p>
-          <p className="text-sm text-zinc-400">{EVIDENCE_EXPIRED}</p>
+          <p className="text-sm text-zinc-300">{sessionFailure.notice}</p>
+          <p className="text-sm text-zinc-400">{sessionFailure.evidenceNote}</p>
           <RunNewCheck href={testHref} />
         </div>
       ) : null}
