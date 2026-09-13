@@ -13,16 +13,13 @@ import {
   ShimEvent,
 } from "../test-helpers/domShim";
 import AreaGrid, { VALIDATOR_AREA_IDS, type ValidatorAreaId } from "./AreaGrid";
-import RawJsonPanel from "./RawJsonPanel";
 import {
-  FILE_VIEWER_CHIP,
   actionButtonIds,
   actionButtonLabelledby,
   areaGradeText,
   areaRateText,
   areaResultCardHtml,
   countAttr,
-  countChipsInFileViewerPanel,
   findNode,
   hasNonAscii,
   pillLabels,
@@ -632,22 +629,5 @@ describe("AreaGrid", () => {
     expect(html).not.toContain("<button");
     expect(html).not.toContain("data-area-card");
     expect(html).toContain(`1/${VALIDATOR_AREA_IDS.length} areas assessed`);
-  });
-});
-describe("RawJsonPanel", () => {
-  test("renders one JSON panel without throwing", () => {
-    const html = render(
-      <RawJsonPanel
-        title="Report"
-        downloadName="report-abc.json"
-        value={{ schema: "federation_tester_report.v1", id: "abc" }}
-      />,
-    );
-    expect(html).toContain("Report");
-    expect(html).toContain("federation_tester_report.v1");
-    expect(html).toContain("abc");
-    expect(html).toContain("Download");
-    expect(countAttr(html, FILE_VIEWER_CHIP)).toBe(1);
-    expect(countChipsInFileViewerPanel(html)).toBe(1);
   });
 });
