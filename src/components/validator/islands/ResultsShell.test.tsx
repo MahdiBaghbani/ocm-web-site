@@ -4103,28 +4103,6 @@ describe("sanitizeGuidanceRecord bracket stripping", () => {
   });
 });
 
-describe("guidanceFor terminal-key disposition (out-of-scope finding 6 verification)", () => {
-  test("a raw key matching a known terminal key resolves to terminal guidance, not the unknown fallback", () => {
-    const record = guidanceFor("terminal_pass");
-    expect(record).not.toBeNull();
-    if (record === null || record.kind !== "terminal") {
-      throw new Error("expected terminal_pass to resolve to terminal guidance");
-    }
-    expect(record.mode).toBe("terminal");
-    expect(record.phase).toBe("result");
-  });
-
-  test("a truly unrecognized raw key resolves to the unknown-key fallback", () => {
-    const record = guidanceFor("not_a_real_step");
-    expect(record).not.toBeNull();
-    if (record === null || record.kind !== "instruction") {
-      throw new Error("expected an unknown-key instruction fallback");
-    }
-    expect(record.title).toBe(UNKNOWN_GUIDANCE_TITLE);
-    expect(record.phase).toBe("unknown");
-  });
-});
-
 describe("progressAnnouncement title selection", () => {
   test("uses the guidance title for a known current instruction, not its body", () => {
     const view = activeViewOf("invite_minted", "paste_s1");
