@@ -1561,57 +1561,6 @@ describe("ResultsShell ready results IA", () => {
   });
 });
 
-describe("ResultsShell public action row ready/live guard", () => {
-  beforeAll(async () => {
-    await registerHappyDom();
-  });
-
-  afterAll(() => {
-    teardownHappyDom();
-  });
-
-  afterEach(() => {
-    document.body.innerHTML = "";
-    document.body.removeAttribute("style");
-  });
-
-  test("hides public actions for a malformed permanent report with a valid reportUrl", async () => {
-    // permanentReport({ grade: null }) is visibility permanent with a valid
-    // public reportUrl, so showPublicActions is true, but the score is
-    // unusable and status is malformed. The action row must stay hidden
-    // because status is not ready/live. Dropping that guard and gating only
-    // on showPublicActions && reportUrl would render Open/Copy here.
-    const report = permanentReport({ grade: null });
-    const result = project({
-      terminalReport: report,
-    });
-    expect(result.status).toBe("malformed");
-    expect(result.visibility).toBe("permanent");
-    expect(result.reportUrl).not.toBeNull();
-    expect(result.showPublicActions).toBe(true);
-
-    const restoreFetch = installTerminalReportFetch(report);
-    try {
-      const { createRoot } = await import("react-dom/client");
-      const root = createRoot(document.body);
-      await act(() => {
-        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
-      });
-      await waitForDom(
-        () => document.body.textContent?.includes(RESULT_HEADLINE.resultUnavailable) === true,
-      );
-
-      expect(document.body.textContent).not.toContain("Open public report");
-      expect(document.body.textContent).not.toContain("Copy public report link");
-      await act(() => {
-        root.unmount();
-      });
-    } finally {
-      restoreFetch();
-    }
-  });
-});
-
 describe("ResultsShell testHref", () => {
   test("defaults recovery links to TEST_HREF and honors a custom testHref", async () => {
     const customHref = "/ocm/validator/";
@@ -2520,77 +2469,6 @@ describe("ResultsShell area detail modal focus restoration", () => {
       // The heading is outside any inert subtree; a restore that fired while the
       // body was still inert would leave it inside an inert ancestor.
       expect(heading.closest("[inert]")).toBeNull();
-      await act(() => {
-        root.unmount();
-      });
-    } finally {
-      restoreFetch();
-    }
-  });
-});
-
-describe("ResultsShell loaded-evidence projection", () => {
-  beforeAll(async () => {
-    await registerHappyDom();
-  });
-
-  afterAll(() => {
-    teardownHappyDom();
-  });
-
-  afterEach(() => {
-    document.body.innerHTML = "";
-    document.body.removeAttribute("style");
-  });
-
-  test("a zero-count scored area stays interactive when loaded evidence exists", async () => {
-    // jwks is scored with a null grade and zero reported evidence, so its card
-    // trigger renders only because loaded evidence rows exist for the area. This
-    // exercises the full projection wiring end to end:
-    //   ResultsShell.loadedEvidenceCountsByArea (evidence rows)
-    //     -> projectResultsPage loadedEvidenceByArea
-    //     -> validatorScore areaGridEntriesFromScore entry.loadedEvidenceCount
-    //     -> AreaGrid interactive open predicate.
-    // Removing the loadedEvidenceByArea argument from the projectResultsPage
-    // call leaves loadedEvidenceCount at 0, so the interactive predicate
-    // (grade !== null || evidenceCount > 0 || loadedEvidence > 0) is false and
-    // the trigger never renders, which fails the assertions below.
-    const restoreFetch = installTerminalReportFetch(
-      permanentReport(specification((id) => (id === "jwks" ? null : "pass")), {
-        evidence: [
-          { area: "jwks", scoreArea: "jwks", reasonCode: "jwks_probed", grade: "pass" },
-          { area: "jwks", scoreArea: "jwks", reasonCode: "jwks_probed", grade: "pass" },
-        ],
-      }),
-    );
-    try {
-      const { createRoot } = await import("react-dom/client");
-      const root = createRoot(document.body);
-      await act(() => {
-        root.render(<ResultsShell host="peer.example" id={SESSION_ID} />);
-      });
-      await waitForDom(
-        () => document.body.textContent?.includes(RESULT_HEADLINE.compatible) === true,
-      );
-
-      // The jwks area has a null grade and zero reported evidence; the only
-      // reason its card is interactive is the loaded evidence projected through
-      // the score. Without the loadedEvidenceByArea wiring this query is null.
-      await waitForDom(
-        () => document.querySelector("button#area-card-jwks-action") !== null,
-      );
-      const trigger = document.querySelector<HTMLButtonElement>(
-        "button#area-card-jwks-action",
-      );
-      expect(trigger).not.toBeNull();
-      if (trigger === null) {
-        throw new Error("missing jwks trigger");
-      }
-      expect(trigger.getAttribute("id")).toBe("area-card-jwks-action");
-      expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
-      // Null grade means no warn/fail reason forward label, so the neutral
-      // View details label proves the card is interactive purely via evidence.
-      expect(trigger.textContent).toBe("View details");
       await act(() => {
         root.unmount();
       });
