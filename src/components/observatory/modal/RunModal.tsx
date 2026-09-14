@@ -231,7 +231,7 @@ export function RunModal({
   }
 
   return (
-    <OverlayFrame title={title} onClose={onClose}>
+    <OverlayFrame title={title} onClose={onClose} size="lg">
       <div className="flex h-full flex-col gap-5">
         <div
           role="tablist"

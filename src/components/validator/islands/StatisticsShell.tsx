@@ -13,16 +13,21 @@ import {
   fetchManifest,
   fetchStatistics,
   type ValidatorFetchDeps,
-  type ValidatorManifest,
-  type ValidatorStatistics,
 } from "../lib/validatorFetch";
+import type { ValidatorManifest } from "../lib/validatorManifest";
 import {
   DEFAULT_STATISTICS_DAYS,
+  STATISTICS_WHY_LABEL,
   canCommitStatisticsRequest,
   parseDaysToken,
   reconcileDaysSelector,
+  statisticsMediumEmpty,
+  statisticsLongPanel,
+  statisticsPanelKind,
+  statisticsPlatformsEmpty,
   statisticsSelectOptions,
   statisticsTimeframeOptions,
+  type ValidatorStatistics,
 } from "../lib/validatorStatistics";
 import AreaPassRateGrid from "./AreaPassRateGrid";
 import GradeDistribution from "./GradeDistribution";
@@ -151,6 +156,92 @@ export default function StatisticsShell({
     return () => controller.abort();
   }, [config, selector, manifest]);
 
+  const k = manifest?.statistics.kAnonymityUniqueHosts;
+  const panel = statisticsPanelKind(error, loading, stats);
+
+  function renderPanel(): React.ReactElement | null {
+    switch (panel) {
+      case "error":
+        return (
+          <p className="text-sm text-zinc-500">statistics unavailable: {error}</p>
+        );
+      case "loading":
+        return <p className="text-sm text-zinc-400">Loading statistics...</p>;
+      case "empty":
+        if (stats === null) {
+          return null;
+        }
+        return (
+          <div className="space-y-6">
+            <SummaryCard title="Statistics" padding="sm">
+              <div className="space-y-3">
+                <p
+                  role="status"
+                  aria-atomic="true"
+                  className="text-sm text-zinc-400"
+                >
+                  Public totals are still building for this window.
+                </p>
+                <p className="text-sm text-zinc-400">{statisticsMediumEmpty(k)}</p>
+                <details>
+                  <summary>{STATISTICS_WHY_LABEL}</summary>
+                  <p className="text-sm text-zinc-400">{statisticsLongPanel(k)}</p>
+                </details>
+              </div>
+            </SummaryCard>
+            <div className="grid gap-4 md:grid-cols-3">
+              {tile("Sessions", "-")}
+              {tile("Unique hosts", "-")}
+              {tile("Healthy", "-")}
+            </div>
+            <SummaryCard title="Platforms" padding="sm">
+              <p className="text-sm text-zinc-400">{statisticsPlatformsEmpty(k)}</p>
+            </SummaryCard>
+            <SummaryCard title="Area pass rates" padding="sm">
+              <AreaPassRateGrid areas={stats.areas} />
+            </SummaryCard>
+          </div>
+        );
+      case "ready":
+        if (stats === null) {
+          return null;
+        }
+        return (
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              {tile("Sessions", String(stats.totals.sessions))}
+              {tile("Unique hosts", String(stats.totals.uniqueHosts))}
+              {tile("Healthy", `${stats.totals.healthyPct}%`)}
+            </div>
+            <SummaryCard title="Platforms" padding="sm">
+              <div className="space-y-2">
+                {stats.platforms.length === 0 ? (
+                  <p className="text-sm text-zinc-400">No platform counts.</p>
+                ) : (
+                  stats.platforms.map((item) => (
+                    <FieldRow
+                      key={item.platform}
+                      label={item.platform}
+                      fullValue={`${item.count} (${item.pct}%)`}
+                      displayValue={`${item.count} (${item.pct}%)`}
+                    />
+                  ))
+                )}
+              </div>
+            </SummaryCard>
+            <SummaryCard title="Grade distribution" padding="sm">
+              <GradeDistribution areas={stats.areas} />
+            </SummaryCard>
+            <SummaryCard title="Area pass rates" padding="sm">
+              <AreaPassRateGrid areas={stats.areas} />
+            </SummaryCard>
+          </div>
+        );
+      default:
+        return null;
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -184,43 +275,7 @@ export default function StatisticsShell({
           </p>
         ) : null}
       </div>
-      {error !== "" ? (
-        <p className="text-sm text-zinc-500">statistics unavailable: {error}</p>
-      ) : null}
-      {loading && stats === null ? (
-        <p className="text-sm text-zinc-400">Loading statistics...</p>
-      ) : null}
-      {stats !== null ? (
-        <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            {tile("Sessions", String(stats.totals.sessions))}
-            {tile("Unique hosts", String(stats.totals.uniqueHosts))}
-            {tile("Healthy", `${stats.totals.healthyPct}%`)}
-          </div>
-          <SummaryCard title="Platforms" padding="sm">
-            <div className="space-y-2">
-              {stats.platforms.length === 0 ? (
-                <p className="text-sm text-zinc-400">No platform counts.</p>
-              ) : (
-                stats.platforms.map((item) => (
-                  <FieldRow
-                    key={item.platform}
-                    label={item.platform}
-                    fullValue={`${item.count} (${item.pct}%)`}
-                    displayValue={`${item.count} (${item.pct}%)`}
-                  />
-                ))
-              )}
-            </div>
-          </SummaryCard>
-          <SummaryCard title="Grade distribution" padding="sm">
-            <GradeDistribution areas={stats.areas} />
-          </SummaryCard>
-          <SummaryCard title="Area pass rates" padding="sm">
-            <AreaPassRateGrid areas={stats.areas} />
-          </SummaryCard>
-        </div>
-      ) : null}
+      {renderPanel()}
     </div>
   );
 }

@@ -13,11 +13,12 @@ import {
   fetchManifest,
   startSession,
   type ValidatorFetchDeps,
-  type ValidatorManifest,
 } from "../lib/validatorFetch";
+import type { ValidatorManifest } from "../lib/validatorManifest";
 import { OPT_IN_MANIFEST_PATH } from "../lib/stateMachine";
 import { interpretHostInput, serializeValidatorUrlState } from "../lib/urlState";
 import { isRecord } from "../lib/validatorShared";
+import { statisticsOptInHint } from "../lib/validatorStatistics";
 
 const DEFAULT_RESULTS_HREF = "/validator/results";
 const HOST_PREVIEW_ID = "validator-host-preview";
@@ -57,6 +58,7 @@ export interface ValidatorEntryFormProps {
   hostError: string;
   formError: string;
   previewHost: string | null;
+  kAnonymityUniqueHosts?: number;
   onTargetBlur?: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   inputRef?: React.Ref<HTMLInputElement>;
@@ -114,7 +116,7 @@ function OptInRow({
   return (
     <label
       className={`flex min-h-11 items-start gap-3 rounded-xl px-1 py-2 text-sm ${
-        disabled === true ? "cursor-not-allowed text-zinc-500" : "cursor-pointer text-zinc-200"
+        disabled === true ? "cursor-not-allowed text-zinc-400" : "cursor-pointer text-zinc-200"
       }`}
       htmlFor={id}
     >
@@ -128,7 +130,7 @@ function OptInRow({
       />
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="font-medium text-zinc-200">{label}</span>
-        <span className="text-zinc-500">{hint}</span>
+        <span className="text-zinc-400">{hint}</span>
         {statusText !== undefined && statusText !== "" ? (
           <span className="text-zinc-400">{statusText}</span>
         ) : null}
@@ -154,6 +156,7 @@ export function ValidatorEntryForm({
   hostError,
   formError,
   previewHost,
+  kAnonymityUniqueHosts,
   onTargetBlur,
   onSubmit,
   inputRef,
@@ -187,15 +190,18 @@ export function ValidatorEntryForm({
           disabled={submitting}
           error={hostError === "" ? undefined : hostError}
           helperText={ENTRY_DOMAIN_HELPER}
-          previewId={previewHost === null ? undefined : HOST_PREVIEW_ID}
+          previewId={HOST_PREVIEW_ID}
           onChange={onTargetChange}
         />
       </div>
-      {previewHost !== null ? (
-        <p id={HOST_PREVIEW_ID} className="text-sm text-zinc-400">
-          Server to check: {previewHost}
-        </p>
-      ) : null}
+      <p
+        id={HOST_PREVIEW_ID}
+        className="min-h-5 truncate text-sm leading-5 text-zinc-400"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {previewHost === null ? null : `Server to check: ${previewHost}`}
+      </p>
       <fieldset className="space-y-1 border-0 p-0">
         <legend className="px-1 text-xs font-semibold text-zinc-400">{ENTRY_LEGEND}</legend>
         <OptInRow
@@ -209,7 +215,7 @@ export function ValidatorEntryForm({
         <OptInRow
           id="validator-opt-in-active"
           label="Run active validation"
-          hint="Tests live sharing steps and may ask you to complete actions during the scan. Off runs passive checks only."
+          hint="Active test: you will accept an OCM invitation on the target server, paste its return invitation here, open a shared test file there, and share a file back. You need an account on the target server. Only one active test can run on that target at a time."
           checked={optInActive}
           disabled={activeDisabled}
           statusText={activeStatus}
@@ -218,7 +224,7 @@ export function ValidatorEntryForm({
         <OptInRow
           id="validator-opt-in-stats"
           label="Contribute to public statistics"
-          hint="Adds aggregate data after privacy thresholds are met. It does not create a public report for this server."
+          hint={statisticsOptInHint(kAnonymityUniqueHosts)}
           checked={optInStats}
           disabled={submitting}
           onChange={onOptInStatsChange}
@@ -347,6 +353,7 @@ export default function ValidatorShell({
       hostError={hostError}
       formError={formError}
       previewHost={previewHost}
+      kAnonymityUniqueHosts={manifest?.statistics.kAnonymityUniqueHosts}
       inputRef={inputRef}
       onTargetBlur={() => {
         const interpreted = interpretHostInput(target);

@@ -63,7 +63,10 @@ export function nextTransientPollDelayMs(
 
 export interface ResultsPollHooks {
   onPoll: (data: SessionPollResponse) => void;
-  onView: (view: MachineView) => void;
+  // The raw poll payload is passed alongside the resolved view so a
+  // consumer can read fields like nextInstruction directly, instead of
+  // reaching back into whatever onPoll last stashed.
+  onView: (view: MachineView, poll: SessionPollResponse) => void;
   onReport: (data: ReportResponse) => void;
   onReportFailure: (failure: ValidatorFailure | null) => void;
   onError: (message: string) => void;
@@ -74,6 +77,8 @@ export interface ResultsPollLoopInput {
   cadence: MachineCadence;
   deps: ValidatorFetchDeps;
   signal: AbortSignal;
+  // Copied read-only links keep GET polling but never POST /stop.
+  readOnly?: boolean;
   reportRefreshMs?: number;
   now?: () => number;
   poll?: PollFn;
@@ -107,12 +112,19 @@ export async function runResultsPollLoop(
   const refreshMs = input.reportRefreshMs ?? REPORT_REFRESH_MS;
   const clock = input.now ?? Date.now;
   const { sessionId, cadence, deps, signal } = input;
+  const readOnly = input.readOnly ?? false;
   const fallbackMs = cadence.pollIntervalMs ?? DEFAULT_VALIDATOR_CONFIG.pollIntervalMs;
 
   let postedStop = false;
   let lastState: string | undefined;
   let lastReportAt: number | undefined;
   let transientFailures = 0;
+  // Cadence from the last poll that carried a genuine (recognized,
+  // non-terminal) instruction. An omitted or unrecognized nextInstruction on
+  // a later poll has no cadence of its own; once we have a safe cadence on
+  // record we keep polling at it instead of halting on a transient bad
+  // payload.
+  let lastLiveCadenceMs: number | undefined;
 
   const maybeFetchReport = async (
     state: string,
@@ -172,13 +184,15 @@ export async function runResultsPollLoop(
     const data = result.data;
     const machine = machineFor(data, cadence);
     hooks.onPoll(data);
-    hooks.onView(machine);
+    hooks.onView(machine, data);
     await maybeFetchReport(data.state, machine);
     if (signal.aborted) {
       return;
     }
 
-    if (machine.shouldPostStop && !postedStop) {
+    // Read-only views keep GET polling and never POST /stop; they only
+    // stop when the session reaches a real terminal state.
+    if (!readOnly && machine.shouldPostStop && !postedStop) {
       postedStop = true;
       const stopped = await stop(sessionId, deps);
       if (signal.aborted) {
@@ -193,16 +207,37 @@ export async function runResultsPollLoop(
       const next: SessionPollResponse = { ...data, state: stopped.data.state };
       const nextMachine = machineFor(next, cadence);
       hooks.onPoll(next);
-      hooks.onView(nextMachine);
+      hooks.onView(nextMachine, next);
       await maybeFetchReport(next.state, nextMachine);
       return;
     }
 
-    if (machine.terminalize || !machine.continuePolling) {
+    // Terminal always wins immediately and is never held on a stale cadence.
+    if (machine.terminalize) {
       return;
     }
 
-    const waited = await wait(machine.pollIntervalMs, { signal });
+    if (machine.continuePolling) {
+      lastLiveCadenceMs = machine.pollIntervalMs;
+    }
+
+    // Only halt outright when no safe cadence has ever been established; a
+    // persistent omitted/unrecognized instruction after a genuine one keeps
+    // polling below instead of stalling the session.
+    if (!readOnly && !machine.continuePolling && lastLiveCadenceMs === undefined) {
+      return;
+    }
+
+    // shouldPostStop keeps a non-zero cadence. A null-instruction non-terminal
+    // poll has pollIntervalMs 0: fall back to the last safe live cadence when
+    // one exists, otherwise the configured fallback, so we do not busy-loop.
+    const waitMs =
+      machine.continuePolling || machine.shouldPostStop
+        ? readOnly && machine.pollIntervalMs === 0
+          ? fallbackMs
+          : machine.pollIntervalMs
+        : lastLiveCadenceMs ?? fallbackMs;
+    const waited = await wait(waitMs, { signal });
     if (!waited.ok) {
       return;
     }

@@ -239,3 +239,106 @@ export function parseValidatorStatistics(body: unknown): ValidatorStatistics | n
   }
   return parsed;
 }
+
+/** Fallback host count used when the manifest omits a positive k value. */
+export const DEFAULT_K_ANONYMITY_UNIQUE_HOSTS = 5;
+
+/**
+ * Resolve the k-anonymity unique-host threshold from a manifest value.
+ * A non-finite, non-positive, or missing k falls back to the default.
+ */
+export function resolveKAnonymityUniqueHosts(k: number | undefined): number {
+  return typeof k === "number" && Number.isFinite(k) && k > 0
+    ? k
+    : DEFAULT_K_ANONYMITY_UNIQUE_HOSTS;
+}
+
+/**
+ * True when statistics are suppressed or empty: all totals are zero and no
+ * platforms are present. Areas, daily, and dailyOmitted are ignored, so the
+ * live eight-zero-area shape still classifies as empty.
+ */
+export function isStatisticsSuppressedOrEmpty(stats: ValidatorStatistics): boolean {
+  const t = stats.totals;
+  return (
+    t.sessions === 0 &&
+    t.uniqueHosts === 0 &&
+    t.healthyPct === 0 &&
+    stats.platforms.length === 0
+  );
+}
+
+export type StatisticsPanelKind = "error" | "loading" | "empty" | "ready";
+
+/**
+ * Classify the exclusive statistics panel to render. Precedence is
+ * error -> loading -> empty -> ready; a null stats value is loading.
+ */
+export function statisticsPanelKind(
+  error: string,
+  loading: boolean,
+  stats: ValidatorStatistics | null,
+): StatisticsPanelKind {
+  if (error !== "") {
+    return "error";
+  }
+  if (loading || stats === null) {
+    return "loading";
+  }
+  return isStatisticsSuppressedOrEmpty(stats) ? "empty" : "ready";
+}
+
+/**
+ * Threshold phrase for displayed copy, built from the raw manifest k.
+ * Displayed copy must not go through resolveKAnonymityUniqueHosts; a
+ * non-finite, non-positive, or missing k reads "enough unique hosts".
+ */
+function statisticsThresholdPhrase(k: number | undefined): string {
+  return typeof k === "number" && Number.isFinite(k) && k > 0
+    ? `at least ${k} unique hosts`
+    : `enough unique hosts`;
+}
+
+export const STATISTICS_WHY_LABEL = "Why are these zero?";
+
+/** Short footnote copy for the statistics window. Uses the raw manifest k. */
+export function statisticsShortFootnote(k: number | undefined): string {
+  return typeof k === "number" && Number.isFinite(k) && k > 0
+    ? `Totals appear after at least ${k} unique hosts contribute in this window.`
+    : `Totals appear after enough unique hosts contribute in this window.`;
+}
+
+/** Medium explanation copy for the empty statistics panel. Uses the raw manifest k. */
+export function statisticsMediumEmpty(k: number | undefined): string {
+  const threshold = statisticsThresholdPhrase(k);
+  return [
+    `Public totals stay at zero until ${threshold} contribute in this window.`,
+    `Contribute to public statistics is off by default, so the pool only grows when people opt in.`,
+    `Opted-in runs may be recorded even before they appear here.`,
+    `Once ${threshold} publish, the counts show for everyone.`,
+  ].join(" ");
+}
+
+/** Long explanation copy for the statistics details panel. Uses the raw manifest k. */
+export function statisticsLongPanel(k: number | undefined): string {
+  const threshold = statisticsThresholdPhrase(k);
+  return [
+    `These totals are aggregate counts across all published runs in the window, never a per-server score.`,
+    `The window waits for ${threshold} so a single host cannot be picked out from the crowd.`,
+    `Contribute to public statistics is off by default.`,
+    `Opting in does not create a public report for this server.`,
+    `This protection is sometimes called k-anonymity.`,
+  ].join(" ");
+}
+
+/** Empty-state copy for the platforms card. Uses the raw manifest k. */
+export function statisticsPlatformsEmpty(k: number | undefined): string {
+  const threshold = statisticsThresholdPhrase(k);
+  return `Platform counts appear after ${threshold} contribute in this window.`;
+}
+
+/** Opt-in hint copy for the contribute toggle. Uses the raw manifest k. */
+export function statisticsOptInHint(k: number | undefined): string {
+  const threshold = statisticsThresholdPhrase(k);
+  return `Adds aggregate data after ${threshold} are in the public window. It does not create a public report for this server.`;
+}

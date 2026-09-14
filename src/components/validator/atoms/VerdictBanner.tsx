@@ -3,19 +3,16 @@
  * inconclusive (terminal pass with no assessed areas).
  */
 import React from "react";
+import { CircleCheck, CircleX, TriangleAlert, LoaderCircle, CircleStop, Info } from "lucide-react";
 import { statusToUi } from "../../observatory/lib/statusStyles";
-import Pill, { type GradeKind } from "./Pill";
+import Pill from "./Pill";
+import {
+  VERDICT_KINDS,
+  verdictKindFromScore,
+  type VerdictKind,
+} from "../lib/results/verdict";
 
-export const VERDICT_KINDS = [
-  "pass",
-  "fail",
-  "warn",
-  "running",
-  "interrupted",
-  "inconclusive",
-] as const;
-
-export type VerdictKind = (typeof VERDICT_KINDS)[number];
+export { VERDICT_KINDS, verdictKindFromScore, type VerdictKind };
 
 export interface VerdictBannerProps {
   verdict: VerdictKind;
@@ -41,14 +38,14 @@ const TINT: Record<VerdictKind, string> = {
   inconclusive: "border-zinc-800 bg-zinc-900/20",
 };
 
-const GLYPH: Record<VerdictKind, string> = {
-  pass: "v",
-  fail: "x",
-  warn: "!",
-  running: "...",
-  interrupted: "i",
-  inconclusive: "i",
-};
+const ICONS = {
+  pass: CircleCheck,
+  fail: CircleX,
+  warn: TriangleAlert,
+  running: LoaderCircle,
+  interrupted: CircleStop,
+  inconclusive: Info,
+} as const satisfies Record<VerdictKind, typeof CircleCheck>;
 
 const DEFAULT_TITLE: Record<VerdictKind, string> = {
   pass: "Pass",
@@ -68,35 +65,6 @@ const PILL_KIND = {
   inconclusive: "unassessed",
 } as const;
 
-/**
- * Map a validated grade plus poll/session state to a banner kind.
- * Interrupted and terminal_fail are keyed from state. Coverage is not inferred.
- */
-export function verdictKindFromScore(input: {
-  grade: GradeKind | null;
-  state: string;
-}): VerdictKind {
-  if (input.state === "interrupted") {
-    return "interrupted";
-  }
-  if (input.state === "terminal_fail") {
-    return "fail";
-  }
-  if (input.grade === "fail") {
-    return "fail";
-  }
-  if (input.grade === "warn") {
-    return "warn";
-  }
-  if (input.grade === "pass") {
-    return "pass";
-  }
-  if (input.state === "terminal_pass") {
-    return "inconclusive";
-  }
-  return "running";
-}
-
 export default function VerdictBanner({
   verdict,
   title,
@@ -105,6 +73,7 @@ export default function VerdictBanner({
   const ui = statusToUi(KIND_TO_STATUS[verdict]);
   const text = verdict === "warn" ? "text-amber-200" : ui.text;
   const heading = title ?? DEFAULT_TITLE[verdict];
+  const Icon = ICONS[verdict];
 
   return (
     <div
@@ -114,10 +83,11 @@ export default function VerdictBanner({
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
           <span
-            className={`mt-0.5 w-6 shrink-0 font-mono text-sm ${text}`}
+            className={`mt-0.5 shrink-0 ${text}`}
+            data-icon={verdict}
             aria-hidden="true"
           >
-            {GLYPH[verdict]}
+            <Icon size={20} strokeWidth={2} aria-hidden="true" />
           </span>
           <div className="min-w-0">
             <div className={`text-sm font-semibold ${text}`}>{heading}</div>

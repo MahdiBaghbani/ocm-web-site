@@ -1,6 +1,7 @@
 /**
  * Standalone JSON panel for a manifest or report. ViewerFrame is the only
  * bordered surface; TextViewerCore must stay noChip so chips are never nested.
+ * Pass fillParent to fill the parent height for modal use.
  */
 import React from "react";
 import { ViewerFrame } from "../../observatory/evidence/renderers/ViewerFrame";
@@ -10,6 +11,8 @@ export interface RawJsonPanelProps {
   value: unknown;
   title?: string;
   downloadName?: string;
+  /** When true, panel fills parent height and scrolls JSON internally. */
+  fillParent?: boolean;
 }
 
 function formatJson(value: unknown): string {
@@ -28,6 +31,7 @@ export default function RawJsonPanel({
   value,
   title,
   downloadName = "report.json",
+  fillParent,
 }: RawJsonPanelProps): React.ReactElement {
   const content = formatJson(value);
   const header =
@@ -36,14 +40,18 @@ export default function RawJsonPanel({
     ) : undefined;
 
   return (
-    <div data-testid="file-viewer-chip">
-      <ViewerFrame headerSlot={header}>
-        <div className="p-4">
+    <div
+      data-testid="file-viewer-chip"
+      className={fillParent ? "h-full min-h-0" : undefined}
+    >
+      <ViewerFrame headerSlot={header} fillParent={fillParent}>
+        <div className={fillParent ? "h-full min-h-0 p-4" : "p-4"}>
           <TextViewerCore
             content={content}
             language="json"
             noChip
             downloadName={downloadName}
+            fillParent={fillParent}
           />
         </div>
       </ViewerFrame>

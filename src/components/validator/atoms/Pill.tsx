@@ -4,6 +4,7 @@
  */
 import React from "react";
 import { statusToUi } from "../../observatory/lib/statusStyles";
+import { GRADE_KINDS, type GradeKind } from "../lib/results/verdict";
 
 export const PILL_KINDS = [
   "pass",
@@ -17,8 +18,7 @@ export const PILL_KINDS = [
 
 export type PillKind = (typeof PILL_KINDS)[number];
 
-export const GRADE_KINDS = ["pass", "fail", "warn"] as const;
-export type GradeKind = (typeof GRADE_KINDS)[number];
+export { GRADE_KINDS, type GradeKind };
 
 const KIND_TO_STATUS = {
   pass: "passed",
@@ -53,6 +53,7 @@ export default function Pill({ kind, label }: PillProps): React.ReactElement {
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-950/40 px-2.5 py-0.5 text-xs ${text}`}
+      data-pill-kind={kind}
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${ui.dot}`} aria-hidden="true" />
       {label ?? DEFAULT_LABEL[kind]}

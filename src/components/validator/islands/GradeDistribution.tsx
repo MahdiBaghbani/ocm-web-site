@@ -4,7 +4,7 @@
 import React from "react";
 import { VALIDATOR_AREA_IDS } from "../atoms/AreaGrid";
 import Pill from "../atoms/Pill";
-import type { ValidatorStatisticsArea } from "../lib/validatorFetch";
+import type { ValidatorStatisticsArea } from "../lib/validatorStatistics";
 
 const CANONICAL_AREA_IDS: ReadonlySet<string> = new Set(VALIDATOR_AREA_IDS);
 

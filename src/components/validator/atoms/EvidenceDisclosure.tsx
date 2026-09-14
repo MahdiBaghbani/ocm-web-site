@@ -3,21 +3,13 @@
  * tokens; does not wrap the matrix FlowAccordionSection contract.
  */
 import React, { useId, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import FieldRow from "../../observatory/stack/cards/FieldRow";
 import Pill, { type GradeKind } from "./Pill";
+import type { EvidenceGrade, EvidenceItem } from "../lib/evidence/types";
+import { reasonCopyFor } from "../lib/validatorReasons";
 
-export interface EvidenceItem {
-  area?: string;
-  scoreArea?: string;
-  leg?: string;
-  step?: string;
-  reasonCode?: string;
-  severity?: string;
-  grade?: GradeKind | null;
-  affectsGrade?: boolean;
-  payloadRedacted?: boolean;
-  createdAt?: string;
-}
+export type { EvidenceGrade, EvidenceItem };
 
 export interface EvidenceDisclosureProps {
   title: string;
@@ -38,7 +30,6 @@ const ROW_KEYS = [
   "severity",
   "grade",
   "affectsGrade",
-  "payloadRedacted",
   "createdAt",
 ] as const;
 
@@ -51,9 +42,12 @@ const ROW_LABELS: Record<(typeof ROW_KEYS)[number], string> = {
   severity: "severity",
   grade: "grade",
   affectsGrade: "affects grade",
-  payloadRedacted: "redacted",
   createdAt: "created",
 };
+
+// Emitted as narrative copy when payloadRedacted is true. The boolean itself
+// is never rendered as an evidence row.
+const REDACTED_NOTE = "Supporting details were redacted from this report.";
 
 function displayOf(value: string | boolean | GradeKind): string {
   if (typeof value === "boolean") {
@@ -114,10 +108,15 @@ export default function EvidenceDisclosure({
       >
         <span className="flex items-start gap-2">
           <span
-            className="mt-0.5 w-3 shrink-0 font-mono text-sm text-zinc-400"
+            className={
+              isOpen
+                ? "mt-0.5 shrink-0 text-zinc-400 rotate-90"
+                : "mt-0.5 shrink-0 text-zinc-400"
+            }
+            data-icon="disclosure-chevron"
             aria-hidden="true"
           >
-            {isOpen ? "v" : ">"}
+            <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
           </span>
           <span className="flex flex-col">
             <span className="text-sm font-semibold text-zinc-100">
@@ -142,17 +141,48 @@ export default function EvidenceDisclosure({
         ) : (
           items.map((item, index) => {
             const rows = rowsFor(item);
+            // Resolved narrative copy is additive: it explains the reason
+            // slug while the raw reasonCode row below keeps its identity.
+            const resolved = reasonCopyFor({
+              reasonCode: item.reasonCode,
+              grade: item.grade,
+              severity: item.severity,
+              affectsGrade: item.affectsGrade,
+            });
             const key =
               item.reasonCode !== undefined && item.reasonCode !== ""
                 ? `${item.reasonCode}-${index}`
                 : `evidence-${index}`;
+            // Pill must reflect the resolved outcome, not the raw entry grade:
+            // grade-specific slugs (for example jwks_unadvertised) fix the
+            // grade regardless of caller grade. Fall back to item.grade when
+            // the resolver leaves grade undefined.
+            const pillKind: GradeKind | null = (() => {
+              const effective = resolved.grade ?? item.grade;
+              if (
+                effective === "pass" ||
+                effective === "fail" ||
+                effective === "warn"
+              ) {
+                return effective;
+              }
+              return null;
+            })();
             return (
               <div key={key} className="space-y-2">
-                {item.grade === "pass" ||
-                item.grade === "fail" ||
-                item.grade === "warn" ? (
-                  <Pill kind={item.grade} />
-                ) : null}
+                {pillKind !== null ? <Pill kind={pillKind} /> : null}
+                <div className="space-y-1" data-reason-source={resolved.source}>
+                  <p className="text-sm font-semibold text-zinc-100">
+                    {resolved.title}
+                  </p>
+                  <p className="text-xs text-zinc-400">{resolved.why}</p>
+                  {resolved.remedy !== undefined && resolved.remedy !== "" ? (
+                    <p className="text-xs text-zinc-400">{resolved.remedy}</p>
+                  ) : null}
+                  {item.payloadRedacted === true ? (
+                    <p className="text-xs text-zinc-400">{REDACTED_NOTE}</p>
+                  ) : null}
+                </div>
                 {rows.map((row) => (
                   <FieldRow
                     key={row.label}
