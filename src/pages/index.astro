@@ -1,11 +1,11 @@
 ---
-import { isPageMounted, landing, pagePath } from '../lib/sitePages';
+import { isPageMounted, pagePath, primaryPage } from '../lib/sitePages';
 import HomepageLayout from '../layouts/HomepageLayout.astro';
 import HeroSection from '../components/sections/HeroSection.astro';
 
 if (!isPageMounted('home')) {
-  const target = landing();
-  return Astro.redirect(`${import.meta.env.BASE_URL}${pagePath(target)}`);
+  const primary = primaryPage();
+  return Astro.redirect(`${import.meta.env.BASE_URL}${pagePath(primary)}`);
 }
 ---
 
