@@ -2,7 +2,7 @@
 import {
   PAGE_ORDER,
   isPageMounted,
-  landing,
+  logoHref,
   pagePath,
   type PageKey,
 } from '../lib/sitePages';
@@ -26,7 +26,11 @@ const navLinks = PAGE_ORDER.filter(
   href: `${base}${pagePath(key)}`,
 }));
 
-const logoHref = `${base}${pagePath(landing())}`;
+const rawLogo = logoHref();
+const external = /^https?:\/\//.test(rawLogo);
+const logoHrefVal = external ? rawLogo : `${base}${rawLogo}`;
+const logoTarget = external ? '_blank' : undefined;
+const logoRel = external ? 'noopener noreferrer' : undefined;
 ---
 
 <header
@@ -34,7 +38,13 @@ const logoHref = `${base}${pagePath(landing())}`;
   class="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 border-b border-gray-800 shadow-lg transition-all duration-300"
 >
   <div class="max-w-screen-2xl mx-auto px-6 flex items-center justify-between h-16">
-    <a href={logoHref} class="flex items-center gap-3 group" aria-label="OpenCloudMesh">
+    <a
+      href={logoHrefVal}
+      target={logoTarget}
+      rel={logoRel}
+      class="flex items-center gap-3 group"
+      aria-label="OpenCloudMesh"
+    >
       <img
         src={`${base}logos/brand/ocm-text-horizontal.svg`}
         alt="OpenCloudMesh"

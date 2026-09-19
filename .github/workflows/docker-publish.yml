@@ -57,8 +57,11 @@ jobs:
           load: false
           build-args: |
             ASTRO_BASE=/
-            ASTRO_SITE=https://ocm.azadehafzar.io
-            SITE_PAGES=home,validator,statistics
+            ASTRO_SITE=${{ vars.VPS_ASTRO_SITE }}
+            SITE_PROFILE=VPS
+            SITE_PRIMARY_PAGE=${{ vars.VPS_PRIMARY_PAGE }}
+            SITE_COMMUNITY_URL=${{ vars.VPS_COMMUNITY_URL }}
+            SITE_LOGO_HREF=${{ vars.VPS_LOGO_HREF }}
             VALIDATOR_CONTACT=${{ vars.VPS_VALIDATOR_CONTACT }}
           tags: |
             ${{ env.IMAGE }}:${{ inputs.version }}

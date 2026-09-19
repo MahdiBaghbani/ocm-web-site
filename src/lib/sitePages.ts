@@ -21,7 +21,8 @@ const PAGE_KEY_SET: ReadonlySet<string> = new Set(PAGE_ORDER);
 /** Named presets. Each value is an ordered key set (canonicalized on resolve). */
 export const PROFILES = {
   default: ["home", "observatory"],
-  VPS: ["home", "validator", "statistics"],
+  "observatory-root": ["observatory"],
+  VPS: ["validator", "statistics"],
 } as const satisfies Record<string, readonly PageKey[]>;
 
 export type SiteProfile = keyof typeof PROFILES;
@@ -35,6 +36,15 @@ function isPageKey(value: string): value is PageKey {
 
 function isSiteProfile(value: string): value is SiteProfile {
   return Object.keys(PROFILES).includes(value);
+}
+
+function readTrimmedEnv(name: string): string | undefined {
+  const raw = process.env[name];
+  if (raw === undefined) {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function keysFromProfile(raw: string | undefined): readonly PageKey[] {
@@ -114,4 +124,47 @@ const PAGE_PATHS = {
 /** Relative site path for `key` (home is the empty prefix). */
 export function pagePath(key: PageKey): string {
   return PAGE_PATHS[key];
+}
+
+/**
+ * Primary page from SITE_PRIMARY_PAGE, or landing() when unset,
+ * unknown, or not mounted.
+ */
+export function primaryPage(): PageKey {
+  const raw = readTrimmedEnv("SITE_PRIMARY_PAGE");
+  if (raw === undefined) {
+    return landing();
+  }
+  if (!isPageKey(raw)) {
+    console.warn(`Unknown SITE_PRIMARY_PAGE "${raw}"; using landing page.`);
+    return landing();
+  }
+  if (!isPageMounted(raw)) {
+    console.warn(
+      `SITE_PRIMARY_PAGE "${raw}" is not mounted; using landing page.`,
+    );
+    return landing();
+  }
+  return raw;
+}
+
+/** Community site URL from SITE_COMMUNITY_URL, or empty when unset. */
+export function communityUrl(): string {
+  return readTrimmedEnv("SITE_COMMUNITY_URL") ?? "";
+}
+
+/**
+ * Logo link target: SITE_LOGO_HREF, else SITE_COMMUNITY_URL, else the primary
+ * page path (relative, not base-prefixed).
+ */
+export function logoHref(): string {
+  const logo = readTrimmedEnv("SITE_LOGO_HREF");
+  if (logo !== undefined) {
+    return logo;
+  }
+  const community = communityUrl();
+  if (community.length > 0) {
+    return community;
+  }
+  return pagePath(primaryPage());
 }

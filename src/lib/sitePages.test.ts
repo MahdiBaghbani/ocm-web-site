@@ -11,18 +11,30 @@ import {
   PAGE_CATALOG,
   PAGE_ORDER,
   PROFILES,
+  communityUrl,
   enabledPages,
   isPageMounted,
   landing,
+  logoHref,
   pagePath,
+  primaryPage,
 } from "./sitePages";
 
-const SITE_ENV_KEYS = ["SITE_PROFILE", "SITE_PAGES"] as const;
+const SITE_ENV_KEYS = [
+  "SITE_PROFILE",
+  "SITE_PAGES",
+  "SITE_PRIMARY_PAGE",
+  "SITE_COMMUNITY_URL",
+  "SITE_LOGO_HREF",
+] as const;
 
 const inheritedEnv: Record<(typeof SITE_ENV_KEYS)[number], string | undefined> =
   {
     SITE_PROFILE: process.env.SITE_PROFILE,
     SITE_PAGES: process.env.SITE_PAGES,
+    SITE_PRIMARY_PAGE: process.env.SITE_PRIMARY_PAGE,
+    SITE_COMMUNITY_URL: process.env.SITE_COMMUNITY_URL,
+    SITE_LOGO_HREF: process.env.SITE_LOGO_HREF,
   };
 
 function restoreInheritedEnv(): void {
@@ -37,8 +49,9 @@ function restoreInheritedEnv(): void {
 }
 
 function clearSiteEnv(): void {
-  delete process.env.SITE_PROFILE;
-  delete process.env.SITE_PAGES;
+  for (const key of SITE_ENV_KEYS) {
+    delete process.env[key];
+  }
 }
 
 beforeEach(() => {
@@ -60,7 +73,7 @@ describe("sitePages catalog", () => {
 });
 
 describe("sitePages profiles", () => {
-  test("default preset resolves home, observatory", () => {
+  test("default preset is unchanged", () => {
     expect(PROFILES.default).toEqual(["home", "observatory"]);
     expect(enabledPages()).toEqual(["home", "observatory"]);
     expect(isPageMounted("home")).toBe(true);
@@ -69,11 +82,19 @@ describe("sitePages profiles", () => {
     expect(isPageMounted("statistics")).toBe(false);
   });
 
-  test("VPS preset resolves home, validator, statistics", () => {
-    expect(PROFILES.VPS).toEqual(["home", "validator", "statistics"]);
+  test("observatory-root preset resolves observatory only", () => {
+    expect(PROFILES["observatory-root"]).toEqual(["observatory"]);
+    process.env.SITE_PROFILE = "observatory-root";
+    expect(enabledPages()).toEqual(["observatory"]);
+    expect(isPageMounted("observatory")).toBe(true);
+    expect(isPageMounted("home")).toBe(false);
+  });
+
+  test("VPS preset resolves validator, statistics", () => {
+    expect(PROFILES.VPS).toEqual(["validator", "statistics"]);
     process.env.SITE_PROFILE = "VPS";
-    expect(enabledPages()).toEqual(["home", "validator", "statistics"]);
-    expect(isPageMounted("home")).toBe(true);
+    expect(enabledPages()).toEqual(["validator", "statistics"]);
+    expect(isPageMounted("home")).toBe(false);
     expect(isPageMounted("validator")).toBe(true);
     expect(isPageMounted("statistics")).toBe(true);
     expect(isPageMounted("observatory")).toBe(false);
@@ -83,7 +104,7 @@ describe("sitePages profiles", () => {
     process.env.SITE_PROFILE = "not-a-profile";
     delete process.env.SITE_PAGES;
     expect(() => enabledPages()).toThrow(
-      /Unknown SITE_PROFILE "not-a-profile"\. Known profiles: default, VPS\./,
+      /Unknown SITE_PROFILE "not-a-profile"\. Known profiles: default, observatory-root, VPS\./,
     );
   });
 
@@ -165,11 +186,74 @@ describe("sitePages landing", () => {
 
   test("landing follows SITE_PROFILE and SITE_PAGES", () => {
     process.env.SITE_PROFILE = "VPS";
-    expect(landing()).toBe("home");
+    expect(landing()).toBe("validator");
 
     delete process.env.SITE_PROFILE;
     process.env.SITE_PAGES = "validator,statistics";
     expect(landing()).toBe("validator");
+  });
+});
+
+describe("sitePages primaryPage", () => {
+  test("returns env value when known and mounted", () => {
+    process.env.SITE_PAGES = "home,observatory,validator";
+    process.env.SITE_PRIMARY_PAGE = "validator";
+    expect(primaryPage()).toBe("validator");
+  });
+
+  test("warns and returns landing when env is unknown", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    process.env.SITE_PRIMARY_PAGE = "not-a-page";
+    expect(primaryPage()).toBe("home");
+    expect(warn).toHaveBeenCalledWith(
+      'Unknown SITE_PRIMARY_PAGE "not-a-page"; using landing page.',
+    );
+  });
+
+  test("warns and returns landing when env is unmounted", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    process.env.SITE_PAGES = "home,observatory";
+    process.env.SITE_PRIMARY_PAGE = "validator";
+    expect(primaryPage()).toBe("home");
+    expect(warn).toHaveBeenCalledWith(
+      'SITE_PRIMARY_PAGE "validator" is not mounted; using landing page.',
+    );
+  });
+
+  test("returns landing when env is unset", () => {
+    expect(primaryPage()).toBe("home");
+  });
+});
+
+describe("sitePages communityUrl", () => {
+  test("returns trimmed value when env is set", () => {
+    process.env.SITE_COMMUNITY_URL = "  https://example.org/ocm  ";
+    expect(communityUrl()).toBe("https://example.org/ocm");
+  });
+
+  test("returns empty string when env is unset or empty", () => {
+    expect(communityUrl()).toBe("");
+    process.env.SITE_COMMUNITY_URL = "   ";
+    expect(communityUrl()).toBe("");
+  });
+});
+
+describe("sitePages logoHref", () => {
+  test("returns SITE_LOGO_HREF when set", () => {
+    process.env.SITE_LOGO_HREF = "https://example.org/logo";
+    process.env.SITE_COMMUNITY_URL = "https://example.org/community";
+    expect(logoHref()).toBe("https://example.org/logo");
+  });
+
+  test("returns SITE_COMMUNITY_URL when logo href is unset", () => {
+    process.env.SITE_COMMUNITY_URL = "https://example.org/community";
+    expect(logoHref()).toBe("https://example.org/community");
+  });
+
+  test("returns primary page path when both logo and community are unset", () => {
+    process.env.SITE_PAGES = "validator,statistics";
+    process.env.SITE_PRIMARY_PAGE = "validator";
+    expect(logoHref()).toBe("validator/");
   });
 });
 
