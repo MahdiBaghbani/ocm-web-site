@@ -9,6 +9,9 @@ export const CONFIG_ORIGIN_KEY = "validator_api_origin";
 
 export interface ValidatorRuntimeConfig {
   validatorApiOrigin: string;
+  communityUrl: string;
+  logoHref: string;
+  validatorContact: string;
   pollIntervalMs: number;
   activePollIntervalMs: number;
   backoffInitialMs: number;
@@ -18,6 +21,9 @@ export interface ValidatorRuntimeConfig {
 
 export const DEFAULT_VALIDATOR_CONFIG = {
   validatorApiOrigin: "",
+  communityUrl: "",
+  logoHref: "",
+  validatorContact: "",
   pollIntervalMs: 1000,
   activePollIntervalMs: 2000,
   backoffInitialMs: 1000,
@@ -35,14 +41,20 @@ export type FetchLike = (
 ) => Promise<Response>;
 
 function cloneDefaults(): ValidatorRuntimeConfig {
-  return {
-    validatorApiOrigin: DEFAULT_VALIDATOR_CONFIG.validatorApiOrigin,
-    pollIntervalMs: DEFAULT_VALIDATOR_CONFIG.pollIntervalMs,
-    activePollIntervalMs: DEFAULT_VALIDATOR_CONFIG.activePollIntervalMs,
-    backoffInitialMs: DEFAULT_VALIDATOR_CONFIG.backoffInitialMs,
-    backoffMaxMs: DEFAULT_VALIDATOR_CONFIG.backoffMaxMs,
-    requestTimeoutMs: DEFAULT_VALIDATOR_CONFIG.requestTimeoutMs,
-  };
+  return { ...DEFAULT_VALIDATOR_CONFIG };
+}
+
+function readOptionalString(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return undefined;
 }
 
 function normalizeApiOrigin(raw: string): string {
@@ -96,6 +108,24 @@ export function parseValidatorConfig(raw: unknown): ValidatorRuntimeConfig {
 
   if (typeof raw[CONFIG_ORIGIN_KEY] === "string") {
     config.validatorApiOrigin = normalizeApiOrigin(raw[CONFIG_ORIGIN_KEY]);
+  }
+
+  const communityUrl = readOptionalString(raw, ["community_url", "communityUrl"]);
+  if (communityUrl !== undefined) {
+    config.communityUrl = communityUrl.trim();
+  }
+
+  const logoHref = readOptionalString(raw, ["logo_href", "logoHref"]);
+  if (logoHref !== undefined) {
+    config.logoHref = logoHref.trim();
+  }
+
+  const validatorContact = readOptionalString(raw, [
+    "validator_contact",
+    "validatorContact",
+  ]);
+  if (validatorContact !== undefined) {
+    config.validatorContact = validatorContact.trim();
   }
 
   config.pollIntervalMs = readOptionalNumber(

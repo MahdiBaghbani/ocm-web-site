@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import type { MatrixRules, SuiteManifest } from "./contracts";
 
 /** Published suite-manifest filename under `public/`. */
@@ -62,4 +64,36 @@ export function buildObservatoryStaticPaths(
   }
 
   return paths;
+}
+
+/**
+ * Read published artifacts and build observatory static paths.
+ * Missing files (ENOENT) yield no paths so a default-profile build can
+ * succeed without ingest. Corrupt or unreadable files still throw.
+ */
+export async function loadObservatoryStaticPaths(
+  rulesPath: string,
+  manifestPath: string,
+): Promise<ObservatoryStaticPath[]> {
+  let rules: MatrixRules;
+  try {
+    rules = JSON.parse(await readFile(rulesPath, "utf-8")) as MatrixRules;
+  } catch (error) {
+    if (isEnoent(error)) {
+      return [];
+    }
+    throw error;
+  }
+
+  let manifest: SuiteManifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as SuiteManifest;
+  } catch (error) {
+    if (isEnoent(error)) {
+      return [];
+    }
+    throw error;
+  }
+
+  return buildObservatoryStaticPaths(rules, manifest);
 }

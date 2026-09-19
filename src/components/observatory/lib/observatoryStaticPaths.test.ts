@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, test } from "bun:test";
 
 import type {
@@ -11,6 +15,7 @@ import {
   SUITE_MANIFEST_FILENAME,
   buildObservatoryStaticPaths,
   isEnoent,
+  loadObservatoryStaticPaths,
 } from "./observatoryStaticPaths";
 
 function makeFlow(overrides: Partial<FlowMetadata> = {}): FlowMetadata {
@@ -186,5 +191,83 @@ describe("buildObservatoryStaticPaths", () => {
     expect(paths).toEqual([
       { params: { slug: undefined }, props: { view: "index" } },
     ]);
+  });
+});
+
+describe("loadObservatoryStaticPaths", () => {
+  test("returns empty paths when the matrix-rules artifact is missing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "observatory-static-paths-"));
+    try {
+      const rulesPath = join(dir, "matrix-rules.v1.json");
+      const manifestPath = join(dir, "suite-manifest.v1.json");
+      await writeFile(manifestPath, JSON.stringify(makeManifest({})));
+
+      await expect(loadObservatoryStaticPaths(rulesPath, manifestPath)).resolves.toEqual(
+        [],
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("returns empty paths when the suite-manifest artifact is missing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "observatory-static-paths-"));
+    try {
+      const rulesPath = join(dir, "matrix-rules.v1.json");
+      const manifestPath = join(dir, "suite-manifest.v1.json");
+      await writeFile(rulesPath, JSON.stringify(makeRules([])));
+
+      await expect(loadObservatoryStaticPaths(rulesPath, manifestPath)).resolves.toEqual(
+        [],
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("returns empty paths when both artifacts are missing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "observatory-static-paths-"));
+    try {
+      const rulesPath = join(dir, "matrix-rules.v1.json");
+      const manifestPath = join(dir, "suite-manifest.v1.json");
+
+      await expect(loadObservatoryStaticPaths(rulesPath, manifestPath)).resolves.toEqual(
+        [],
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("throws when an existing artifact is corrupt", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "observatory-static-paths-"));
+    try {
+      const rulesPath = join(dir, "matrix-rules.v1.json");
+      const manifestPath = join(dir, "suite-manifest.v1.json");
+      await writeFile(rulesPath, "{not-json");
+      await writeFile(manifestPath, JSON.stringify(makeManifest({})));
+
+      await expect(loadObservatoryStaticPaths(rulesPath, manifestPath)).rejects.toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("builds paths when both artifacts exist", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "observatory-static-paths-"));
+    try {
+      const rules = makeRules([makeScenario({ cell_id: "cell-a" })]);
+      const manifest = makeManifest({ "run-1": makeRun("run-1") });
+      const rulesPath = join(dir, "matrix-rules.v1.json");
+      const manifestPath = join(dir, "suite-manifest.v1.json");
+      await writeFile(rulesPath, JSON.stringify(rules));
+      await writeFile(manifestPath, JSON.stringify(manifest));
+
+      await expect(loadObservatoryStaticPaths(rulesPath, manifestPath)).resolves.toEqual(
+        buildObservatoryStaticPaths(rules, manifest),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -11,11 +11,8 @@ import EvidenceDisclosure from "../atoms/EvidenceDisclosure";
 import ReportJsonModal from "../atoms/ReportJsonModal";
 import StepRow from "../atoms/StepRow";
 import VerdictBanner from "../atoms/VerdictBanner";
-import {
-  fetchConfigSource,
-  loadValidatorConfig,
-  type ValidatorRuntimeConfig,
-} from "../lib/validatorConfig";
+import type { ValidatorRuntimeConfig } from "../lib/validatorConfig";
+import { loadSharedRuntimeConfig } from "../../../lib/siteRuntimeConfig";
 import {
   claimInvite,
   joinValidatorUrl,
@@ -882,7 +879,7 @@ export default function ResultsShell({
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
-      const loaded = await loadValidatorConfig(fetchConfigSource(fetch.bind(globalThis)));
+      const loaded = await loadSharedRuntimeConfig();
       if (controller.signal.aborted) {
         return;
       }

@@ -20,9 +20,8 @@ const PAGE_KEY_SET: ReadonlySet<string> = new Set(PAGE_ORDER);
 
 /** Named presets. Each value is an ordered key set (canonicalized on resolve). */
 export const PROFILES = {
-  default: ["home", "observatory"],
+  default: ["home", "observatory", "validator", "statistics"],
   "observatory-root": ["observatory"],
-  VPS: ["validator", "statistics"],
 } as const satisfies Record<string, readonly PageKey[]>;
 
 export type SiteProfile = keyof typeof PROFILES;
@@ -148,23 +147,3 @@ export function primaryPage(): PageKey {
   return raw;
 }
 
-/** Community site URL from SITE_COMMUNITY_URL, or empty when unset. */
-export function communityUrl(): string {
-  return readTrimmedEnv("SITE_COMMUNITY_URL") ?? "";
-}
-
-/**
- * Logo link target: SITE_LOGO_HREF, else SITE_COMMUNITY_URL, else the primary
- * page path (relative, not base-prefixed).
- */
-export function logoHref(): string {
-  const logo = readTrimmedEnv("SITE_LOGO_HREF");
-  if (logo !== undefined) {
-    return logo;
-  }
-  const community = communityUrl();
-  if (community.length > 0) {
-    return community;
-  }
-  return pagePath(primaryPage());
-}

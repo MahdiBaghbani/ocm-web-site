@@ -2,10 +2,10 @@
 import {
   PAGE_ORDER,
   isPageMounted,
-  logoHref,
   pagePath,
   type PageKey,
 } from '../lib/sitePages';
+import { SITE_LOGO_LINK_ID } from '../lib/wireSiteLogoLink';
 
 const base = import.meta.env.BASE_URL;
 
@@ -26,11 +26,7 @@ const navLinks = PAGE_ORDER.filter(
   href: `${base}${pagePath(key)}`,
 }));
 
-const rawLogo = logoHref();
-const external = /^https?:\/\//.test(rawLogo);
-const logoHrefVal = external ? rawLogo : `${base}${rawLogo}`;
-const logoTarget = external ? '_blank' : undefined;
-const logoRel = external ? 'noopener noreferrer' : undefined;
+const defaultLogoHref = base === '' || base === '/' ? '/' : base;
 ---
 
 <header
@@ -39,9 +35,8 @@ const logoRel = external ? 'noopener noreferrer' : undefined;
 >
   <div class="max-w-screen-2xl mx-auto px-6 flex items-center justify-between h-16">
     <a
-      href={logoHrefVal}
-      target={logoTarget}
-      rel={logoRel}
+      id={SITE_LOGO_LINK_ID}
+      href={defaultLogoHref}
       class="flex items-center gap-3 group"
       aria-label="OpenCloudMesh"
     >
@@ -93,14 +88,17 @@ const logoRel = external ? 'noopener noreferrer' : undefined;
   </div>
 </header>
 
-<script>
+<script define:vars={{ base }}>
+  import { wireSiteLogoLink } from '../lib/wireSiteLogoLink';
+
+  wireSiteLogoLink(base);
+
   const header = document.getElementById('site-header');
   const mobileMenuBtn = document.getElementById('mobile-menu-btn');
   const mobileMenu = document.getElementById('mobile-menu');
   const hamburgerIcon = document.getElementById('hamburger-icon');
   const closeIcon = document.getElementById('close-icon');
 
-  // Tighten the chrome once content has scrolled underneath the fixed header.
   function updateHeader() {
     if (!header) return;
     if (window.scrollY > 20) {
