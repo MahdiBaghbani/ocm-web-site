@@ -4,11 +4,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import FieldRow from "../../observatory/stack/cards/FieldRow";
 import SummaryCard from "../../observatory/ui/SummaryCard";
-import {
-  fetchConfigSource,
-  loadValidatorConfig,
-  type ValidatorRuntimeConfig,
-} from "../lib/validatorConfig";
+import type { ValidatorRuntimeConfig } from "../lib/validatorConfig";
+import { loadSharedRuntimeConfig } from "../../../lib/siteRuntimeConfig";
 import {
   fetchManifest,
   fetchStatistics,
@@ -91,7 +88,7 @@ export default function StatisticsShell({
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
-      const loaded = await loadValidatorConfig(fetchConfigSource(fetch.bind(globalThis)));
+      const loaded = await loadSharedRuntimeConfig();
       if (controller.signal.aborted) {
         return;
       }

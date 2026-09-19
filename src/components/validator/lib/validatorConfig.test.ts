@@ -13,6 +13,9 @@ describe("validatorConfig defaults", () => {
   test("exposes poll, backoff, and timeout defaults", () => {
     expect(DEFAULT_VALIDATOR_CONFIG).toEqual({
       validatorApiOrigin: "",
+      communityUrl: "",
+      logoHref: "",
+      validatorContact: "",
       pollIntervalMs: 1000,
       activePollIntervalMs: 2000,
       backoffInitialMs: 1000,
@@ -75,6 +78,9 @@ describe("parseValidatorConfig", () => {
       }),
     ).toEqual({
       validatorApiOrigin: "",
+      communityUrl: "",
+      logoHref: "",
+      validatorContact: "",
       pollIntervalMs: 1500,
       activePollIntervalMs: 2500,
       backoffInitialMs: 2000,
@@ -91,6 +97,28 @@ describe("parseValidatorConfig", () => {
         request_timeout_ms: 1.5,
       }),
     ).toEqual({ ...DEFAULT_VALIDATOR_CONFIG });
+  });
+
+  test("parses site deployment fields from snake_case and camelCase", () => {
+    expect(
+      parseValidatorConfig({
+        community_url: " https://community.example ",
+        logoHref: "https://logo.example",
+        validator_contact: "ops@example.com",
+      }),
+    ).toMatchObject({
+      communityUrl: "https://community.example",
+      logoHref: "https://logo.example",
+      validatorContact: "ops@example.com",
+    });
+  });
+
+  test("logoHref does not fall through to communityUrl in the parser", () => {
+    expect(
+      parseValidatorConfig({
+        community_url: "https://community.example",
+      }).logoHref,
+    ).toBe("");
   });
 });
 

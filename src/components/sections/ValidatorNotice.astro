@@ -1,17 +1,5 @@
 ---
-import { isPageMounted } from "../../lib/sitePages";
-import { normalizeValidatorContact } from "../validator/lib/validatorContact";
-
-const contactRaw = import.meta.env.VALIDATOR_CONTACT;
-const contactInput =
-  typeof contactRaw === "string" ? contactRaw.trim() : String(contactRaw ?? "").trim();
-
-if (isPageMounted("validator") && contactInput === "") {
-  throw new Error("VALIDATOR_CONTACT is required when the validator page is mounted");
-}
-
-const contactLink =
-  contactInput === "" ? null : normalizeValidatorContact(contactInput);
+import ValidatorNoticeContact from "../validator/islands/ValidatorNoticeContact.tsx";
 
 // Public start rate limit from opencloudmesh-go/internal/platform/config/presets.go
 const startPublicRequests = 10;
@@ -59,14 +47,7 @@ const startPublicWindowSeconds = 60;
       </li>
       <li>
         Operator contact:
-        {contactLink?.ok === true && (
-          <a
-            class="text-sky-300 underline-offset-2 hover:text-sky-200 hover:underline"
-            href={contactLink.href}
-          >
-            {contactLink.label}
-          </a>
-        )}
+        <ValidatorNoticeContact client:load />
       </li>
     </ul>
   </details>

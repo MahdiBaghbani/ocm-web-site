@@ -1,4 +1,7 @@
 # Multi-stage build: Bun builder, nginx runtime (MPA static site).
+# Generic image: default profile, no baked deployment URLs or contact.
+# Optional SITE_* / VALIDATOR_CONTACT at build time write dist/config.json
+# (Pages). Leave them unset so deployments mount their own config.json.
 
 FROM oven/bun:1.4.0 AS builder
 
@@ -9,18 +12,11 @@ ARG ASTRO_SITE=
 ARG SITE_PROFILE=default
 ARG SITE_PAGES=
 ARG SITE_PRIMARY_PAGE=
-ARG SITE_COMMUNITY_URL=
-ARG SITE_LOGO_HREF=
-ARG VALIDATOR_CONTACT=
-
 ENV ASTRO_BASE=${ASTRO_BASE}
 ENV ASTRO_SITE=${ASTRO_SITE}
 ENV SITE_PROFILE=${SITE_PROFILE}
 ENV SITE_PRIMARY_PAGE=${SITE_PRIMARY_PAGE}
-ENV SITE_COMMUNITY_URL=${SITE_COMMUNITY_URL}
-ENV SITE_LOGO_HREF=${SITE_LOGO_HREF}
-# SITE_PAGES is ARG-only: Docker exposes ARG SITE_PAGES="" in RUN, so the build step unsets it when empty so SITE_PROFILE applies; non-empty values are exported as overrides.
-ENV VALIDATOR_CONTACT=${VALIDATOR_CONTACT}
+# Empty SITE_PAGES must be unset so SITE_PROFILE applies (Docker ARG defaults to "").
 
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile

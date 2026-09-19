@@ -1,7 +1,9 @@
 # Publish the OCM website image to GHCR.
 # Express path: manual workflow_dispatch with a version input. No Changie,
-# no GPG tag, no release-PR chain. Bakes the VPS profile + contact into
-# the image at build time.
+# no GPG tag, no release-PR chain. The image is deployment-agnostic: it
+# builds every page and bakes no deployment-specific config. Each deployment
+# supplies its own runtime /config.json (community URL, logo, contact) and
+# owns root routing at the edge.
 
 name: Publish ocm-web image
 
@@ -57,12 +59,6 @@ jobs:
           load: false
           build-args: |
             ASTRO_BASE=/
-            ASTRO_SITE=${{ vars.VPS_ASTRO_SITE }}
-            SITE_PROFILE=VPS
-            SITE_PRIMARY_PAGE=${{ vars.VPS_PRIMARY_PAGE }}
-            SITE_COMMUNITY_URL=${{ vars.VPS_COMMUNITY_URL }}
-            SITE_LOGO_HREF=${{ vars.VPS_LOGO_HREF }}
-            VALIDATOR_CONTACT=${{ vars.VPS_VALIDATOR_CONTACT }}
           tags: |
             ${{ env.IMAGE }}:${{ inputs.version }}
             ${{ env.IMAGE }}:sha-${{ github.sha }}
