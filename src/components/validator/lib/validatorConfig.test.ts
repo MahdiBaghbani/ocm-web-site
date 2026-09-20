@@ -7,6 +7,8 @@ import {
   fetchConfigSource,
   loadValidatorConfig,
   parseValidatorConfig,
+  resolveConfigJsonPath,
+  resolveDefaultConfigJsonPath,
 } from "./validatorConfig";
 
 describe("validatorConfig defaults", () => {
@@ -122,6 +124,28 @@ describe("parseValidatorConfig", () => {
   });
 });
 
+describe("resolveConfigJsonPath", () => {
+  test("maps root bases to /config.json", () => {
+    expect(resolveConfigJsonPath("")).toBe("/config.json");
+    expect(resolveConfigJsonPath("/")).toBe("/config.json");
+  });
+
+  test("prefixes config.json with a subpath base", () => {
+    expect(resolveConfigJsonPath("/ocm-test-suite/")).toBe(
+      "/ocm-test-suite/config.json",
+    );
+    expect(resolveConfigJsonPath("/ocm-test-suite")).toBe(
+      "/ocm-test-suite/config.json",
+    );
+  });
+});
+
+describe("resolveDefaultConfigJsonPath", () => {
+  test("falls back to /config.json when BASE_URL is unset in tests", () => {
+    expect(resolveDefaultConfigJsonPath()).toBe(CONFIG_JSON_PATH);
+  });
+});
+
 describe("loadValidatorConfig sources", () => {
   test("reads an injected record", async () => {
     const loaded = await loadValidatorConfig({
@@ -161,5 +185,22 @@ describe("loadValidatorConfig sources", () => {
     await expect(loadValidatorConfig(missing)).resolves.toEqual({
       ...DEFAULT_VALIDATOR_CONFIG,
     });
+  });
+
+  test("fetch source honors an explicit subpath base", async () => {
+    const calls: string[] = [];
+    const subpath = resolveConfigJsonPath("/ocm-test-suite/");
+    const source = fetchConfigSource(async (input) => {
+      calls.push(String(input));
+      return new Response(
+        JSON.stringify({ community_url: "https://pages.example" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }, subpath);
+
+    await expect(loadValidatorConfig(source)).resolves.toMatchObject({
+      communityUrl: "https://pages.example",
+    });
+    expect(calls).toEqual(["/ocm-test-suite/config.json"]);
   });
 });
