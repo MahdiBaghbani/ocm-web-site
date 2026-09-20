@@ -4,13 +4,6 @@
  * load error.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CircleCheck, CircleMinus, CircleX, TriangleAlert } from "lucide-react";
-import AreaGrid from "../atoms/AreaGrid";
-import AreaModal from "../atoms/AreaModal";
-import EvidenceDisclosure from "../atoms/EvidenceDisclosure";
-import ReportJsonModal from "../atoms/ReportJsonModal";
-import StepRow from "../atoms/StepRow";
-import VerdictBanner from "../atoms/VerdictBanner";
 import type { ValidatorRuntimeConfig } from "../lib/validatorConfig";
 import { loadSharedRuntimeConfig } from "../../../lib/siteRuntimeConfig";
 import {
@@ -43,16 +36,12 @@ import {
 } from "../lib/results/progress";
 import { projectActionable } from "../lib/results/actionable";
 import { projectActionRows } from "../lib/results/actionRows";
-import {
-  projectCapability,
-  RETENTION_POLICY_TEXT,
-} from "../lib/results/capability";
+import { projectCapability } from "../lib/results/capability";
 import { projectProgressCollections } from "../lib/results/collections";
 import {
   projectSessionStart,
   sessionFromLocation,
   sessionFromProps,
-  SESSION_START_LOADING_TEXT,
 } from "../lib/results/sessionStart";
 import {
   INITIAL_LIVE_INSTRUCTION_HOLD,
@@ -60,16 +49,30 @@ import {
   type LiveInstructionHold,
 } from "../lib/results/stabilizeLiveView";
 import { projectTransportFailure } from "../lib/results/transportFailure";
-import {
-  EXPIRED_EVIDENCE_NOTE,
-  projectSessionFailure,
-} from "../lib/results/sessionFailures";
+import { projectSessionFailure } from "../lib/results/sessionFailures";
 import { isSameSessionId, isStaleSessionId } from "../lib/results/sessionIdentity";
 import {
-  CACHED_SESSION_JSON_NOTE,
   projectResultsPage,
   type ResultsPageStatus,
 } from "../lib/results/projectResultsPage";
+import { ActionSection } from "./results/ActionSection";
+import {
+  EvidenceSection,
+  EVIDENCE_EMPTY_SNAPSHOT,
+  EVIDENCE_EXPIRED,
+  EVIDENCE_NOT_SAVED,
+} from "./results/EvidenceSection";
+import {
+  CopyNoticeRegion,
+  INVITE_FIELD_LABEL,
+  MAX_REVERSE_INVITE_LENGTH,
+  ProgressSection,
+  REVERSE_INVITE_FIELD_LABEL,
+  REVERSE_INVITE_SUBMIT_LABEL,
+  REVERSE_INVITE_TOO_LONG_TEXT,
+  type CopyNotice,
+} from "./results/ProgressSection";
+import { PAGE_LINK_NOT_SAVED_NOTICE, ResultsHeader } from "./results/ResultsHeader";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
@@ -102,126 +105,24 @@ export interface ResultsShellProps {
 
 export const TEST_HREF = "/validator/";
 
-export const EVIDENCE_NOT_SAVED =
-  "No saved evidence is available because this report was not public.";
-
-export const EVIDENCE_EMPTY_SNAPSHOT =
-  "No evidence items were included in this session snapshot.";
-
-export const EVIDENCE_EXPIRED = EXPIRED_EVIDENCE_NOTE;
-
-export const PAGE_LINK_NOT_SAVED_NOTICE =
-  "Not saved. This result was not stored as a public report. A copied page link identifies the session but does not preserve these scores or evidence.";
+export {
+  EVIDENCE_EMPTY_SNAPSHOT,
+  EVIDENCE_EXPIRED,
+  EVIDENCE_NOT_SAVED,
+};
+export { PAGE_LINK_NOT_SAVED_NOTICE };
+export {
+  CopyNoticeRegion,
+  INVITE_FIELD_LABEL,
+  MAX_REVERSE_INVITE_LENGTH,
+  REVERSE_INVITE_FIELD_LABEL,
+  REVERSE_INVITE_SUBMIT_LABEL,
+  REVERSE_INVITE_TOO_LONG_TEXT,
+};
+export type { CopyNotice };
 
 const PAGE_LINK_READONLY_PARAM = "ro";
 const PAGE_LINK_READONLY_VALUE = "1";
-
-const ACTION_BTN =
-  "inline-flex min-h-11 items-center rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800";
-
-// AG-2.2 reserved the in-row `data-cta-slot` column StepRow already
-// renders for every row (sized for "Copy invitation", "Copy again", and
-// the secondary report link). AG-2.3 wires the live "View report"
-// secondary link on the current row. AG-1.4 wires the primary
-// "Copy invitation" / "Copy again" claim CTA plus the cached-invite field on
-// the current paste_s1 row (see InvitePasteSlot). AG-1.5 wires the bounded
-// reverse-invite form into this same slot, but only while the displayed
-// instruction is exactly paste_s2; every other reverse-row state (pending,
-// complete, or current at wait_forward_share) keeps the invisible reserved
-// placeholder below so the layout never shifts. The slot mounts inside the
-// reverse row's own StepRow card (via its formSlot prop), not as a sibling
-// element.
-const RESERVED_REVERSE_FORM_CLASS = "invisible min-h-56 w-full";
-const REVERSE_FORM_CLASS = "mt-3 min-h-56 w-full space-y-3";
-
-// AG-1.5 bounded length for the unpadded base64url(token@fqdn) reverse
-// invite shape. A DNS fqdn is at most 253 ASCII characters; with a generous
-// allowance for the token half, unpadded base64url inflates plaintext by
-// roughly 4/3. 512 covers that with headroom without accepting arbitrary
-// pasted text.
-export const MAX_REVERSE_INVITE_LENGTH = 512;
-
-export const REVERSE_INVITE_FIELD_LABEL = "Return invitation";
-export const REVERSE_INVITE_SUBMIT_LABEL = "Submit return invitation";
-export const REVERSE_INVITE_TOO_LONG_TEXT =
-  "That return invitation is too long. Paste the invitation issued by the target server.";
-
-/**
- * AG-1.5 reverse-invite form slot. Renders the invisible reserved
- * placeholder unless `active` is true (the displayed instruction is exactly
- * paste_s2), in which case it renders the real, controlled textarea form.
- * Both branches keep the same `data-reserved-form-slot` / `data-reserved
- * -alert-slot` markers so the reserved-layout contract does not change
- * shape when the form goes live.
- */
-function ReverseFormSlot({
-  active,
-  value,
-  onChange,
-  busy,
-  error,
-  onSubmit,
-}: {
-  active: boolean;
-  value: string;
-  onChange: (value: string) => void;
-  busy: boolean;
-  error: string | null;
-  onSubmit: () => void;
-}): React.ReactElement {
-  if (!active) {
-    return (
-      <div data-reserved-form-slot="" aria-hidden="true" className={RESERVED_REVERSE_FORM_CLASS}>
-        <div data-reserved-alert-slot="" />
-      </div>
-    );
-  }
-  return (
-    <div data-reserved-form-slot="" className={REVERSE_FORM_CLASS}>
-      <form
-        data-reverse-form=""
-        className="space-y-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
-        <div className="space-y-1">
-          <label
-            htmlFor="results-reverse-invite-field"
-            className="block text-xs font-semibold text-zinc-300"
-          >
-            {REVERSE_INVITE_FIELD_LABEL}
-          </label>
-          <textarea
-            id="results-reverse-invite-field"
-            data-reverse-invite-field=""
-            rows={3}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
-        <button type="submit" className={ACTION_BTN} disabled={busy}>
-          {REVERSE_INVITE_SUBMIT_LABEL}
-        </button>
-      </form>
-      <div data-reserved-alert-slot="">
-        {error !== null ? (
-          <p
-            data-post-error=""
-            role="alert"
-            aria-live="assertive"
-            aria-atomic="true"
-            className="text-sm text-rose-200"
-          >
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Pure mapping from a postReverseInvite failure to operator-facing copy.
@@ -241,56 +142,6 @@ export function reverseInviteErrorCopy(failure: ValidatorFailure): string {
     return actionErrorCopy("paste_400_invalid_invitation");
   }
   return failure.message !== "" ? failure.message : "Could not import the return invitation.";
-}
-
-// AG-1.4 invite paste slot. Mounts inside the current invite row's card via
-// StepRow's formSlot. Shows the locked claim error when a claim failed with no
-// usable cache, and the cached invitation in a labeled, read-only, selectable
-// field that stays available even when the clipboard copy fails.
-function InvitePasteSlot({
-  invite,
-  error,
-}: {
-  invite: string | null;
-  error: string | null;
-}): React.ReactElement | null {
-  if (invite === null && error === null) {
-    return null;
-  }
-  return (
-    <div data-invite-slot="" className="mt-3 space-y-2">
-      {error !== null ? (
-        <p
-          data-post-error=""
-          className="text-sm text-rose-200"
-          role="alert"
-          aria-live="assertive"
-          aria-atomic="true"
-        >
-          {error}
-        </p>
-      ) : null}
-      {invite !== null ? (
-        <div className="space-y-1">
-          <label
-            htmlFor="results-invite-field"
-            className="block text-xs font-semibold text-zinc-300"
-          >
-            {INVITE_FIELD_LABEL}
-          </label>
-          <input
-            id="results-invite-field"
-            type="text"
-            readOnly
-            value={invite}
-            data-invite-field=""
-            data-invite-value={invite}
-            className="w-full select-all rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function liveViewSignature(step: UserStep, guidanceKey: string | null): string {
@@ -389,126 +240,6 @@ export function areaTotals(areas: readonly SpecificationAreaGridEntry[]): {
   return { passed, warn, failed, rest };
 }
 
-type SummaryChipIcon = "pass" | "warn" | "fail" | "not-tested";
-
-function summaryChipCounts(
-  areas: readonly Pick<SpecificationAreaGridEntry, "grade">[],
-): { pass: number; warn: number; fail: number; notTested: number } {
-  let pass = 0;
-  let warn = 0;
-  let fail = 0;
-  let notTested = 0;
-  for (const area of areas) {
-    if (area.grade === "pass") {
-      pass += 1;
-    } else if (area.grade === "warn") {
-      warn += 1;
-    } else if (area.grade === "fail") {
-      fail += 1;
-    } else {
-      notTested += 1;
-    }
-  }
-  return { pass, warn, fail, notTested };
-}
-
-const SUMMARY_CHIPS = [
-  { icon: "pass", label: "pass", text: "text-emerald-300", Icon: CircleCheck },
-  { icon: "warn", label: "warn", text: "text-amber-200", Icon: TriangleAlert },
-  { icon: "fail", label: "fail", text: "text-rose-300", Icon: CircleX },
-  { icon: "not-tested", label: "not tested", text: "text-zinc-300", Icon: CircleMinus },
-] as const satisfies ReadonlyArray<{
-  icon: SummaryChipIcon;
-  label: string;
-  text: string;
-  Icon: typeof CircleCheck;
-}>;
-
-function SummaryChipBand({
-  areas,
-  assessed,
-  total,
-  coverageLabel,
-}: {
-  areas: readonly SpecificationAreaGridEntry[];
-  assessed: number;
-  total: number;
-  coverageLabel: string;
-}): React.ReactElement {
-  const counts = summaryChipCounts(areas);
-  const countFor: Record<SummaryChipIcon, number> = {
-    pass: counts.pass,
-    warn: counts.warn,
-    fail: counts.fail,
-    "not-tested": counts.notTested,
-  };
-  const sentence =
-    `${assessed} of ${total} areas tested: ${counts.pass} pass, ` +
-    `${counts.warn} warn, ${counts.fail} fail, ${counts.notTested} not tested`;
-  return (
-    <>
-      <div
-        data-summary-chips=""
-        className="grid min-h-[5.5rem] grid-cols-2 gap-2 sm:min-h-11 sm:grid-cols-4"
-      >
-        {SUMMARY_CHIPS.map((chip) => {
-          const Icon = chip.Icon;
-          return (
-            <span
-              key={chip.icon}
-              data-icon={chip.icon}
-              className={`inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/40 px-2.5 py-0.5 text-xs tabular-nums ${chip.text}`}
-              aria-hidden="true"
-            >
-              <Icon size={16} strokeWidth={2} aria-hidden="true" />
-              <span className="min-w-[1ch]">{countFor[chip.icon]}</span>
-              <span>{chip.label}</span>
-            </span>
-          );
-        })}
-      </div>
-      <p className="text-sm text-zinc-300" data-summary-coverage="">
-        {coverageLabel} areas tested
-      </p>
-      <span className="sr-only" data-summary-sr="">
-        {sentence}
-      </span>
-    </>
-  );
-}
-
-function BackToTest({ href }: { href: string }): React.ReactElement {
-  return (
-    <a href={href} className={`${ACTION_BTN} text-zinc-200`}>
-      Back to Test
-    </a>
-  );
-}
-
-function RunNewCheck({ href }: { href: string }): React.ReactElement {
-  return (
-    <a href={href} className={ACTION_BTN}>
-      Run a new check
-    </a>
-  );
-}
-
-function ReloadButton({ label }: { label: string }): React.ReactElement {
-  return (
-    <button
-      type="button"
-      className={ACTION_BTN}
-      onClick={() => {
-        if (typeof window !== "undefined") {
-          window.location.reload();
-        }
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 function pageLinkIsReadOnly(href: string): boolean {
   try {
     return new URL(href).searchParams.get(PAGE_LINK_READONLY_PARAM) === PAGE_LINK_READONLY_VALUE;
@@ -546,16 +277,10 @@ function readOnlyStop(): Promise<{
   });
 }
 
-export type CopyNotice = {
-  ok: boolean;
-  text: string;
-};
-
 export const EMPTY_COPY_NOTICE: CopyNotice = { ok: true, text: "" };
 export const COPY_SUCCESS_TEXT = "Copied";
 
 // AG-1.4 cached-invite field label. Claim CTA labels live in actionRows.
-export const INVITE_FIELD_LABEL = "Invitation";
 export const CLAIM_COPY_FAILURE_TEXT =
   "Could not copy the invitation. Select and copy it from the field below.";
 
@@ -688,51 +413,6 @@ export async function copyText(value: string): Promise<boolean> {
     }
     restorePriorFocus(previousActive, textarea);
   }
-}
-
-export function CopyNoticeRegion({
-  notice,
-  fallbackValue,
-}: {
-  notice: CopyNotice;
-  fallbackValue: string | null;
-}): React.ReactElement {
-  const successText = notice.ok ? notice.text : "";
-  const failureText = notice.ok ? "" : notice.text;
-  return (
-    <div className="space-y-2">
-      <p
-        id="results-copy-notice"
-        className="text-sm text-zinc-300"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        {successText}
-      </p>
-      {failureText !== "" ? (
-        <p
-          id="results-copy-failure"
-          className="text-sm text-rose-200"
-          role="alert"
-          aria-live="assertive"
-          aria-atomic="true"
-        >
-          {failureText}
-        </p>
-      ) : null}
-      {fallbackValue !== null ? (
-        <input
-          type="text"
-          readOnly
-          value={fallbackValue}
-          aria-describedby={failureText !== "" ? "results-copy-failure" : "results-copy-notice"}
-          data-copy-fallback=""
-          className="w-full rounded-xl border border-rose-400 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-        />
-      ) : null}
-    </div>
-  );
 }
 
 export default function ResultsShell({
@@ -1208,17 +888,13 @@ export default function ResultsShell({
       mounted,
       typeof window === "undefined" ? null : window.location.href,
     );
-    if (sessionStart.kind === "failure") {
-      return (
-        <div className="space-y-4">
-          <BackToTest href={testHref} />
-          <p className="text-sm text-rose-200" role="alert">
-            {sessionStart.message}
-          </p>
-        </div>
-      );
-    }
-    return <p className="text-sm text-zinc-400">{SESSION_START_LOADING_TEXT}</p>;
+    return (
+      <ResultsHeader
+        kind="session-start"
+        sessionStart={sessionStart}
+        testHref={testHref}
+      />
+    );
   }
 
   const collections = projectProgressCollections({
@@ -1277,343 +953,106 @@ export default function ResultsShell({
     hasSourceReport: projection.sourceReport !== null,
   });
   const rawJsonLabel = actionable.rawJson.label;
-  // Normal ready/live results surface the full report JSON as a low-emphasis
-  // footer action; the malformed terminal keeps a prominent action button.
-  const readyRawJsonTrigger =
-    actionable.rawJson.hasSourceReport ? (
-      <button
-        type="button"
-        className="text-sm text-zinc-400 underline hover:text-zinc-200"
-        aria-haspopup="dialog"
-        aria-expanded={rawJsonOpen}
-        onClick={() => setRawJsonOpen(true)}
-      >
-        {rawJsonLabel}
-      </button>
-    ) : null;
-  const malformedRawJsonTrigger = actionable.rawJson.showMalformedTrigger ? (
-    <button
-      type="button"
-      className={ACTION_BTN}
-      aria-haspopup="dialog"
-      aria-expanded={rawJsonOpen}
-      onClick={() => setRawJsonOpen(true)}
-    >
-      {rawJsonLabel}
-    </button>
-  ) : null;
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-zinc-100">
-            Result for {session.host}
-          </p>
-          <p className="mt-1 break-all text-sm text-zinc-400">
-            Session {session.id}
-          </p>
-          {actionRows.pageLink.visible ? (
-            <>
-              <button
-                type="button"
-                className={`${ACTION_BTN} mt-2`}
-                onClick={() => {
-                  void handleCopyPageLink();
-                }}
-              >
-                {actionRows.pageLink.label}
-              </button>
-              {actionRows.pageLink.showNotSavedNotice ? (
-                <p className="mt-2 text-sm text-zinc-400">
-                  {PAGE_LINK_NOT_SAVED_NOTICE}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      </div>
-      {projection.bannerVerdict !== null &&
-      view !== null &&
-      (projection.status === "live" || projection.status === "ready") ? (
-        <div data-banner-region="">
-          <VerdictBanner
-            verdict={projection.bannerVerdict}
-            title={projection.bannerTitle}
-            message={projection.bannerMessage}
-          />
-        </div>
-      ) : null}
-      {statusText !== null ? (
-        <p
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          data-step-status=""
-          className="text-sm text-zinc-400"
-        >
-          {statusText}
-        </p>
-      ) : null}
-      <CopyNoticeRegion notice={copyNotice} fallbackValue={copyFallback} />
-      {transportFailure.poll !== null ? (
-        <div className="space-y-3">
-          <p className="text-sm text-rose-200" role="alert">
-            {transportFailure.poll.message}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {transportFailure.poll.showRetry ? (
-              <ReloadButton label={transportFailure.poll.retryLabel} />
-            ) : null}
-            <RunNewCheck href={testHref} />
-          </div>
-        </div>
-      ) : null}
-      {view === null ? (
-        <p className="text-sm text-zinc-400">Loading session...</p>
-      ) : projection.status === "live" ? (
-        <div className="space-y-3" data-step-list="">
-          {actionRows.liveRows.map((row) => {
-            const rowFormSlot =
-              row.reverseMounted ? (
-                <ReverseFormSlot
-                  active={row.reverseActive}
-                  value={reverseValue}
-                  onChange={setReverseValue}
-                  busy={row.reverseBusy}
-                  error={postError}
-                  onSubmit={() => {
-                    void handleReverseInvite();
-                  }}
-                />
-              ) : row.showInviteSlot ? (
-                <InvitePasteSlot invite={cachedInvite} error={postError} />
-              ) : undefined;
-            return (
-              <StepRow
-                key={row.step}
-                step={row.step}
-                status={row.status}
-                index={row.index}
-                guidance={row.isCurrent ? currentRowGuidance : undefined}
-                ctaLabel={row.claimLabel}
-                onCta={
-                  row.isClaimRow
-                    ? () => {
-                        void handleClaimInvite();
-                      }
-                    : undefined
-                }
-                disabled={row.claimDisabled}
-                ctaHref={row.liveReportHref}
-                formSlot={rowFormSlot}
-                cardRef={row.isCurrent ? currentCardRef : undefined}
-                cardTabIndex={row.isCurrent && restoreCurrentCardFocus ? -1 : undefined}
-              />
-            );
-          })}
-        </div>
-      ) : null}
-      {projection.status === "loading_report" ? (
-        <p className="text-sm text-zinc-400">Loading report...</p>
-      ) : null}
-      {sessionFailure?.kind === "not_saved_empty" ? (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-100">{sessionFailure.title}</h2>
-          <p className="text-sm text-zinc-300">{sessionFailure.body}</p>
-          {sessionFailure.guidance !== null && sessionFailure.guidance.kind === "instruction" ? (
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-zinc-100">{sessionFailure.guidance.title}</p>
-              <p className="text-sm text-zinc-300">{sessionFailure.guidance.body}</p>
-            </div>
-          ) : null}
-          {sessionFailure.guidance !== null && sessionFailure.guidance.kind === "terminal" ? (
-            <p className="text-sm text-zinc-300">{sessionFailure.guidance.body}</p>
-          ) : null}
-          {sessionFailure.failModeLabel !== "" ? (
-            <p className="text-sm text-zinc-300">{sessionFailure.failModeLabel}</p>
-          ) : null}
-          <RunNewCheck href={testHref} />
-        </div>
-      ) : null}
-      {sessionFailure?.kind === "malformed" ? (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-100">{sessionFailure.title}</h2>
-          <p className="text-sm text-zinc-300">{sessionFailure.body}</p>
-          <div className="flex flex-wrap gap-2">
-            {sessionFailure.showRetry ? (
-              <ReloadButton label={sessionFailure.retryLabel} />
-            ) : null}
-            <RunNewCheck href={testHref} />
-          </div>
-        </div>
-      ) : null}
-      {sessionFailure?.kind === "expired" ? (
-        <div className="space-y-3">
-          <p className="text-sm text-zinc-300">{sessionFailure.notice}</p>
-          <p className="text-sm text-zinc-400">{sessionFailure.evidenceNote}</p>
-          <RunNewCheck href={testHref} />
-        </div>
-      ) : null}
-      {transportFailure.report !== null ? (
-        <div className="space-y-3">
-          <p className="text-sm text-rose-200" role="alert">
-            {transportFailure.report.message}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {transportFailure.report.showRetry ? (
-              <ReloadButton label={transportFailure.report.retryLabel} />
-            ) : null}
-            <RunNewCheck href={testHref} />
-          </div>
-        </div>
-      ) : null}
-      {projection.showAreas ? (
-        <div className="space-y-4">
-          <SummaryChipBand
-            areas={projection.score.areas}
-            assessed={projection.score.assessed}
-            total={projection.score.total}
-            coverageLabel={projection.score.coverageLabel}
-          />
-          <div>
-            <h2
-              ref={gridHeadingRef}
-              tabIndex={-1}
-              className="mb-3 text-sm font-semibold text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
-            >
-              What was tested
-            </h2>
-            <AreaGrid
-              areas={resultAreas}
-              variant="results"
-              openArea={selectedArea}
-              onAreaClick={(areaId) => setSelectedArea(areaId)}
-              registerTriggerRef={registerTriggerRef}
-            />
-          </div>
-        </div>
-      ) : null}
-      {capability.visibilityNotice.visible ? (
-        <div className="space-y-2">
-          <p className="text-sm text-zinc-300">{capability.visibilityNotice.text}</p>
-          {capability.visibilityNotice.showRetentionPolicy ? (
-            <p className="text-sm text-zinc-400">{RETENTION_POLICY_TEXT}</p>
-          ) : null}
-        </div>
-      ) : null}
-      {actionRows.publicReport.visible ? (
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <a
-            href={actionRows.publicReport.reportUrl}
-            className={ACTION_BTN}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {actionRows.publicReport.openLabel}
-          </a>
-          <button
-            type="button"
-            className={ACTION_BTN}
-            onClick={() => {
-              void handleCopyReport();
-            }}
-          >
-            {actionRows.publicReport.copyLabel}
-          </button>
-        </div>
-      ) : null}
-      {actionRows.interruptedRecovery.visible ? (
-        <div className="flex flex-wrap gap-2"><RunNewCheck href={testHref} /></div>
-      ) : null}
-      {capability.evidence.sectionVisible ? (
-        <div className="space-y-4">
-          {capability.evidence.showDisclosure ? (
-            <EvidenceDisclosure
-              title="Evidence"
-              items={collections.evidence}
-              defaultExpanded={collections.evidence.length > 0}
-            />
-          ) : null}
-          {capability.evidence.showNotSaved ? (
-            <div>
-              <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
-              <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
-              <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_NOT_SAVED}</p>
-            </div>
-          ) : null}
-          {capability.evidence.showSessionEmpty ? (
-            <div>
-              <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
-              <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
-            </div>
-          ) : null}
-          {capability.evidence.showUnknownEmpty ? (
-            <div>
-              <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
-              <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EMPTY_SNAPSHOT}</p>
-            </div>
-          ) : null}
-          {capability.evidence.showExpired ? (
-            <div>
-              <h2 className="text-sm font-semibold text-zinc-100">Evidence</h2>
-              <p className="mt-1 text-sm text-zinc-400">{EVIDENCE_EXPIRED}</p>
-            </div>
-          ) : null}
-          {capability.evidence.showCachedSessionNote ? (
-            <p className="text-sm text-zinc-400">{CACHED_SESSION_JSON_NOTE}</p>
-          ) : null}
-          {readyRawJsonTrigger}
-        </div>
-      ) : null}
-      {malformedRawJsonTrigger}
-      {rawJsonOpen && actionable.rawJson.hasSourceReport && projection.sourceReport !== null ? (
-        <ReportJsonModal
-          title={projection.rawJsonTitle}
-          sourceReport={projection.sourceReport}
-          note={projection.rawJsonNote}
-          downloadName={`report-${session.id}.json`}
-          onClose={() => setRawJsonOpen(false)}
-        />
-      ) : null}
-      {actionable.areaModal.showModal &&
-      selectedArea !== null &&
-      selectedEntry !== null &&
-      projection.sourceReport !== null ? (
-        <AreaModal
-          area={selectedArea}
-          areaLabel={selectedEntry.label}
-          items={collections.evidence}
-          sourceReport={projection.sourceReport}
-          grade={selectedEntry.grade}
-          pillLabel={selectedEntry.pillLabel}
-          evidenceCount={selectedEntry.evidenceCount}
-          onClose={() => {
-            const area = selectedArea;
-            setSelectedArea(null);
-            // OverlayFrame removes inert and restores its captured element in a
-            // passive-effect cleanup. A microtask would run before that cleanup,
-            // so the focus could land while the body is still inert. Defer with
-            // setTimeout(0): a macrotask that runs after OverlayFrame's inert
-            // cleanup (React flushes passive effects via MessageChannel, which
-            // beats the clamped setTimeout) and that the happy-dom tests flush
-            // through their act/timer loop. This deferred focus is remount
-            // insurance and wins afterward, refocusing the current trigger for
-            // the stored area id or the grid heading when the trigger is gone.
-            setTimeout(() => {
-              if (area === null) {
-                return;
-              }
-              const btn = triggerRefs.current.get(area);
-              if (btn !== undefined && btn !== null && btn.isConnected) {
-                btn.focus();
-              } else {
-                gridHeadingRef.current?.focus();
-              }
-            }, 0);
-          }}
-        />
-      ) : null}
+      <ResultsHeader
+        kind="identity"
+        host={session.host}
+        sessionId={session.id}
+        pageLink={actionRows.pageLink}
+        onCopyPageLink={() => {
+          void handleCopyPageLink();
+        }}
+      />
+      <ProgressSection
+        bannerVerdict={projection.bannerVerdict}
+        bannerTitle={projection.bannerTitle}
+        bannerMessage={projection.bannerMessage}
+        view={view}
+        status={projection.status}
+        statusText={statusText}
+        copyNotice={copyNotice}
+        copyFallback={copyFallback}
+        pollFailure={transportFailure.poll}
+        testHref={testHref}
+        liveRows={actionRows.liveRows}
+        currentRowGuidance={currentRowGuidance}
+        reverseValue={reverseValue}
+        onReverseChange={setReverseValue}
+        postError={postError}
+        onReverseSubmit={() => {
+          void handleReverseInvite();
+        }}
+        cachedInvite={cachedInvite}
+        onClaimInvite={() => {
+          void handleClaimInvite();
+        }}
+        currentCardRef={currentCardRef}
+        restoreCurrentCardFocus={restoreCurrentCardFocus}
+      />
+      <ActionSection
+        sessionFailure={sessionFailure}
+        testHref={testHref}
+        reportFailure={transportFailure.report}
+        showAreas={projection.showAreas}
+        scoreAreas={projection.score.areas}
+        resultAreas={resultAreas}
+        assessed={projection.score.assessed}
+        total={projection.score.total}
+        coverageLabel={projection.score.coverageLabel}
+        selectedArea={selectedArea}
+        onAreaClick={(areaId) => setSelectedArea(areaId)}
+        registerTriggerRef={registerTriggerRef}
+        gridHeadingRef={gridHeadingRef}
+        visibilityNotice={capability.visibilityNotice}
+        publicReport={actionRows.publicReport}
+        onCopyReport={() => {
+          void handleCopyReport();
+        }}
+        interruptedRecoveryVisible={actionRows.interruptedRecovery.visible}
+      />
+      <EvidenceSection
+        evidence={capability.evidence}
+        items={collections.evidence}
+        hasSourceReport={actionable.rawJson.hasSourceReport}
+        showMalformedTrigger={actionable.rawJson.showMalformedTrigger}
+        rawJsonLabel={rawJsonLabel}
+        rawJsonOpen={rawJsonOpen}
+        onOpenRawJson={() => setRawJsonOpen(true)}
+        onCloseRawJson={() => setRawJsonOpen(false)}
+        rawJsonTitle={projection.rawJsonTitle}
+        sourceReport={projection.sourceReport}
+        rawJsonNote={projection.rawJsonNote}
+        downloadName={`report-${session.id}.json`}
+        showAreaModal={actionable.areaModal.showModal}
+        selectedArea={selectedArea}
+        selectedEntry={selectedEntry}
+        onCloseAreaModal={() => {
+          const area = selectedArea;
+          setSelectedArea(null);
+          // OverlayFrame removes inert and restores its captured element in a
+          // passive-effect cleanup. A microtask would run before that cleanup,
+          // so the focus could land while the body is still inert. Defer with
+          // setTimeout(0): a macrotask that runs after OverlayFrame's inert
+          // cleanup (React flushes passive effects via MessageChannel, which
+          // beats the clamped setTimeout) and that the happy-dom tests flush
+          // through their act/timer loop. This deferred focus is remount
+          // insurance and wins afterward, refocusing the current trigger for
+          // the stored area id or the grid heading when the trigger is gone.
+          setTimeout(() => {
+            if (area === null) {
+              return;
+            }
+            const btn = triggerRefs.current.get(area);
+            if (btn !== undefined && btn !== null && btn.isConnected) {
+              btn.focus();
+            } else {
+              gridHeadingRef.current?.focus();
+            }
+          }, 0);
+        }}
+      />
     </div>
   );
 }
