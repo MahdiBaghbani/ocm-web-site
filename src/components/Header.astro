@@ -37,6 +37,7 @@ const defaultLogoHref = base === '' || base === '/' ? '/' : base;
     <a
       id={SITE_LOGO_LINK_ID}
       href={defaultLogoHref}
+      data-base-url={base}
       class="flex items-center gap-3 group"
       aria-label="OpenCloudMesh"
     >
@@ -88,10 +89,11 @@ const defaultLogoHref = base === '' || base === '/' ? '/' : base;
   </div>
 </header>
 
-<script define:vars={{ base }}>
-  import { wireSiteLogoLink } from '../lib/wireSiteLogoLink';
+<script>
+  import { SITE_LOGO_LINK_ID, wireSiteLogoLink } from '../lib/wireSiteLogoLink';
 
-  wireSiteLogoLink(base);
+  const logo = document.getElementById(SITE_LOGO_LINK_ID);
+  wireSiteLogoLink(logo?.dataset.baseUrl || '/');
 
   const header = document.getElementById('site-header');
   const mobileMenuBtn = document.getElementById('mobile-menu-btn');
