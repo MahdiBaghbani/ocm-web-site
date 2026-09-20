@@ -1,5 +1,6 @@
 # Multi-stage build: Bun builder, nginx runtime (MPA static site).
-# Generic image: default profile, no baked deployment URLs or contact.
+# GHCR image is validator-shaped: validator + statistics pages only.
+# Do not bake deployment URLs or contact; deployments mount config.json.
 # Optional SITE_* / VALIDATOR_CONTACT at build time write dist/config.json
 # (Pages). Leave them unset so deployments mount their own config.json.
 
@@ -10,13 +11,14 @@ WORKDIR /app
 ARG ASTRO_BASE=/
 ARG ASTRO_SITE=
 ARG SITE_PROFILE=default
-ARG SITE_PAGES=
+ARG SITE_PAGES=validator,statistics
 ARG SITE_PRIMARY_PAGE=
 ENV ASTRO_BASE=${ASTRO_BASE}
 ENV ASTRO_SITE=${ASTRO_SITE}
 ENV SITE_PROFILE=${SITE_PROFILE}
 ENV SITE_PRIMARY_PAGE=${SITE_PRIMARY_PAGE}
 # Empty SITE_PAGES must be unset so SITE_PROFILE applies (Docker ARG defaults to "").
+# Do not ENV SITE_PAGES: an empty string wins over SITE_PROFILE and fails the build.
 
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
