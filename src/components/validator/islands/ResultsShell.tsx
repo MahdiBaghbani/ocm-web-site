@@ -13,63 +13,38 @@ import {
   type CanonicalAreaId,
   type SpecificationAreaGridEntry,
 } from "../lib/validatorScore";
-import {
-  progressAnnouncement,
-  stripBracketedMarkers,
-} from "../lib/results/progress";
+import { stripBracketedMarkers } from "../lib/results/progress";
 import { projectActionable } from "../lib/results/actionable";
 import { projectActionRows } from "../lib/results/actionRows";
 import { projectCapability } from "../lib/results/capability";
 import { projectProgressCollections } from "../lib/results/collections";
 import { projectSessionStart } from "../lib/results/sessionStart";
-import { INITIAL_LIVE_INSTRUCTION_HOLD, stabilizeLiveView } from "../lib/results/stabilizeLiveView";
 import { projectTransportFailure } from "../lib/results/transportFailure";
 import { projectSessionFailure } from "../lib/results/sessionFailures";
 import { projectResultsPage } from "../lib/results/projectResultsPage";
-import { ActionSection } from "./results/ActionSection";
 import {
+  ActionSection,
   EvidenceSection,
-  EVIDENCE_EMPTY_SNAPSHOT,
-  EVIDENCE_EXPIRED,
-  EVIDENCE_NOT_SAVED,
-} from "./results/EvidenceSection";
-import {
-  CopyNoticeRegion,
-  INVITE_FIELD_LABEL,
-  MAX_REVERSE_INVITE_LENGTH,
   ProgressSection,
-  REVERSE_INVITE_FIELD_LABEL,
-  REVERSE_INVITE_SUBMIT_LABEL,
-  REVERSE_INVITE_TOO_LONG_TEXT,
-  type CopyNotice,
-} from "./results/ProgressSection";
-import { PAGE_LINK_NOT_SAVED_NOTICE, ResultsHeader } from "./results/ResultsHeader";
-import {
-  CLAIM_COPY_FAILURE_TEXT,
-  readStoredInvite,
-  useClaimAction,
-  writeStoredInvite,
-} from "./results/useClaimAction";
-import {
-  COPY_SUCCESS_TEXT,
-  copyText,
-  EMPTY_COPY_NOTICE,
-  useClipboardActions,
-  type ClipboardCopyTarget,
-} from "./results/useClipboardActions";
-import { useResultPolling } from "./results/useResultPolling";
-import {
+  ResultsHeader,
   syncSessionIdentity,
+  useClaimAction,
+  useClipboardActions,
+  useResultPolling,
   useResultSession,
-} from "./results/useResultSession";
-import {
-  reverseInviteErrorCopy,
   useReverseInvite,
-} from "./results/useReverseInvite";
+  type ClipboardCopyTarget,
+} from "./results";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
-export { progressAnnouncement, stripBracketedMarkers };
-export { INITIAL_LIVE_INSTRUCTION_HOLD, stabilizeLiveView };
+export {
+  progressAnnouncement,
+  stripBracketedMarkers,
+} from "../lib/results/progress";
+export {
+  INITIAL_LIVE_INSTRUCTION_HOLD,
+  stabilizeLiveView,
+} from "../lib/results/stabilizeLiveView";
 export { resultAreaEntries } from "../lib/results/collections";
 export {
   COPY_AGAIN_LABEL,
@@ -99,24 +74,25 @@ export interface ResultsShellProps {
 export const TEST_HREF = "/validator/";
 
 export {
+  CLAIM_COPY_FAILURE_TEXT,
+  COPY_SUCCESS_TEXT,
+  CopyNoticeRegion,
+  EMPTY_COPY_NOTICE,
   EVIDENCE_EMPTY_SNAPSHOT,
   EVIDENCE_EXPIRED,
   EVIDENCE_NOT_SAVED,
-};
-export { PAGE_LINK_NOT_SAVED_NOTICE };
-export {
-  CopyNoticeRegion,
   INVITE_FIELD_LABEL,
   MAX_REVERSE_INVITE_LENGTH,
+  PAGE_LINK_NOT_SAVED_NOTICE,
   REVERSE_INVITE_FIELD_LABEL,
   REVERSE_INVITE_SUBMIT_LABEL,
   REVERSE_INVITE_TOO_LONG_TEXT,
-};
-export type { CopyNotice };
-
-export { reverseInviteErrorCopy };
-export { EMPTY_COPY_NOTICE, COPY_SUCCESS_TEXT, copyText };
-export { CLAIM_COPY_FAILURE_TEXT, readStoredInvite, writeStoredInvite };
+  copyText,
+  readStoredInvite,
+  reverseInviteErrorCopy,
+  writeStoredInvite,
+} from "./results";
+export type { CopyNotice } from "./results";
 
 /**
  * Live session report href. Shown only when origin is a normalized real
