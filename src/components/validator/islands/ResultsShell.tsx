@@ -3,29 +3,12 @@
  * a private or public terminal result without treating report_not_public as a
  * load error.
  */
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ValidatorRuntimeConfig } from "../lib/validatorConfig";
-import { loadSharedRuntimeConfig } from "../../../lib/siteRuntimeConfig";
+import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { joinValidatorUrl } from "../lib/validatorFetch";
 import {
-  claimInvite,
-  joinValidatorUrl,
-  postReverseInvite,
-  type ReportResponse,
-  type SessionPollResponse,
-  type ValidatorFailure,
-  type ValidatorFetchDeps,
-} from "../lib/validatorFetch";
-import { runResultsPollLoop } from "../lib/resultsPoll";
-import {
-  type MachineView,
-  type UserStep,
-} from "../lib/stateMachine";
-import {
-  actionErrorCopy,
   guidanceFor,
   type GuidanceRecord,
 } from "../lib/validatorGuidance";
-import type { ValidatorUrlState } from "../lib/urlState";
 import {
   type CanonicalAreaId,
   type SpecificationAreaGridEntry,
@@ -38,23 +21,11 @@ import { projectActionable } from "../lib/results/actionable";
 import { projectActionRows } from "../lib/results/actionRows";
 import { projectCapability } from "../lib/results/capability";
 import { projectProgressCollections } from "../lib/results/collections";
-import {
-  projectSessionStart,
-  sessionFromLocation,
-  sessionFromProps,
-} from "../lib/results/sessionStart";
-import {
-  INITIAL_LIVE_INSTRUCTION_HOLD,
-  stabilizeLiveView,
-  type LiveInstructionHold,
-} from "../lib/results/stabilizeLiveView";
+import { projectSessionStart } from "../lib/results/sessionStart";
+import { INITIAL_LIVE_INSTRUCTION_HOLD, stabilizeLiveView } from "../lib/results/stabilizeLiveView";
 import { projectTransportFailure } from "../lib/results/transportFailure";
 import { projectSessionFailure } from "../lib/results/sessionFailures";
-import { isSameSessionId, isStaleSessionId } from "../lib/results/sessionIdentity";
-import {
-  projectResultsPage,
-  type ResultsPageStatus,
-} from "../lib/results/projectResultsPage";
+import { projectResultsPage } from "../lib/results/projectResultsPage";
 import { ActionSection } from "./results/ActionSection";
 import {
   EvidenceSection,
@@ -73,6 +44,28 @@ import {
   type CopyNotice,
 } from "./results/ProgressSection";
 import { PAGE_LINK_NOT_SAVED_NOTICE, ResultsHeader } from "./results/ResultsHeader";
+import {
+  CLAIM_COPY_FAILURE_TEXT,
+  readStoredInvite,
+  useClaimAction,
+  writeStoredInvite,
+} from "./results/useClaimAction";
+import {
+  COPY_SUCCESS_TEXT,
+  copyText,
+  EMPTY_COPY_NOTICE,
+  useClipboardActions,
+  type ClipboardCopyTarget,
+} from "./results/useClipboardActions";
+import { useResultPolling } from "./results/useResultPolling";
+import {
+  syncSessionIdentity,
+  useResultSession,
+} from "./results/useResultSession";
+import {
+  reverseInviteErrorCopy,
+  useReverseInvite,
+} from "./results/useReverseInvite";
 
 export { AREA_DESCRIPTIONS } from "../lib/score/areas";
 export { progressAnnouncement, stripBracketedMarkers };
@@ -121,83 +114,9 @@ export {
 };
 export type { CopyNotice };
 
-const PAGE_LINK_READONLY_PARAM = "ro";
-const PAGE_LINK_READONLY_VALUE = "1";
-
-/**
- * Pure mapping from a postReverseInvite failure to operator-facing copy.
- * The known backend reasonCodes reuse the shared paste_* guidance strings;
- * anything else (peer_unreachable, not_found, internal_error, or an
- * unrecognized envelope) falls back to the backend message, and finally to
- * a generic string when even that is empty.
- */
-export function reverseInviteErrorCopy(failure: ValidatorFailure): string {
-  if (failure.error === "wrong_target_host") {
-    return actionErrorCopy("paste_422_wrong_target_host");
-  }
-  if (failure.error === "conflict") {
-    return actionErrorCopy("paste_409_conflict");
-  }
-  if (failure.error === "missing_field") {
-    return actionErrorCopy("paste_400_invalid_invitation");
-  }
-  return failure.message !== "" ? failure.message : "Could not import the return invitation.";
-}
-
-function liveViewSignature(step: UserStep, guidanceKey: string | null): string {
-  return `${step}:${guidanceKey ?? ""}`;
-}
-
-function isFocusLossControl(node: Element | null): node is HTMLElement {
-  if (node === null) {
-    return false;
-  }
-  const tag = typeof node.tagName === "string" ? node.tagName.toUpperCase() : "";
-  return tag === "BUTTON" || tag === "A" || tag === "TEXTAREA" || tag === "FORM";
-}
-
-function snapshotFocusLossControl(): Element | null {
-  if (typeof document === "undefined") {
-    return null;
-  }
-  const active = document.activeElement;
-  return isFocusLossControl(active) ? active : null;
-}
-
-/**
- * Defensive bracket stripping for a guidance record's title and body, not
- * just the single-line announcement. Applies to whatever guidance record is
- * handed to the current row, so any bracketed planning marker never reaches
- * the visible guidance slot (which is also what a screen reader announces).
- */
-export function sanitizeGuidanceRecord(
-  record: GuidanceRecord | null,
-): GuidanceRecord | null {
-  if (record === null) {
-    return null;
-  }
-  if (record.kind === "instruction") {
-    return {
-      ...record,
-      title: stripBracketedMarkers(record.title),
-      body: stripBracketedMarkers(record.body),
-    };
-  }
-  return { ...record, body: stripBracketedMarkers(record.body) };
-}
-
-function requestDeps(
-  config: ValidatorRuntimeConfig,
-  signal?: AbortSignal,
-): ValidatorFetchDeps {
-  return {
-    origin: config.validatorApiOrigin,
-    timeoutMs: config.requestTimeoutMs,
-    backoffInitialMs: config.backoffInitialMs,
-    backoffMaxMs: config.backoffMaxMs,
-    signal,
-  };
-}
+export { reverseInviteErrorCopy };
+export { EMPTY_COPY_NOTICE, COPY_SUCCESS_TEXT, copyText };
+export { CLAIM_COPY_FAILURE_TEXT, readStoredInvite, writeStoredInvite };
 
 /**
  * Live session report href. Shown only when origin is a normalized real
@@ -240,179 +159,26 @@ export function areaTotals(areas: readonly SpecificationAreaGridEntry[]): {
   return { passed, warn, failed, rest };
 }
 
-function pageLinkIsReadOnly(href: string): boolean {
-  try {
-    return new URL(href).searchParams.get(PAGE_LINK_READONLY_PARAM) === PAGE_LINK_READONLY_VALUE;
-  } catch {
-    return false;
-  }
-}
-
-function pageLinkHref(status: ResultsPageStatus, href: string): string {
-  if (status !== "live") {
-    return href;
-  }
-  try {
-    const url = new URL(href);
-    url.searchParams.set(PAGE_LINK_READONLY_PARAM, PAGE_LINK_READONLY_VALUE);
-    return url.href;
-  } catch {
-    return href;
-  }
-}
-
-function readOnlyStop(): Promise<{
-  ok: false;
-  kind: "aborted";
-  status: null;
-  error: string;
-  message: string;
-}> {
-  return Promise.resolve({
-    ok: false,
-    kind: "aborted",
-    status: null,
-    error: "aborted",
-    message: "",
-  });
-}
-
-export const EMPTY_COPY_NOTICE: CopyNotice = { ok: true, text: "" };
-export const COPY_SUCCESS_TEXT = "Copied";
-
-// AG-1.4 cached-invite field label. Claim CTA labels live in actionRows.
-export const CLAIM_COPY_FAILURE_TEXT =
-  "Could not copy the invitation. Select and copy it from the field below.";
-
-const INVITE_STORAGE_PREFIX = "validator:invite:";
-
-function inviteStorageKey(sessionId: string): string {
-  return `${INVITE_STORAGE_PREFIX}${sessionId}`;
-}
-
-// SessionStorage is a best-effort durable backup of a claimed invitation for a
-// single session id. Access and read/write can throw (disabled storage, quota,
-// privacy mode); every path is guarded and non-fatal, so the in-memory cache
-// remains the source of truth.
-export function readStoredInvite(sessionId: string): string | null {
-  try {
-    if (typeof window === "undefined") {
-      return null;
-    }
-    const store: Storage | undefined = window.sessionStorage;
-    if (store === undefined || store === null) {
-      return null;
-    }
-    const raw = store.getItem(inviteStorageKey(sessionId));
-    return typeof raw === "string" && raw !== "" ? raw : null;
-  } catch {
+/**
+ * Defensive bracket stripping for a guidance record's title and body, not
+ * just the single-line announcement. Applies to whatever guidance record is
+ * handed to the current row, so any bracketed planning marker never reaches
+ * the visible guidance slot (which is also what a screen reader announces).
+ */
+export function sanitizeGuidanceRecord(
+  record: GuidanceRecord | null,
+): GuidanceRecord | null {
+  if (record === null) {
     return null;
   }
-}
-
-export function writeStoredInvite(sessionId: string, value: string): void {
-  try {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const store: Storage | undefined = window.sessionStorage;
-    if (store === undefined || store === null) {
-      return;
-    }
-    store.setItem(inviteStorageKey(sessionId), value);
-  } catch {
-    // Storing the invite is best-effort; the in-memory cache stays valid.
+  if (record.kind === "instruction") {
+    return {
+      ...record,
+      title: stripBracketedMarkers(record.title),
+      body: stripBracketedMarkers(record.body),
+    };
   }
-}
-
-function clipboardWriter(): Clipboard | undefined {
-  if (
-    typeof window === "undefined" ||
-    window.isSecureContext !== true ||
-    typeof navigator === "undefined"
-  ) {
-    return undefined;
-  }
-  const clipboard = navigator.clipboard;
-  if (clipboard === undefined || typeof clipboard.writeText !== "function") {
-    return undefined;
-  }
-  return clipboard;
-}
-
-function createOffscreenCopyTextarea(value: string): HTMLTextAreaElement {
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  // 1px offscreen. display:none and the old opacity:0 fixed trick both break
-  // selection in some browsers, so the node stays measurable for the copy.
-  textarea.style.position = "absolute";
-  textarea.style.width = "1px";
-  textarea.style.height = "1px";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  textarea.style.padding = "0";
-  textarea.style.border = "0";
-  textarea.style.overflow = "hidden";
-  return textarea;
-}
-
-function restorePriorFocus(previousActive: Element | null, textarea: HTMLTextAreaElement): void {
-  if (
-    previousActive instanceof HTMLElement &&
-    previousActive !== textarea &&
-    previousActive.isConnected
-  ) {
-    try {
-      previousActive.focus({ preventScroll: true });
-    } catch {
-      // Focus restore is best-effort.
-    }
-  }
-}
-
-// Shared page-link / report-link / later AG-1.4 copy helper. Tier 2 execCommand
-// is best-effort only; a true return is not a guarantee on every browser.
-export async function copyText(value: string): Promise<boolean> {
-  const clipboard = clipboardWriter();
-  if (clipboard !== undefined) {
-    try {
-      await clipboard.writeText(value);
-      return true;
-    } catch {
-      // Clipboard API rejected; try the execCommand fallback.
-    }
-  }
-  if (typeof document === "undefined") {
-    return false;
-  }
-  const previousActive = document.activeElement;
-  const textarea = createOffscreenCopyTextarea(value);
-  document.body.appendChild(textarea);
-  try {
-    if (typeof textarea.focus === "function") {
-      textarea.focus({ preventScroll: true });
-    }
-    if (typeof textarea.select === "function") {
-      textarea.select();
-    }
-    if (typeof document.execCommand !== "function") {
-      return false;
-    }
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    try {
-      const parent = textarea.parentNode;
-      if (parent !== null) {
-        parent.removeChild(textarea);
-      }
-    } catch {
-      // Textarea cleanup is best-effort.
-    }
-    restorePriorFocus(previousActive, textarea);
-  }
+  return { ...record, body: stripBracketedMarkers(record.body) };
 }
 
 export default function ResultsShell({
@@ -420,70 +186,13 @@ export default function ResultsShell({
   id,
   testHref = TEST_HREF,
 }: ResultsShellProps): React.ReactElement {
-  const [session, setSession] = useState<ValidatorUrlState | null>(() =>
-    sessionFromProps(host, id),
-  );
-  const [mounted, setMounted] = useState(false);
-  const [config, setConfig] = useState<ValidatorRuntimeConfig | null>(null);
-  const [poll, setPoll] = useState<SessionPollResponse | null>(null);
-  const [view, setView] = useState<MachineView | null>(null);
-  const [guidanceKey, setGuidanceKey] = useState<string | null>(null);
-  const [lastLiveReport, setLastLiveReport] = useState<ReportResponse | null>(null);
-  const [terminalReport, setTerminalReport] = useState<ReportResponse | null>(null);
-  const [reportFailure, setReportFailure] = useState<ValidatorFailure | null>(null);
-  const [error, setError] = useState("");
-  const [copyNotice, setCopyNotice] = useState<CopyNotice>(EMPTY_COPY_NOTICE);
-  const [copyFallback, setCopyFallback] = useState<string | null>(null);
-  const [cachedInvite, setCachedInvite] = useState<string | null>(null);
-  const [claimBusy, setClaimBusy] = useState(false);
-  // Terminal lock. An uncached 410 means the invitation is already claimed and
-  // unrecoverable in this browser, so the CTA must stay disabled after the
-  // in-flight claimBusy clears. It persists until a session/navigation reset.
-  const [claimLocked, setClaimLocked] = useState(false);
-  // AG-2.4 sole POST-error channel for the current row. The claim CTA and
-  // the reverse-invite form both write here; only one of them can be the
-  // active row at a time, so the two failure paths never collide.
   const [postError, setPostError] = useState<string | null>(null);
-  // Holds the session id of the in-flight claim, or null when idle. Using the
-  // id (not a bool) lets an old claim's finally avoid clearing a newer
-  // session's lock after a navigation reset cleared the shared ref.
-  const claimLockRef = useRef<string | null>(null);
-  // Mirrors the current session id every render so an async claim callback can
-  // compare the session it started in against the live session with no
-  // effect-timing gap.
-  const currentSessionIdRef = useRef<string | null>(null);
-  // AG-1.5 reverse-invite form state. The textarea stays controlled and its
-  // busy/lock pair mirrors the AG-1.4 claim race-safety shape; its error now
-  // shares the postError channel above.
-  const [reverseValue, setReverseValue] = useState("");
-  const [reverseBusy, setReverseBusy] = useState(false);
-  // Holds the session id of the in-flight reverse POST, or null when idle.
-  // Reverse POST is not cached, so unlike claimLockRef this only guards
-  // against a double submit while one request is outstanding.
-  const reverseLockRef = useRef<string | null>(null);
-  // Mirrors the current guidanceKey every render so an async reverse-invite
-  // callback can tell whether polling already left paste_s2 while its POST
-  // was in flight, with no effect-timing gap.
-  const guidanceKeyRef = useRef<string | null>(null);
-  // AG-2.4 sole POST-error channel. Cleared synchronously during render
-  // (see the guidanceKeyRef assignment below) whenever the displayed
-  // instruction changes, so a stale claim or reverse failure never survives
-  // past the row it happened on, not even for one committed frame. A fresh
-  // POST attempt clears it directly (see handleClaimInvite /
-  // handleReverseInvite), and a repeat poll of the same instruction leaves
-  // guidanceKey unchanged, so this does not fire on every poll.
-  const prevGuidanceKeyRef = useRef(guidanceKey);
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<CanonicalAreaId | null>(null);
-  const viewRef = useRef<MachineView | null>(null);
-  const liveHoldRef = useRef<LiveInstructionHold>(INITIAL_LIVE_INSTRUCTION_HOLD);
-  const currentCardRef = useRef<HTMLDivElement | null>(null);
-  const liveViewSeededRef = useRef(false);
-  const lastLiveSignatureRef = useRef<string | null>(null);
-  const pendingFocusLossElRef = useRef<Element | null>(null);
   const [restoreCurrentCardFocus, setRestoreCurrentCardFocus] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const copyMountedRef = useRef(true);
+  const currentCardRef = useRef<HTMLDivElement | null>(null);
+  const sessionChangeResetRef = useRef<() => void>(() => {});
+  const copyTargetRef = useRef<ClipboardCopyTarget>({ status: "live", reportUrl: null });
   // Live trigger buttons keyed by canonical area id, plus a grid-heading
   // fallback. On close we restore focus by area id so the correct trigger wins
   // even if the modal remounted a fresh button; OverlayFrame does its own
@@ -502,131 +211,64 @@ export default function ResultsShell({
     [],
   );
 
-  useEffect(() => {
-    setMounted(true);
-    setSession(
-      sessionFromLocation(
-        host,
-        id,
-        typeof window === "undefined" ? null : window.location.href,
-      ),
-    );
-  }, [host, id]);
+  const {
+    session,
+    mounted,
+    currentSessionIdRef,
+    guidanceKeyRef,
+    prevGuidanceKeyRef,
+  } = useResultSession({ host, id, sessionChangeResetRef });
 
-  useEffect(() => {
-    viewRef.current = null;
-    liveHoldRef.current = INITIAL_LIVE_INSTRUCTION_HOLD;
-    liveViewSeededRef.current = false;
-    lastLiveSignatureRef.current = null;
-    pendingFocusLossElRef.current = null;
-    setRestoreCurrentCardFocus(false);
-    setPoll(null);
-    setView(null);
-    setGuidanceKey(null);
-    setLastLiveReport(null);
-    setTerminalReport(null);
-    setReportFailure(null);
-    setError("");
-    setRawJsonOpen(false);
-    setSelectedArea(null);
-    setCopyNotice(EMPTY_COPY_NOTICE);
-    setCopyFallback(null);
-    setCachedInvite(null);
-    setClaimBusy(false);
-    setClaimLocked(false);
-    setPostError(null);
-    claimLockRef.current = null;
-    setReverseValue("");
-    setReverseBusy(false);
-    reverseLockRef.current = null;
-    if (copyTimerRef.current !== null) {
-      clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = null;
-    }
-  }, [session?.host, session?.id]);
+  const {
+    copyNotice,
+    copyFallback,
+    settleCopyOutcome,
+    handleCopyPageLink,
+    handleCopyReport,
+    reset: resetClipboard,
+  } = useClipboardActions({ session, copyTargetRef });
 
-  useEffect(() => {
-    copyMountedRef.current = true;
-    return () => {
-      copyMountedRef.current = false;
-      if (copyTimerRef.current !== null) {
-        clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = null;
-      }
-    };
-  }, []);
+  const {
+    config,
+    poll,
+    view,
+    guidanceKey,
+    lastLiveReport,
+    terminalReport,
+    reportFailure,
+    error,
+    pendingFocusLossElRef,
+    reset: resetPolling,
+  } = useResultPolling({ session });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      const loaded = await loadSharedRuntimeConfig();
-      if (controller.signal.aborted) {
-        return;
-      }
-      setConfig(loaded);
-    })();
-    return () => controller.abort();
-  }, []);
+  const {
+    cachedInvite,
+    claimBusy,
+    claimLocked,
+    handleClaimInvite,
+    reset: resetClaim,
+  } = useClaimAction({
+    session,
+    config,
+    currentSessionIdRef,
+    guidanceKeyRef,
+    settleCopyOutcome,
+    setPostError,
+  });
 
-  useEffect(() => {
-    if (config === null || session === null) {
-      return;
-    }
-    const controller = new AbortController();
-    const readOnly =
-      typeof window !== "undefined" && pageLinkIsReadOnly(window.location.href);
-    void runResultsPollLoop(
-      {
-        sessionId: session.id,
-        cadence: {
-          pollIntervalMs: config.pollIntervalMs,
-          activePollIntervalMs: config.activePollIntervalMs,
-        },
-        deps: requestDeps(config, controller.signal),
-        signal: controller.signal,
-        // Copied live links use ?ro=1 so this view keeps GET polling but
-        // never POSTs /stop.
-        readOnly,
-        stop: readOnly ? readOnlyStop : undefined,
-      },
-      {
-        onPoll: (data) => {
-          setPoll(data);
-        },
-        onView: (machine, pollData) => {
-          const { stabilized, hold } = stabilizeLiveView(
-            machine,
-            pollData.nextInstruction,
-            liveHoldRef.current,
-          );
-          liveHoldRef.current = hold;
-          viewRef.current = stabilized.view;
-          const signature = liveViewSignature(stabilized.view.step, stabilized.guidanceKey);
-          const seeded = liveViewSeededRef.current;
-          const previous = lastLiveSignatureRef.current;
-          lastLiveSignatureRef.current = signature;
-          liveViewSeededRef.current = true;
-          if (seeded && previous !== signature) {
-            pendingFocusLossElRef.current = snapshotFocusLossControl();
-          } else {
-            pendingFocusLossElRef.current = null;
-          }
-          setView(stabilized.view);
-          setGuidanceKey(stabilized.guidanceKey);
-        },
-        onReport: (data) => {
-          if (viewRef.current?.terminalize === true) {
-            setTerminalReport(data);
-          } else {
-            setLastLiveReport(data);
-          }
-        },
-        onReportFailure: setReportFailure,
-        onError: setError,
-      },
-    );
-    return () => controller.abort();
-  }, [config, session]);
+  const {
+    reverseValue,
+    reverseBusy,
+    setReverseValue,
+    handleReverseInvite,
+    reset: resetReverse,
+  } = useReverseInvite({
+    session,
+    config,
+    currentSessionIdRef,
+    guidanceKeyRef,
+    setPostError,
+  });
 
   useLayoutEffect(() => {
     const pending = pendingFocusLossElRef.current;
@@ -651,12 +293,25 @@ export default function ResultsShell({
     }
   }, [guidanceKey, view]);
 
-  currentSessionIdRef.current = session?.id ?? null;
-  guidanceKeyRef.current = guidanceKey;
-  if (prevGuidanceKeyRef.current !== guidanceKey) {
-    prevGuidanceKeyRef.current = guidanceKey;
+  // Guard 15: synchronous render-phase session-identity writes. Must stay in
+  // this orchestrator render body; never a useEffect, child, or hook body.
+  syncSessionIdentity(
+    { currentSessionIdRef, guidanceKeyRef, prevGuidanceKeyRef },
+    session?.id ?? null,
+    guidanceKey,
+    setPostError,
+  );
+
+  sessionChangeResetRef.current = () => {
+    resetPolling();
+    setRestoreCurrentCardFocus(false);
+    setRawJsonOpen(false);
+    setSelectedArea(null);
+    resetClipboard();
+    resetClaim();
     setPostError(null);
-  }
+    resetReverse();
+  };
 
   const projection = projectResultsPage({
     poll,
@@ -666,221 +321,10 @@ export default function ResultsShell({
     reportFailure,
     validatorApiOrigin: config?.validatorApiOrigin ?? "",
   });
-
-  function clearCopyTimer(): void {
-    if (copyTimerRef.current !== null) {
-      clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = null;
-    }
-  }
-
-  function settleCopyOutcome(ok: boolean, value: string, failureText: string): void {
-    clearCopyTimer();
-    if (ok) {
-      setCopyFallback(null);
-      // Commit an empty live-region tick so a repeat copy can re-announce.
-      setCopyNotice({ ok: true, text: "" });
-      copyTimerRef.current = setTimeout(() => {
-        if (!copyMountedRef.current) {
-          copyTimerRef.current = null;
-          return;
-        }
-        setCopyNotice({ ok: true, text: COPY_SUCCESS_TEXT });
-        copyTimerRef.current = setTimeout(() => {
-          if (!copyMountedRef.current) {
-            copyTimerRef.current = null;
-            return;
-          }
-          setCopyNotice((current) => (current.ok ? { ok: true, text: "" } : current));
-          copyTimerRef.current = null;
-        }, 2000);
-      }, 0);
-      return;
-    }
-    setCopyFallback(value);
-    setCopyNotice({ ok: false, text: failureText });
-  }
-
-  async function handleCopyPageLink(): Promise<void> {
-    if (session === null || typeof window === "undefined") {
-      return;
-    }
-    const value = pageLinkHref(projection.status, window.location.href);
-    const ok = await copyText(value);
-    settleCopyOutcome(ok, value, "Could not copy the page link.");
-  }
-
-  async function handleCopyReport(): Promise<void> {
-    if (projection.reportUrl === null) {
-      return;
-    }
-    const ok = await copyText(projection.reportUrl);
-    settleCopyOutcome(
-      ok,
-      projection.reportUrl,
-      "Could not copy the report link. Open the report and copy its address instead.",
-    );
-  }
-
-  // AG-1.4 primary CTA for the paste_s1 step. First use claims the invitation
-  // (one POST), caches it before any clipboard access, then copies it. Once a
-  // cache exists, this is "Copy again": it copies the cached value only and
-  // never POSTs. A fast double click issues exactly one claim because the ref
-  // lock is acquired synchronously before the await.
-  async function handleClaimInvite(): Promise<void> {
-    if (session === null || config === null) {
-      return;
-    }
-    // An uncached 410 terminally locked this browser out of claiming; never
-    // re-POST even if a stray click reaches the disabled CTA.
-    if (claimLocked) {
-      return;
-    }
-    // Capture the session this claim belongs to. Every post-await write is
-    // guarded against it so a POST for session A that resolves after
-    // navigation to session B cannot touch B's cache, error, notice, or state.
-    const claimSessionId = session.id;
-    if (cachedInvite !== null) {
-      const ok = await copyText(cachedInvite);
-      // A copy that resolves after navigation must not re-announce for B.
-      if (isStaleSessionId(claimSessionId, currentSessionIdRef.current)) {
-        return;
-      }
-      settleCopyOutcome(ok, cachedInvite, CLAIM_COPY_FAILURE_TEXT);
-      return;
-    }
-    if (claimLockRef.current !== null) {
-      return;
-    }
-    claimLockRef.current = claimSessionId;
-    setClaimBusy(true);
-    setPostError(null);
-    try {
-      const result = await claimInvite(claimSessionId, requestDeps(config));
-      // Ignore a stale resolution entirely once the session changed.
-      if (isStaleSessionId(claimSessionId, currentSessionIdRef.current)) {
-        return;
-      }
-      if (result.ok) {
-        const invite = result.data.inviteString;
-        // Cache before clipboard so the invite survives a copy failure and
-        // later polls; sessionStorage is a best-effort durable backup.
-        setCachedInvite(invite);
-        writeStoredInvite(claimSessionId, invite);
-        const ok = await copyText(invite);
-        // Navigation during the copy await must not re-announce for B.
-        if (isStaleSessionId(claimSessionId, currentSessionIdRef.current)) {
-          return;
-        }
-        settleCopyOutcome(ok, invite, CLAIM_COPY_FAILURE_TEXT);
-        return;
-      }
-      // A late failure response must not overwrite postError once the
-      // instruction has already advanced past paste_s1 for this session.
-      // Caching above is unaffected: only these announcement writes guard on
-      // guidanceKey, matching AG-1.5's reverse-handler pattern.
-      if (
-        isStaleSessionId(claimSessionId, currentSessionIdRef.current)
-        || guidanceKeyRef.current !== "paste_s1"
-      ) {
-        return;
-      }
-      if (result.error === "INVITE_ALREADY_CLAIMED") {
-        const cached = readStoredInvite(claimSessionId);
-        if (cached !== null) {
-          setCachedInvite(cached);
-          const ok = await copyText(cached);
-          if (
-            isStaleSessionId(claimSessionId, currentSessionIdRef.current)
-            || guidanceKeyRef.current !== "paste_s1"
-          ) {
-            return;
-          }
-          settleCopyOutcome(ok, cached, CLAIM_COPY_FAILURE_TEXT);
-        } else {
-          // Already claimed and unrecoverable here: show locked copy and keep
-          // the CTA disabled permanently for this session.
-          setPostError(actionErrorCopy("claim_410_no_cache"));
-          setClaimLocked(true);
-        }
-        return;
-      }
-      if (result.error === "SESSION_NOT_READY") {
-        setPostError(actionErrorCopy("claim_409_session_not_ready"));
-        return;
-      }
-      setPostError(
-        result.message !== "" ? result.message : "Could not claim the invitation.",
-      );
-    } finally {
-      // Only release the in-flight lock this claim actually still owns; a
-      // newer session may have reset the shared ref or acquired its own lock.
-      if (isSameSessionId(claimLockRef.current, claimSessionId)) {
-        claimLockRef.current = null;
-      }
-      // Never clear a newer session's transient busy state. claimLocked is
-      // intentionally left untouched here so an uncached-410 lock persists.
-      if (isSameSessionId(claimSessionId, currentSessionIdRef.current)) {
-        setClaimBusy(false);
-      }
-    }
-  }
-
-  // AG-1.5 submit for the paste_s2 reverse-invite form. Reuses AG-1.4's ref
-  // lock plus busy state so a fast double click issues exactly one POST, but
-  // unlike the claim CTA the reverse POST result is never cached: each
-  // submit from paste_s2 can post again once the prior request settles. A
-  // 200 never advances the UI on its own (only the poll leaving paste_s2
-  // does that), and any write after this POST settles is dropped once either
-  // the session changed or polling already left paste_s2 while it was in
-  // flight.
-  async function handleReverseInvite(): Promise<void> {
-    if (session === null || config === null) {
-      return;
-    }
-    // Trim only the surrounding whitespace; inner whitespace/content is part
-    // of the invite string and must reach the backend unchanged.
-    const trimmed = reverseValue.trim();
-    if (trimmed.length > MAX_REVERSE_INVITE_LENGTH) {
-      setPostError(REVERSE_INVITE_TOO_LONG_TEXT);
-      return;
-    }
-    if (reverseLockRef.current !== null) {
-      return;
-    }
-    const reverseSessionId = session.id;
-    reverseLockRef.current = reverseSessionId;
-    setReverseBusy(true);
-    setPostError(null);
-    try {
-      const result = await postReverseInvite(reverseSessionId, trimmed, requestDeps(config));
-      // Ignore a stale resolution: either the session changed, or polling
-      // already left paste_s2 while this POST was in flight. Neither the
-      // 200 nor the error is state truth; only the poll loop is.
-      if (
-        isStaleSessionId(reverseSessionId, currentSessionIdRef.current) ||
-        guidanceKeyRef.current !== "paste_s2"
-      ) {
-        return;
-      }
-      if (result.ok) {
-        setPostError(null);
-        return;
-      }
-      setPostError(reverseInviteErrorCopy(result));
-    } finally {
-      // Only release the in-flight lock this submit actually still owns.
-      if (isSameSessionId(reverseLockRef.current, reverseSessionId)) {
-        reverseLockRef.current = null;
-      }
-      // Busy clears on session identity alone (matching AG-1.4): once this
-      // session's own POST settles, the submit button must re-enable even
-      // if polling already moved past paste_s2 and unmounted the form.
-      if (isSameSessionId(reverseSessionId, currentSessionIdRef.current)) {
-        setReverseBusy(false);
-      }
-    }
-  }
+  copyTargetRef.current = {
+    status: projection.status,
+    reportUrl: projection.reportUrl,
+  };
 
   if (session === null) {
     const sessionStart = projectSessionStart(
