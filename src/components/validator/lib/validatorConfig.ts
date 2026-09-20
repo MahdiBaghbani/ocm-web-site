@@ -7,6 +7,34 @@ import { isRecord } from "./validatorShared";
 export const CONFIG_JSON_PATH = "/config.json";
 export const CONFIG_ORIGIN_KEY = "validator_api_origin";
 
+/** Join a site base URL with config.json (origin-absolute, not document-relative). */
+export function resolveConfigJsonPath(baseUrl: string): string {
+  const trimmed = baseUrl.trim();
+  if (trimmed === "" || trimmed === "/") {
+    return CONFIG_JSON_PATH;
+  }
+
+  const withoutTrailingSlash = trimmed.endsWith("/")
+    ? trimmed.slice(0, -1)
+    : trimmed;
+  const withLeadingSlash = withoutTrailingSlash.startsWith("/")
+    ? withoutTrailingSlash
+    : `/${withoutTrailingSlash}`;
+  return `${withLeadingSlash}/config.json`;
+}
+
+function readDefaultConfigJsonBaseUrl(): string {
+  const base = import.meta.env?.BASE_URL;
+  if (typeof base === "string" && base !== "") {
+    return base;
+  }
+  return "/";
+}
+
+export function resolveDefaultConfigJsonPath(): string {
+  return resolveConfigJsonPath(readDefaultConfigJsonBaseUrl());
+}
+
 export interface ValidatorRuntimeConfig {
   validatorApiOrigin: string;
   communityUrl: string;
@@ -163,7 +191,7 @@ export function parseValidatorConfig(raw: unknown): ValidatorRuntimeConfig {
 
 export function fetchConfigSource(
   fetchLike: FetchLike,
-  path: string = CONFIG_JSON_PATH,
+  path: string = resolveDefaultConfigJsonPath(),
 ): ValidatorConfigSource {
   return {
     async read() {
