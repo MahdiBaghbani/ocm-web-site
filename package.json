@@ -9,7 +9,7 @@
     "dev": "astro dev",
     "build": "bun run check:matrix-rules && astro build && bun run scripts/write-config-json.ts",
     "preview": "astro preview",
-    "test": "bun test --preload ./test-preload.ts",
+    "test": "bun test --isolate --preload ./test-preload.ts",
     "check:matrix-rules": "bun run scripts/check-matrix-rules-artifact.ts",
     "astro": "astro"
   },
