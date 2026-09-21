@@ -12,13 +12,15 @@ import type { VerdictKind } from "../../lib/results/verdict";
 import type { MachineView } from "../../lib/stateMachine";
 import type { GuidanceRecord } from "../../lib/validatorGuidance";
 import { ReloadButton, RunNewCheck } from "./ActionSection";
+import { ACTION_BTN } from "./constants";
 
-export const MAX_REVERSE_INVITE_LENGTH = 512;
+export {
+  MAX_REVERSE_INVITE_LENGTH,
+  REVERSE_INVITE_TOO_LONG_TEXT,
+} from "./constants";
 
 export const REVERSE_INVITE_FIELD_LABEL = "Return invitation";
 export const REVERSE_INVITE_SUBMIT_LABEL = "Submit return invitation";
-export const REVERSE_INVITE_TOO_LONG_TEXT =
-  "That return invitation is too long. Paste the invitation issued by the target server.";
 
 export const INVITE_FIELD_LABEL = "Invitation";
 
@@ -26,9 +28,6 @@ export type CopyNotice = {
   ok: boolean;
   text: string;
 };
-
-const ACTION_BTN =
-  "inline-flex min-h-11 items-center rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800";
 
 // AG-2.2 reserved the in-row `data-cta-slot` column StepRow already
 // renders for every row (sized for "Copy invitation", "Copy again", and

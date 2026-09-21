@@ -3,10 +3,10 @@
  */
 import React from "react";
 import Pill from "../atoms/Pill";
-import { CANONICAL_AREA_IDS as VALIDATOR_AREA_IDS } from "../lib/score/areas";
+import { CANONICAL_AREA_IDS } from "../lib/score/areas";
 import type { ValidatorStatisticsArea } from "../lib/validatorStatistics";
 
-const CANONICAL_AREA_IDS: ReadonlySet<string> = new Set(VALIDATOR_AREA_IDS);
+const CANONICAL_AREA_SET: ReadonlySet<string> = new Set(CANONICAL_AREA_IDS);
 
 type GradeArea = Pick<ValidatorStatisticsArea, "area" | "pass" | "warn" | "fail">;
 
@@ -26,7 +26,7 @@ function countOf(value: number | undefined): number {
 }
 
 function canonicalAreas(areas: readonly GradeArea[]): GradeArea[] {
-  return areas.filter((item) => CANONICAL_AREA_IDS.has(item.area));
+  return areas.filter((item) => CANONICAL_AREA_SET.has(item.area));
 }
 
 function sumAreas(areas: readonly GradeArea[]): GradeTotals {

@@ -12,7 +12,7 @@ import {
 import { isSameSessionId, isStaleSessionId } from "../../lib/results/sessionIdentity";
 import { actionErrorCopy } from "../../lib/validatorGuidance";
 import type { ValidatorUrlState } from "../../lib/urlState";
-import { MAX_REVERSE_INVITE_LENGTH, REVERSE_INVITE_TOO_LONG_TEXT } from "./ProgressSection";
+import { MAX_REVERSE_INVITE_LENGTH, REVERSE_INVITE_TOO_LONG_TEXT } from "./constants";
 
 /**
  * Pure mapping from a postReverseInvite failure to operator-facing copy.

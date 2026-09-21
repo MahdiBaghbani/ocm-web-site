@@ -8,12 +8,10 @@ import {
   SESSION_START_LOADING_TEXT,
   type SessionStartProjection,
 } from "../../lib/results/sessionStart";
+import { ACTION_BTN } from "./constants";
 
 export const PAGE_LINK_NOT_SAVED_NOTICE =
   "Not saved. This result was not stored as a public report. A copied page link identifies the session but does not preserve these scores or evidence.";
-
-const ACTION_BTN =
-  "inline-flex min-h-11 items-center rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800";
 
 export type ResultsHeaderProps =
   | {

@@ -5,10 +5,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ValidatorUrlState } from "../../lib/urlState";
 import type { ResultsPageStatus } from "../../lib/results/projectResultsPage";
+import {
+  PAGE_LINK_READONLY_PARAM,
+  PAGE_LINK_READONLY_VALUE,
+} from "./constants";
 import type { CopyNotice } from "./ProgressSection";
-
-const PAGE_LINK_READONLY_PARAM = "ro";
-const PAGE_LINK_READONLY_VALUE = "1";
 
 export const EMPTY_COPY_NOTICE: CopyNotice = { ok: true, text: "" };
 export const COPY_SUCCESS_TEXT = "Copied";

@@ -13,9 +13,7 @@ import type { PublicReportAction } from "../../lib/results/actionRows";
 import type { SessionFailureDisplay } from "../../lib/results/sessionFailures";
 import type { TransportFailureDisplay } from "../../lib/results/transportFailure";
 import type { CanonicalAreaId, SpecificationAreaGridEntry } from "../../lib/validatorScore";
-
-export const ACTION_BTN =
-  "inline-flex min-h-11 items-center rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800";
+import { ACTION_BTN } from "./constants";
 
 type SummaryChipIcon = "pass" | "warn" | "fail" | "not-tested";
 

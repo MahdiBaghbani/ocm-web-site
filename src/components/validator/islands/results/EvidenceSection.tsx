@@ -12,7 +12,7 @@ import { EXPIRED_EVIDENCE_NOTE } from "../../lib/results/sessionFailures";
 import type { EvidenceItem } from "../../lib/evidence/types";
 import type { ReportResponse } from "../../lib/validatorFetch";
 import type { CanonicalAreaId, SpecificationAreaGridEntry } from "../../lib/validatorScore";
-import { ACTION_BTN } from "./ActionSection";
+import { ACTION_BTN } from "./constants";
 
 export const EVIDENCE_NOT_SAVED =
   "No saved evidence is available because this report was not public.";

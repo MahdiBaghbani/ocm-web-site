@@ -19,9 +19,10 @@ import {
   stabilizeLiveView,
   type LiveInstructionHold,
 } from "../../lib/results/stabilizeLiveView";
-
-const PAGE_LINK_READONLY_PARAM = "ro";
-const PAGE_LINK_READONLY_VALUE = "1";
+import {
+  PAGE_LINK_READONLY_PARAM,
+  PAGE_LINK_READONLY_VALUE,
+} from "./constants";
 
 function liveViewSignature(step: UserStep, guidanceKey: string | null): string {
   return `${step}:${guidanceKey ?? ""}`;

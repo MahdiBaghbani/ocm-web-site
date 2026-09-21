@@ -1,6 +1,7 @@
 // Statistics-specific fetch fixtures for StatisticsShell panel tests.
 // Built on fetchStub (requestUrl / jsonResponse); does not install a DOM.
 
+import { CANONICAL_AREA_IDS } from "../lib/score/areas";
 import { jsonResponse, requestUrl } from "./fetchStub";
 
 export const CONFIG_BODY = {
@@ -10,17 +11,6 @@ export const CONFIG_BODY = {
   backoff_max_ms: 1,
   request_timeout_ms: 5000,
 };
-
-export const AREA_IDS = [
-  "discovery",
-  "tls",
-  "jwks",
-  "httpsig",
-  "sharing",
-  "notification",
-  "token",
-  "capability",
-] as const;
 
 export function parseableManifest(): Record<string, unknown> {
   return {
@@ -60,7 +50,7 @@ export function parseableManifest(): Record<string, unknown> {
 }
 
 export function zeroAreas(): Array<{ area: string; pass: number; warn: number; fail: number }> {
-  return AREA_IDS.map((area) => ({ area, pass: 0, warn: 0, fail: 0 }));
+  return CANONICAL_AREA_IDS.map((area) => ({ area, pass: 0, warn: 0, fail: 0 }));
 }
 
 export function emptyStatistics(): Record<string, unknown> {

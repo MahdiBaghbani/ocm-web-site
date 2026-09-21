@@ -1,5 +1,5 @@
 // ResultsShell union-test facade over the canonical union DOM shim.
-// See ResultsShell.test.tsx for the 38 inline mount call sites this collapses.
+// Collapses the shared mount/teardown used by ResultsShell peel tests.
 
 import { act } from "react";
 import type { ReactElement } from "react";
