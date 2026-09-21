@@ -1,18 +1,21 @@
 import React, { act } from "react";
 import { describe, expect, test } from "bun:test";
 
-import StatisticsShell from "./StatisticsShell";
+import StatisticsShell from "@/components/validator/islands/StatisticsShell";
 import {
   installDomShim,
   reactDomContainerOf,
 } from "@/components/validator/tests/helpers/domShim";
-import { mockIslandFetch, readyStatistics } from "../test-helpers/statisticsFetch";
+import {
+  mockIslandFetch,
+  readyStatistics,
+} from "@/components/validator/tests/islands/StatisticsShell/helpers/statisticsFetch";
 import {
   findById,
   findByTag,
   htmlOf,
   tileValue,
-} from "../test-helpers/statisticsShell";
+} from "@/components/validator/tests/islands/StatisticsShell/helpers/statisticsShell";
 import { waitForText } from "@/components/validator/tests/helpers/wait";
 
 describe("StatisticsShell island panels", () => {

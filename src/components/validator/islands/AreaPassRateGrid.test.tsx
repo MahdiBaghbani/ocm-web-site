@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import AreaPassRateGrid from "./AreaPassRateGrid";
-import { zeroAreas } from "../test-helpers/statisticsFetch";
+import { zeroAreas } from "@/components/validator/tests/islands/StatisticsShell/helpers/statisticsFetch";
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);

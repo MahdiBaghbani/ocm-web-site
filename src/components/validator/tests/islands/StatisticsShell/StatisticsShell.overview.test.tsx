@@ -2,23 +2,26 @@ import React, { act } from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import StatisticsShell from "./StatisticsShell";
+import StatisticsShell from "@/components/validator/islands/StatisticsShell";
 import {
   DEFAULT_STATISTICS_DAYS,
   STATISTICS_TIMEFRAME_DAYS,
   parseDaysToken,
-} from "../lib/validatorStatistics";
+} from "@/components/validator/lib/validatorStatistics";
 import {
   installDomShim,
   reactDomContainerOf,
 } from "@/components/validator/tests/helpers/domShim";
-import { emptyStatistics, mockIslandFetch } from "../test-helpers/statisticsFetch";
+import {
+  emptyStatistics,
+  mockIslandFetch,
+} from "@/components/validator/tests/islands/StatisticsShell/helpers/statisticsFetch";
 import {
   findById,
   findByTag,
   htmlOf,
   tileValue,
-} from "../test-helpers/statisticsShell";
+} from "@/components/validator/tests/islands/StatisticsShell/helpers/statisticsShell";
 import { waitForText } from "@/components/validator/tests/helpers/wait";
 
 function render(node: React.ReactElement): string {

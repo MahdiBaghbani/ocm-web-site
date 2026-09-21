@@ -1,7 +1,7 @@
 // Shared DOM-walk helpers for StatisticsShell panel tests.
 // Copied from the pre-split StatisticsShell hub; behavior is unchanged.
 
-import type { ShimNode } from "./domShim";
+import type { ShimNode } from "@/components/validator/tests/helpers/domShim";
 
 const TEXT_NODE = 3;
 const DOCUMENT_NODE = 9;

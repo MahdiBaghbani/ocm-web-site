@@ -1,8 +1,8 @@
 // Statistics-specific fetch fixtures for StatisticsShell panel tests.
 // Built on fetchStub (requestUrl / jsonResponse); does not install a DOM.
 
-import { CANONICAL_AREA_IDS } from "../lib/score/areas";
-import { jsonResponse, requestUrl } from "./fetchStub";
+import { CANONICAL_AREA_IDS } from "@/components/validator/lib/score/areas";
+import { jsonResponse, requestUrl } from "@/components/validator/tests/helpers/fetchStub";
 
 export const CONFIG_BODY = {
   poll_interval_ms: 1,
