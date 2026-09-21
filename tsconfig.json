@@ -12,6 +12,9 @@
     "jsxImportSource": "react",
     "types": [
       "bun"
-    ]
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   }
 }
