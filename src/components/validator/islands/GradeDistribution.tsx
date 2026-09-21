@@ -2,8 +2,8 @@
  * Pass/warn/fail bars from area totals or an explicit totals object.
  */
 import React from "react";
-import { VALIDATOR_AREA_IDS } from "../atoms/AreaGrid";
 import Pill from "../atoms/Pill";
+import { CANONICAL_AREA_IDS as VALIDATOR_AREA_IDS } from "../lib/score/areas";
 import type { ValidatorStatisticsArea } from "../lib/validatorStatistics";
 
 const CANONICAL_AREA_IDS: ReadonlySet<string> = new Set(VALIDATOR_AREA_IDS);
