@@ -107,8 +107,8 @@ describe("ResultsShell loaded-evidence projection", () => {
     await registerHappyDom();
   });
 
-  afterAll(() => {
-    teardownHappyDom();
+  afterAll(async () => {
+    await teardownHappyDom();
   });
 
   afterEach(() => {

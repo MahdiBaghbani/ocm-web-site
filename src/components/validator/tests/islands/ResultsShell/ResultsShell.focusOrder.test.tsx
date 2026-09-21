@@ -207,8 +207,8 @@ describe("ResultsShell focus order, live regions, and reserved layout", () => {
     await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
-  afterAll(() => {
-    teardownHappyDom();
+  afterAll(async () => {
+    await teardownHappyDom();
   });
 
   afterEach(() => {

@@ -108,8 +108,8 @@ describe("ResultsShell area detail modal focus restoration", () => {
     await registerHappyDom();
   });
 
-  afterAll(() => {
-    teardownHappyDom();
+  afterAll(async () => {
+    await teardownHappyDom();
   });
 
   // Test-only focus harness for the deferred-restore ordering.

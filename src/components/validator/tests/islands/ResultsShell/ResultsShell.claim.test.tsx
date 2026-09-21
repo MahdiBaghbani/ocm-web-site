@@ -359,8 +359,8 @@ describe("ResultsShell paste_s1 claim invitation", () => {
     await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
-  afterAll(() => {
-    teardownHappyDom();
+  afterAll(async () => {
+    await teardownHappyDom();
   });
 
   afterEach(() => {

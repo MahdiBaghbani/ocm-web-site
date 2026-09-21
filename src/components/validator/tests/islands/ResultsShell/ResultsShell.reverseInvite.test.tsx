@@ -328,8 +328,8 @@ describe("ResultsShell paste_s2 reverse invite", () => {
     await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
-  afterAll(() => {
-    teardownHappyDom();
+  afterAll(async () => {
+    await teardownHappyDom();
   });
 
   afterEach(() => {

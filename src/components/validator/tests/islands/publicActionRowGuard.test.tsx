@@ -93,8 +93,8 @@ describe("ResultsShell public action row ready/live guard", () => {
     await registerHappyDom();
   });
 
-  afterAll(() => {
-    teardownHappyDom();
+  afterAll(async () => {
+    await teardownHappyDom();
   });
 
   afterEach(() => {

@@ -302,8 +302,8 @@ beforeAll(async () => {
   await registerHappyDom("http://localhost/", "AreaModal.test.tsx");
 });
 
-afterAll(() => {
-  teardownHappyDom();
+afterAll(async () => {
+  await teardownHappyDom();
 });
 
 afterEach(() => {

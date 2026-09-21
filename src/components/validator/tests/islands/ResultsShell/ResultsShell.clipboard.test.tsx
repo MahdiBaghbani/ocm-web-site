@@ -305,8 +305,8 @@ describe("ResultsShell page-link clipboard", () => {
     await registerHappyDom("http://localhost/?host=peer.example&id=" + SESSION_ID);
   });
 
-  afterAll(() => {
-    teardownHappyDom();
+  afterAll(async () => {
+    await teardownHappyDom();
   });
 
   afterEach(() => {

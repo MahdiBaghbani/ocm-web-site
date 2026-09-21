@@ -6,7 +6,7 @@
 
 export interface HappyDomRegistrator {
   register: (options?: { url?: string }) => void;
-  unregister: () => void;
+  unregister: () => Promise<void>;
 }
 
 function isDomRegistrator(value: unknown): value is HappyDomRegistrator {
@@ -19,6 +19,8 @@ function isDomRegistrator(value: unknown): value is HappyDomRegistrator {
 }
 
 let registrator: HappyDomRegistrator | null = null;
+let priorActEnvironmentPresent = false;
+let priorActEnvironment: unknown = undefined;
 
 // Idempotent: a second call while already registered is a no-op, so nested
 // describe blocks can each call this in beforeAll without double-registering.
@@ -52,14 +54,27 @@ export async function registerHappyDom(
     throw new Error("happy-dom is installed but did not expose a GlobalRegistrator export.");
   }
   registrator = mod.GlobalRegistrator;
+  priorActEnvironmentPresent = Reflect.has(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  priorActEnvironment = priorActEnvironmentPresent
+    ? Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT")
+    : undefined;
   registrator.register({ url });
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 }
 
 // Idempotent: safe to call even when nothing is registered.
-export function teardownHappyDom(): void {
-  registrator?.unregister();
+export async function teardownHappyDom(): Promise<void> {
+  if (registrator === null) {
+    return;
+  }
+  const current = registrator;
+  await current.unregister();
   registrator = null;
+  if (priorActEnvironmentPresent) {
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", priorActEnvironment);
+  } else {
+    Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  }
 }
 
 // Drains one pending macrotask (a zero-delay-ish setTimeout tick) so tests

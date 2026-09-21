@@ -25,8 +25,8 @@ beforeAll(async () => {
   await registerHappyDom("http://localhost/", "ReportJsonModal.test.tsx");
 });
 
-afterAll(() => {
-  teardownHappyDom();
+afterAll(async () => {
+  await teardownHappyDom();
 });
 
 afterEach(() => {
