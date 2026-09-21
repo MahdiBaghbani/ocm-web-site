@@ -7,7 +7,7 @@ import {
   trackedSleep,
   unreadResponse,
 } from "./test-helpers";
-import { jsonResponse } from "../../test-helpers/fetchStub";
+import { jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 import type { ValidatorFetchDeps } from "./types";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";

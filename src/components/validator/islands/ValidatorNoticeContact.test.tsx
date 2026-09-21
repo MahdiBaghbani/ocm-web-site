@@ -7,9 +7,9 @@ import {
   installDomShim,
   reactDomContainerOf,
   ShimNode,
-} from "../test-helpers/domShim";
-import { jsonResponse } from "../test-helpers/fetchStub";
-import { waitForText } from "../test-helpers/wait";
+} from "@/components/validator/tests/helpers/domShim";
+import { jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
+import { waitForText } from "@/components/validator/tests/helpers/wait";
 import ValidatorNoticeContact from "./ValidatorNoticeContact";
 
 afterEach(() => {

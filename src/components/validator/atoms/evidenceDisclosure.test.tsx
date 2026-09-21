@@ -9,7 +9,7 @@ import {
   reactDomContainerOf,
   ShimEvent,
   ShimNode,
-} from "../test-helpers/domShim";
+} from "@/components/validator/tests/helpers/domShim";
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);

@@ -14,7 +14,7 @@ import AreaModal, { AreaModalContent } from "./AreaModal";
 import type { EvidenceItem } from "./EvidenceDisclosure";
 import type { CanonicalAreaId } from "../lib/validatorScore";
 import { VALIDATOR_REASONS } from "../lib/validatorReasons";
-import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
+import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 
 const DISCOVERY: CanonicalAreaId = "discovery";
 

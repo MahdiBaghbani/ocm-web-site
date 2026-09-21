@@ -7,9 +7,9 @@ import {
   reactDomContainerOf,
   ShimEvent,
   ShimNode,
-} from "../test-helpers/domShim";
-import { requestUrl, jsonResponse } from "../test-helpers/fetchStub";
-import { waitForText } from "../test-helpers/wait";
+} from "@/components/validator/tests/helpers/domShim";
+import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
+import { waitForText } from "@/components/validator/tests/helpers/wait";
 
 function walk(node: ShimNode, visit: (current: ShimNode) => void): void {
   visit(node);

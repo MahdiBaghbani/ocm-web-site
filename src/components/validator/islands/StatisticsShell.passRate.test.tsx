@@ -5,7 +5,7 @@ import StatisticsShell from "./StatisticsShell";
 import {
   installDomShim,
   reactDomContainerOf,
-} from "../test-helpers/domShim";
+} from "@/components/validator/tests/helpers/domShim";
 import { mockIslandFetch, readyStatistics } from "../test-helpers/statisticsFetch";
 import {
   findById,
@@ -13,7 +13,7 @@ import {
   htmlOf,
   tileValue,
 } from "../test-helpers/statisticsShell";
-import { waitForText } from "../test-helpers/wait";
+import { waitForText } from "@/components/validator/tests/helpers/wait";
 
 describe("StatisticsShell island panels", () => {
   test("ready branch renders numeric tiles, platforms, and area-grade totals", async () => {

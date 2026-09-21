@@ -10,7 +10,7 @@ import React, { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import ReportJsonModal from "./ReportJsonModal";
-import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
+import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 
 const REPORT = {
   schema: "federation_tester_report.v1",

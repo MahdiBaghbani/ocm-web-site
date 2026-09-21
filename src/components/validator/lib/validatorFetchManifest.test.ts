@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { fetchManifest } from "./validatorFetch";
 import { parseValidatorManifest } from "./validatorManifest";
 import { captureFetch, STORE_DOWN, trackedSleep } from "./fetch/test-helpers";
-import { jsonResponse } from "../test-helpers/fetchStub";
+import { jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 
 function validManifest(): Record<string, unknown> {
   return {

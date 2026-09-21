@@ -11,7 +11,7 @@ import {
 import {
   installDomShim,
   reactDomContainerOf,
-} from "../test-helpers/domShim";
+} from "@/components/validator/tests/helpers/domShim";
 import { emptyStatistics, mockIslandFetch } from "../test-helpers/statisticsFetch";
 import {
   findById,
@@ -19,7 +19,7 @@ import {
   htmlOf,
   tileValue,
 } from "../test-helpers/statisticsShell";
-import { waitForText } from "../test-helpers/wait";
+import { waitForText } from "@/components/validator/tests/helpers/wait";
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);

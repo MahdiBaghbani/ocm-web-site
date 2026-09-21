@@ -5,7 +5,7 @@ import {
   installDomShim,
   reactDomContainerOf,
   ShimEvent,
-} from "../test-helpers/domShim";
+} from "@/components/validator/tests/helpers/domShim";
 import AreaGrid, { VALIDATOR_AREA_IDS, type ValidatorAreaId } from "./AreaGrid";
 import {
   actionButtonIds,

@@ -4,7 +4,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { ShimNode } from "../test-helpers/domShim";
+import type { ShimNode } from "@/components/validator/tests/helpers/domShim";
 
 export function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);

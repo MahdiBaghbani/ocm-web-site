@@ -4,8 +4,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import ResultsShell from "./ResultsShell";
 import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
 import type { ReportResponse } from "../lib/validatorFetch";
-import { requestUrl, jsonResponse } from "../test-helpers/fetchStub";
-import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
+import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
+import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
 const API_ORIGIN = "https://validator.example.com";

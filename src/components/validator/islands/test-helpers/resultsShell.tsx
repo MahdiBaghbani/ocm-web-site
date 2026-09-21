@@ -11,8 +11,8 @@ import {
   ShimEvent,
   ShimNode,
   type ShimDocument,
-} from "../../test-helpers/domShim";
-import { waitForText } from "../../test-helpers/wait";
+} from "@/components/validator/tests/helpers/domShim";
+import { waitForText } from "@/components/validator/tests/helpers/wait";
 
 export { installDomShim, reactDomContainerOf, ShimEvent, ShimNode };
 export type { ShimDocument };

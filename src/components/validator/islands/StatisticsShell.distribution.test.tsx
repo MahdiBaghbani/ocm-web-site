@@ -5,10 +5,10 @@ import StatisticsShell from "./StatisticsShell";
 import {
   installDomShim,
   reactDomContainerOf,
-} from "../test-helpers/domShim";
+} from "@/components/validator/tests/helpers/domShim";
 import { emptyStatistics, mockIslandFetch } from "../test-helpers/statisticsFetch";
 import { findById, findByTag, htmlOf } from "../test-helpers/statisticsShell";
-import { waitForText } from "../test-helpers/wait";
+import { waitForText } from "@/components/validator/tests/helpers/wait";
 
 describe("StatisticsShell island panels", () => {
   test("empty branch omits GradeDistribution", async () => {

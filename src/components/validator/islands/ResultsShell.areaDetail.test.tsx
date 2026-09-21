@@ -9,10 +9,10 @@ import {
   reactDomContainerOf,
   ShimEvent,
   ShimNode,
-} from "../test-helpers/domShim";
-import { requestUrl, jsonResponse } from "../test-helpers/fetchStub";
-import { waitForText } from "../test-helpers/wait";
-import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
+} from "@/components/validator/tests/helpers/domShim";
+import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
+import { waitForText } from "@/components/validator/tests/helpers/wait";
+import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
 const API_ORIGIN = "https://validator.example.com";

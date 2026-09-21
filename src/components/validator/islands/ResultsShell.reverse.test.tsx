@@ -11,8 +11,8 @@ import ResultsShell, {
 import { type CanonicalAreaId } from "../lib/validatorScore";
 import { ACTION_ERROR_COPY } from "../lib/validatorGuidance";
 import { type ReportResponse, type ValidatorFailure } from "../lib/validatorFetch";
-import { requestUrl, jsonResponse } from "../test-helpers/fetchStub";
-import { registerHappyDom, teardownHappyDom } from "../test-helpers/happyDom";
+import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
+import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
 const API_ORIGIN = "https://validator.example.com";
