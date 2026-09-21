@@ -2,7 +2,7 @@ import React from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import GradeDistribution from "./GradeDistribution";
+import GradeDistribution from "@/components/validator/islands/GradeDistribution";
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);

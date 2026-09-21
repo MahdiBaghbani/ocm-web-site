@@ -2,7 +2,7 @@ import React from "react";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import ValidatorShell, { ValidatorEntryForm } from "./ValidatorShell";
+import ValidatorShell, { ValidatorEntryForm } from "@/components/validator/islands/ValidatorShell";
 
 function render(node: React.ReactElement): string {
   return renderToStaticMarkup(node);

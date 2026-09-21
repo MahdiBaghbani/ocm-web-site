@@ -1,10 +1,10 @@
 import React, { act } from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 
-import ResultsShell, { projectResultsPage } from "./ResultsShell";
-import { RESULT_HEADLINE } from "../lib/validatorScore";
-import { resolveValidatorMachine } from "../lib/stateMachine";
-import type { ReportResponse, SessionPollResponse } from "../lib/validatorFetch";
+import ResultsShell, { projectResultsPage } from "@/components/validator/islands/ResultsShell";
+import { RESULT_HEADLINE } from "@/components/validator/lib/validatorScore";
+import { resolveValidatorMachine } from "@/components/validator/lib/stateMachine";
+import type { ReportResponse, SessionPollResponse } from "@/components/validator/lib/validatorFetch";
 import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 

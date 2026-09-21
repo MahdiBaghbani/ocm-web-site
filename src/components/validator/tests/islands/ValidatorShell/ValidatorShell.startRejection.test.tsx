@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { describe, expect, test } from "bun:test";
 
-import ValidatorShell from "./ValidatorShell";
+import ValidatorShell from "@/components/validator/islands/ValidatorShell";
 import {
   installDomShim,
   reactDomContainerOf,

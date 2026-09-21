@@ -2,7 +2,7 @@ import React, { act } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
 import { createRoot } from "react-dom/client";
 
-import { resetSharedRuntimeConfigForTests } from "../../../lib/siteRuntimeConfig";
+import { resetSharedRuntimeConfigForTests } from "@/lib/siteRuntimeConfig";
 import {
   installDomShim,
   reactDomContainerOf,
@@ -10,7 +10,7 @@ import {
 } from "@/components/validator/tests/helpers/domShim";
 import { jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 import { waitForText } from "@/components/validator/tests/helpers/wait";
-import ValidatorNoticeContact from "./ValidatorNoticeContact";
+import ValidatorNoticeContact from "@/components/validator/islands/ValidatorNoticeContact";
 
 afterEach(() => {
   resetSharedRuntimeConfigForTests();
