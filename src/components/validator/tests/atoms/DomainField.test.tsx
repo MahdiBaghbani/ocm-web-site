@@ -1,8 +1,8 @@
 import React from "react";
 import { describe, expect, test } from "bun:test";
 
-import DomainField from "./DomainField";
-import { render } from "./test-helpers";
+import DomainField from "@/components/validator/atoms/DomainField";
+import { render } from "@/components/validator/tests/atoms/helpers/test-helpers";
 
 describe("DomainField", () => {
   test("renders a labeled read-only domain value", () => {

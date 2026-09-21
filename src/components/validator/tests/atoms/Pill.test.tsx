@@ -1,8 +1,8 @@
 import React from "react";
 import { describe, expect, test } from "bun:test";
 
-import Pill, { PILL_KINDS } from "./Pill";
-import { firstPillLabel, render } from "./test-helpers";
+import Pill, { PILL_KINDS } from "@/components/validator/atoms/Pill";
+import { firstPillLabel, render } from "@/components/validator/tests/atoms/helpers/test-helpers";
 
 describe("Pill", () => {
   test("renders every kind with its default label", () => {

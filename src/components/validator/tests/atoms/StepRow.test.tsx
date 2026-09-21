@@ -1,8 +1,8 @@
 import React from "react";
 import { describe, expect, test } from "bun:test";
 
-import { guidanceFor } from "../lib/validatorGuidance";
-import StepRow from "./StepRow";
+import { guidanceFor } from "@/components/validator/lib/validatorGuidance";
+import StepRow from "@/components/validator/atoms/StepRow";
 import {
   ctaSlotTag,
   guidanceSlotTag,
@@ -12,7 +12,7 @@ import {
   secondaryLinkTag,
   statusCaptionTag,
   stepIndexNumeral,
-} from "./test-helpers";
+} from "@/components/validator/tests/atoms/helpers/test-helpers";
 
 describe("StepRow", () => {
   test("renders pending, current, and complete statuses", () => {

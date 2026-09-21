@@ -1,13 +1,13 @@
 import React from "react";
 import { describe, expect, test } from "bun:test";
 
-import RawJsonPanel from "./RawJsonPanel";
+import RawJsonPanel from "@/components/validator/atoms/RawJsonPanel";
 import {
   FILE_VIEWER_CHIP,
   countAttr,
   countChipsInFileViewerPanel,
   render,
-} from "./test-helpers";
+} from "@/components/validator/tests/atoms/helpers/test-helpers";
 
 describe("RawJsonPanel", () => {
   test("renders one JSON panel without throwing", () => {

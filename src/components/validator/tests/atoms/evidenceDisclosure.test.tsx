@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { ChevronRight } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import EvidenceDisclosure from "./EvidenceDisclosure";
+import EvidenceDisclosure from "@/components/validator/atoms/EvidenceDisclosure";
 import {
   installDomShim,
   reactDomContainerOf,

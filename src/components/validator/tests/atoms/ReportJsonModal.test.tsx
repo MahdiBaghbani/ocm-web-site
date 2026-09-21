@@ -9,7 +9,7 @@ import {
 import React, { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import ReportJsonModal from "./ReportJsonModal";
+import ReportJsonModal from "@/components/validator/atoms/ReportJsonModal";
 import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 
 const REPORT = {

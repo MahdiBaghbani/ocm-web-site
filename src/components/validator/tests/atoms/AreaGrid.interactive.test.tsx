@@ -6,7 +6,7 @@ import {
   reactDomContainerOf,
   ShimEvent,
 } from "@/components/validator/tests/helpers/domShim";
-import AreaGrid, { VALIDATOR_AREA_IDS, type ValidatorAreaId } from "./AreaGrid";
+import AreaGrid, { VALIDATOR_AREA_IDS, type ValidatorAreaId } from "@/components/validator/atoms/AreaGrid";
 import {
   actionButtonIds,
   actionButtonLabelledby,
@@ -14,7 +14,7 @@ import {
   countAttr,
   findNode,
   render,
-} from "./test-helpers";
+} from "@/components/validator/tests/atoms/helpers/test-helpers";
 
 describe("AreaGrid interactive", () => {
   test("results interactive trigger appears only when openable", () => {

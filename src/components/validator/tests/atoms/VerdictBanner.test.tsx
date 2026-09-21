@@ -15,8 +15,8 @@ import {
   iconSlotMarkup,
   render,
   svgInnerMarkup,
-} from "./test-helpers";
-import VerdictBanner, { VERDICT_KINDS, verdictKindFromScore } from "./VerdictBanner";
+} from "@/components/validator/tests/atoms/helpers/test-helpers";
+import VerdictBanner, { VERDICT_KINDS, verdictKindFromScore } from "@/components/validator/atoms/VerdictBanner";
 
 const VERDICT_LUCIDE_ICONS = {
   pass: CircleCheck,

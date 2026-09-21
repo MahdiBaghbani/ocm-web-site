@@ -6,8 +6,8 @@ import {
   CANONICAL_AREA_IDS,
   areaGridEntriesFromScore,
   parseSpecificationScore,
-} from "../lib/validatorScore";
-import AreaGrid, { VALIDATOR_AREA_IDS } from "./AreaGrid";
+} from "@/components/validator/lib/validatorScore";
+import AreaGrid, { VALIDATOR_AREA_IDS } from "@/components/validator/atoms/AreaGrid";
 import {
   areaGradeText,
   areaRateText,
@@ -16,7 +16,7 @@ import {
   hasNonAscii,
   pillLabels,
   render,
-} from "./test-helpers";
+} from "@/components/validator/tests/atoms/helpers/test-helpers";
 
 describe("AreaGrid rendering", () => {
   test("always renders the eight canonical areas", () => {

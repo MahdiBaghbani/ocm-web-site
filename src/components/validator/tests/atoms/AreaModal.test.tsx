@@ -10,10 +10,10 @@ import React, { act, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createRoot, type Root } from "react-dom/client";
 
-import AreaModal, { AreaModalContent } from "./AreaModal";
-import type { EvidenceItem } from "./EvidenceDisclosure";
-import type { CanonicalAreaId } from "../lib/validatorScore";
-import { VALIDATOR_REASONS } from "../lib/validatorReasons";
+import AreaModal, { AreaModalContent } from "@/components/validator/atoms/AreaModal";
+import type { EvidenceItem } from "@/components/validator/atoms/EvidenceDisclosure";
+import type { CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import { VALIDATOR_REASONS } from "@/components/validator/lib/validatorReasons";
 import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 
 const DISCOVERY: CanonicalAreaId = "discovery";
