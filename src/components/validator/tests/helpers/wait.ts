@@ -1,6 +1,6 @@
 import { act } from "react";
 
-import type { ShimNode } from "./domShim";
+import type { ShimNode } from "@/components/validator/tests/helpers/domShim";
 
 // Preserves the 2000ms waitForText contract copied across the validator
 // test harnesses: poll the shim container's text content until the needle

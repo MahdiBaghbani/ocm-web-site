@@ -1,8 +1,8 @@
 // Statistics-specific fetch fixtures for StatisticsShell panel tests.
 // Built on fetchStub (requestUrl / jsonResponse); does not install a DOM.
 
-import { CANONICAL_AREA_IDS } from "@/components/validator/lib/score/areas";
 import { jsonResponse, requestUrl } from "@/components/validator/tests/helpers/fetchStub";
+import { zeroAreas } from "@/components/validator/tests/helpers/zeroAreas";
 
 export const CONFIG_BODY = {
   poll_interval_ms: 1,
@@ -47,10 +47,6 @@ export function parseableManifest(): Record<string, unknown> {
     sessionKind: { supported: ["passive"], scanDefault: "passive" },
     nextInstruction: { created: "wait_probe" },
   };
-}
-
-export function zeroAreas(): Array<{ area: string; pass: number; warn: number; fail: number }> {
-  return CANONICAL_AREA_IDS.map((area) => ({ area, pass: 0, warn: 0, fail: 0 }));
 }
 
 export function emptyStatistics(): Record<string, unknown> {
