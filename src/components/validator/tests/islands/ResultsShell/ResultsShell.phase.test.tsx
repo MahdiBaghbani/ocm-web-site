@@ -1,14 +1,14 @@
 import React, { act } from "react";
 import { describe, expect, test } from "bun:test";
 
-import ResultsShell from "./ResultsShell";
-import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
-import { type ReportResponse } from "../lib/validatorFetch";
+import ResultsShell from "@/components/validator/islands/ResultsShell";
+import { RESULT_HEADLINE, type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import { type ReportResponse } from "@/components/validator/lib/validatorFetch";
 import {
   installDomShim,
   reactDomContainerOf,
   ShimNode,
-} from "./test-helpers/resultsShell";
+} from "@/components/validator/tests/islands/ResultsShell/helpers/resultsShell";
 import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 import { waitForText } from "@/components/validator/tests/helpers/wait";
 

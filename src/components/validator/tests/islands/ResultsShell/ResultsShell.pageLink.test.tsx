@@ -5,10 +5,10 @@ import ResultsShell, {
   PAGE_LINK_NOT_SAVED_NOTICE,
   TEST_HREF,
   VISIBILITY_NOTICE,
-} from "./ResultsShell";
-import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
-import type { EvidenceItem } from "../lib/evidence/types";
-import { type ReportResponse } from "../lib/validatorFetch";
+} from "@/components/validator/islands/ResultsShell";
+import { RESULT_HEADLINE, type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import type { EvidenceItem } from "@/components/validator/lib/evidence/types";
+import { type ReportResponse } from "@/components/validator/lib/validatorFetch";
 import {
   installDomShim,
   reactDomContainerOf,

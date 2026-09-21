@@ -3,12 +3,12 @@ import { describe, expect, test } from "bun:test";
 
 import ResultsShell, {
   VISIBILITY_NOTICE,
-} from "./ResultsShell";
-import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
+} from "@/components/validator/islands/ResultsShell";
+import { RESULT_HEADLINE, type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
 import {
   resolvePublicReportUrl,
   type ReportResponse,
-} from "../lib/validatorFetch";
+} from "@/components/validator/lib/validatorFetch";
 import {
   installDomShim,
   reactDomContainerOf,

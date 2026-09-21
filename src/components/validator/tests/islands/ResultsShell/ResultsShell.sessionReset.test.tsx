@@ -5,15 +5,15 @@ import ResultsShell, {
   CACHED_SESSION_JSON_NOTE,
   EVIDENCE_NOT_SAVED,
   VISIBILITY_NOTICE,
-} from "./ResultsShell";
-import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
-import type { ReportResponse } from "../lib/validatorFetch";
+} from "@/components/validator/islands/ResultsShell";
+import { RESULT_HEADLINE, type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import type { ReportResponse } from "@/components/validator/lib/validatorFetch";
 import {
   installDomShim,
   reactDomContainerOf,
   ShimEvent,
   ShimNode,
-} from "./test-helpers/resultsShell";
+} from "@/components/validator/tests/islands/ResultsShell/helpers/resultsShell";
 import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 import { waitForText } from "@/components/validator/tests/helpers/wait";
 

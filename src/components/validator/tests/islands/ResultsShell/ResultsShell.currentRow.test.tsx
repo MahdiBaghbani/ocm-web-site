@@ -3,13 +3,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bu
 
 import ResultsShell, {
   COPY_INVITATION_LABEL,
-} from "./ResultsShell";
-import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
-import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "../lib/validatorGuidance";
+} from "@/components/validator/islands/ResultsShell";
+import { RESULT_HEADLINE, type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "@/components/validator/lib/validatorGuidance";
 import {
   joinValidatorUrl,
   type ReportResponse,
-} from "../lib/validatorFetch";
+} from "@/components/validator/lib/validatorFetch";
 import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 
@@ -879,7 +879,7 @@ describe("ResultsShell current-row guidance, announce, and reserved slots", () =
   });
 
   test("strips bracketed markers from the visible current-row guidance and the step announcement", async () => {
-    const guidanceModule = await import("../lib/validatorGuidance");
+    const guidanceModule = await import("@/components/validator/lib/validatorGuidance");
     const originalGuidanceFor = guidanceModule.guidanceFor;
     // Defensive stripping in ResultsShell exists for guidance content that
     // should never carry a bracketed planning marker, even though the real
@@ -887,7 +887,7 @@ describe("ResultsShell current-row guidance, announce, and reserved slots", () =
     // through a scoped module mock (restored in finally) so this proves the
     // real render path strips it, instead of only unit-testing the pure
     // stripBracketedMarkers/sanitizeGuidanceRecord helpers in isolation.
-    mock.module("../lib/validatorGuidance", () => ({
+    mock.module("@/components/validator/lib/validatorGuidance", () => ({
       ...guidanceModule,
       guidanceFor: (key: string | null | undefined) => {
         const record = originalGuidanceFor(key);
@@ -936,7 +936,7 @@ describe("ResultsShell current-row guidance, announce, and reserved slots", () =
         root.unmount();
       });
       restoreFetch();
-      mock.module("../lib/validatorGuidance", () => ({
+      mock.module("@/components/validator/lib/validatorGuidance", () => ({
         ...guidanceModule,
         guidanceFor: originalGuidanceFor,
       }));

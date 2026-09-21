@@ -4,9 +4,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import ResultsShell, {
   COPY_SUCCESS_TEXT,
   copyText,
-} from "./ResultsShell";
-import { type CanonicalAreaId } from "../lib/validatorScore";
-import type { ReportResponse } from "../lib/validatorFetch";
+} from "@/components/validator/islands/ResultsShell";
+import { type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import type { ReportResponse } from "@/components/validator/lib/validatorFetch";
 import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 

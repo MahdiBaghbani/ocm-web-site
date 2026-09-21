@@ -7,10 +7,10 @@ import ResultsShell, {
   COPY_INVITATION_LABEL,
   COPY_SUCCESS_TEXT,
   INVITE_FIELD_LABEL,
-} from "./ResultsShell";
-import { type CanonicalAreaId } from "../lib/validatorScore";
-import { ACTION_ERROR_COPY } from "../lib/validatorGuidance";
-import { type ReportResponse } from "../lib/validatorFetch";
+} from "@/components/validator/islands/ResultsShell";
+import { type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import { ACTION_ERROR_COPY } from "@/components/validator/lib/validatorGuidance";
+import { type ReportResponse } from "@/components/validator/lib/validatorFetch";
 import { requestUrl, jsonResponse } from "@/components/validator/tests/helpers/fetchStub";
 import { registerHappyDom, teardownHappyDom } from "@/components/validator/tests/helpers/happyDom";
 

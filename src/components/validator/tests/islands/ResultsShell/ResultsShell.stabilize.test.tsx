@@ -3,9 +3,9 @@ import { describe, expect, test } from "bun:test";
 import {
   INITIAL_LIVE_INSTRUCTION_HOLD,
   stabilizeLiveView,
-} from "./ResultsShell";
-import { resolveValidatorMachine } from "../lib/stateMachine";
-import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "../lib/validatorGuidance";
+} from "@/components/validator/islands/ResultsShell";
+import { resolveValidatorMachine } from "@/components/validator/lib/stateMachine";
+import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "@/components/validator/lib/validatorGuidance";
 
 function activeViewOf(state: string, nextInstruction?: string): ReturnType<typeof resolveValidatorMachine> {
   return resolveValidatorMachine({ state, optInActive: true, nextInstruction });

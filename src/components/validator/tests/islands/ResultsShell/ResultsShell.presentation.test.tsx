@@ -15,18 +15,18 @@ import {
   sanitizeGuidanceRecord,
   specificationInputFromReport,
   stripBracketedMarkers,
-} from "./ResultsShell";
-import { type CanonicalAreaId } from "../lib/validatorScore";
-import type { EvidenceItem } from "../lib/evidence/types";
-import { resolveValidatorMachine } from "../lib/stateMachine";
-import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "../lib/validatorGuidance";
+} from "@/components/validator/islands/ResultsShell";
+import { type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import type { EvidenceItem } from "@/components/validator/lib/evidence/types";
+import { resolveValidatorMachine } from "@/components/validator/lib/stateMachine";
+import { UNKNOWN_GUIDANCE_TITLE, guidanceFor } from "@/components/validator/lib/validatorGuidance";
 import {
   joinValidatorUrl,
   resolvePublicReportUrl,
   type ReportResponse,
   type SessionPollResponse,
   type ValidatorFailure,
-} from "../lib/validatorFetch";
+} from "@/components/validator/lib/validatorFetch";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
 const API_ORIGIN = "https://validator.example.com";

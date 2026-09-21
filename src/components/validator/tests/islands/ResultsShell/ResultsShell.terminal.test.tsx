@@ -4,15 +4,15 @@ import {
   CACHED_SESSION_JSON_NOTE,
   VISIBILITY_NOTICE,
   projectResultsPage,
-} from "./ResultsShell";
-import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
-import type { EvidenceItem } from "../lib/evidence/types";
-import { resolveValidatorMachine } from "../lib/stateMachine";
+} from "@/components/validator/islands/ResultsShell";
+import { RESULT_HEADLINE, type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import type { EvidenceItem } from "@/components/validator/lib/evidence/types";
+import { resolveValidatorMachine } from "@/components/validator/lib/stateMachine";
 import {
   type ReportResponse,
   type SessionPollResponse,
   type ValidatorFailure,
-} from "../lib/validatorFetch";
+} from "@/components/validator/lib/validatorFetch";
 
 const SESSION_ID = "0193a0c2-7c1d-7b4a-8f2e-1a2b3c4d5e6f";
 const API_ORIGIN = "https://validator.example.com";

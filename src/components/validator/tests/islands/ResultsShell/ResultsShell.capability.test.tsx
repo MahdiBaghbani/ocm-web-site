@@ -3,14 +3,14 @@ import { describe, expect, test } from "bun:test";
 
 import ResultsShell, {
   projectResultsPage,
-} from "./ResultsShell";
-import { RESULT_HEADLINE, type CanonicalAreaId } from "../lib/validatorScore";
-import { resolveValidatorMachine } from "../lib/stateMachine";
-import { guidanceFor } from "../lib/validatorGuidance";
+} from "@/components/validator/islands/ResultsShell";
+import { RESULT_HEADLINE, type CanonicalAreaId } from "@/components/validator/lib/validatorScore";
+import { resolveValidatorMachine } from "@/components/validator/lib/stateMachine";
+import { guidanceFor } from "@/components/validator/lib/validatorGuidance";
 import {
   type ReportResponse,
   type SessionPollResponse,
-} from "../lib/validatorFetch";
+} from "@/components/validator/lib/validatorFetch";
 import {
   installDomShim,
   reactDomContainerOf,
