@@ -7,13 +7,13 @@ import { describe, expect, test } from "bun:test";
 import type {
   RunEntry,
   SuiteManifest,
-} from "./contracts";
+} from "@/components/observatory/lib/contracts";
 import {
   SUITE_MANIFEST_FILENAME,
   buildObservatoryStaticPaths,
   isEnoent,
   loadObservatoryStaticPaths,
-} from "./observatoryStaticPaths";
+} from "@/components/observatory/lib/observatoryStaticPaths";
 import {
   makeRules,
   makeScenario,

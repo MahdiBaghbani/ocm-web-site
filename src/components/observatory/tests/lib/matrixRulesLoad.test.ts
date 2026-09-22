@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { FlowMetadata } from "./contracts";
+import type { FlowMetadata } from "@/components/observatory/lib/contracts";
 import {
   canRenderObservatory,
   canRenderRunModal,
   evaluateMatrixRulesLoad,
   runModalRenderContext,
-} from "./matrixRulesLoad";
+} from "@/components/observatory/lib/matrixRulesLoad";
 import {
   makeFlow,
   makeRules,

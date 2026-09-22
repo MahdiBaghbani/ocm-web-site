@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { FlowMetadata, MatrixRuleScenario } from "./contracts";
+import type { FlowMetadata, MatrixRuleScenario } from "@/components/observatory/lib/contracts";
 import {
   getFlowMetadataValidationError,
   validateMatrixRulesFlows,
-} from "./flowValidation";
-import { isSupportedGlyphId, SUPPORTED_GLYPH_IDS } from "./glyphRegistry";
+} from "@/components/observatory/lib/flowValidation";
+import { isSupportedGlyphId, SUPPORTED_GLYPH_IDS } from "@/components/observatory/lib/glyphRegistry";
 import {
   makeFlow,
   makeRules,
