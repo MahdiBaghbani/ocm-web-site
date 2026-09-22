@@ -12,8 +12,16 @@ import {
 } from "./checkMatrixRulesArtifact";
 import { evaluateMatrixRulesLoad } from "./matrixRulesLoad";
 
-describe("committed matrix-rules.v1.json", () => {
-  const artifactPath = defaultMatrixRulesArtifactPath();
+const artifactPath = defaultMatrixRulesArtifactPath();
+const artifactPresent = await Bun.file(artifactPath).exists();
+const skipAbsent =
+  "matrix-rules.v1.json not generated in this checkout; run site ingest";
+
+describe("generated matrix-rules.v1.json", () => {
+  if (!artifactPresent) {
+    test.skip(skipAbsent, () => {});
+    return;
+  }
 
   test("loads from public/ and satisfies evaluateMatrixRulesLoad", async () => {
     const rules = await loadMatrixRulesArtifact(artifactPath);

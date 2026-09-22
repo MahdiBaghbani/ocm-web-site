@@ -18,7 +18,7 @@ import { OverlayFrame, type OverlayFrameSize } from "./OverlayFrame";
 
 interface DomRegistrator {
   register: (options?: { url?: string }) => void;
-  unregister: () => void;
+  unregister: () => Promise<void>;
 }
 
 function isDomRegistrator(value: unknown): value is DomRegistrator {
@@ -33,6 +33,8 @@ function isDomRegistrator(value: unknown): value is DomRegistrator {
 }
 
 let registrator: DomRegistrator | null = null;
+let priorActEnvironmentPresent = false;
+let priorActEnvironment: unknown = undefined;
 
 beforeAll(async () => {
   // Runtime-only specifier: keeps the type checker from requiring the optional
@@ -60,13 +62,27 @@ beforeAll(async () => {
     );
   }
   registrator = mod.GlobalRegistrator;
+  priorActEnvironmentPresent = Reflect.has(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  priorActEnvironment = priorActEnvironmentPresent
+    ? Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT")
+    : undefined;
   registrator.register({ url: "http://localhost/" });
   // React 19 requires this flag for act() outside a bundler test preset.
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 });
 
-afterAll(() => {
-  registrator?.unregister();
+afterAll(async () => {
+  if (registrator === null) {
+    return;
+  }
+  const current = registrator;
+  await current.unregister();
+  registrator = null;
+  if (priorActEnvironmentPresent) {
+    Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", priorActEnvironment);
+  } else {
+    Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  }
 });
 
 let root: Root | null = null;
