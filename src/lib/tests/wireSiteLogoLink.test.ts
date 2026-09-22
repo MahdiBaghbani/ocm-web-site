@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { resetSharedRuntimeConfigForTests } from "./siteRuntimeConfig";
+import { resetSharedRuntimeConfigForTests } from "@/lib/siteRuntimeConfig";
 import {
   applySiteLogoLink,
   SITE_LOGO_LINK_ID,
   type SiteLogoAnchor,
   wireSiteLogoLink,
-} from "./wireSiteLogoLink";
+} from "@/lib/wireSiteLogoLink";
 
 afterEach(() => {
   resetSharedRuntimeConfigForTests();
@@ -53,7 +53,7 @@ describe("applySiteLogoLink", () => {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    const { loadSharedRuntimeConfig } = await import("./siteRuntimeConfig");
+    const { loadSharedRuntimeConfig } = await import("@/lib/siteRuntimeConfig");
     await loadSharedRuntimeConfig(fetchLike);
 
     const anchor = fakeAnchor("/");
@@ -69,7 +69,7 @@ describe("applySiteLogoLink", () => {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    const { loadSharedRuntimeConfig } = await import("./siteRuntimeConfig");
+    const { loadSharedRuntimeConfig } = await import("@/lib/siteRuntimeConfig");
     await loadSharedRuntimeConfig(fetchLike);
 
     const anchor = fakeAnchor("/");
@@ -85,7 +85,7 @@ describe("applySiteLogoLink", () => {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    const { loadSharedRuntimeConfig } = await import("./siteRuntimeConfig");
+    const { loadSharedRuntimeConfig } = await import("@/lib/siteRuntimeConfig");
     await loadSharedRuntimeConfig(fetchLike);
 
     const removed: string[] = [];

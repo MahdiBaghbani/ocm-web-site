@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { DEFAULT_VALIDATOR_CONFIG } from "../components/validator/lib/validatorConfig";
+import { DEFAULT_VALIDATOR_CONFIG } from "@/components/validator/lib/validatorConfig";
 import {
   loadSharedRuntimeConfig,
   resetSharedRuntimeConfigForTests,
   resolveSiteLogoHref,
   siteLogoLinkAttrs,
-} from "./siteRuntimeConfig";
+} from "@/lib/siteRuntimeConfig";
 
 afterEach(() => {
   resetSharedRuntimeConfigForTests();

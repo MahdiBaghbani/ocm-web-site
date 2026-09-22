@@ -9,8 +9,8 @@ import {
   checkMatrixRulesPayload,
   defaultMatrixRulesArtifactPath,
   loadMatrixRulesArtifact,
-} from "./checkMatrixRulesArtifact";
-import { evaluateMatrixRulesLoad } from "./matrixRulesLoad";
+} from "@/components/observatory/lib/checkMatrixRulesArtifact";
+import { evaluateMatrixRulesLoad } from "@/components/observatory/lib/matrixRulesLoad";
 
 const artifactPath = defaultMatrixRulesArtifactPath();
 const artifactPresent = await Bun.file(artifactPath).exists();

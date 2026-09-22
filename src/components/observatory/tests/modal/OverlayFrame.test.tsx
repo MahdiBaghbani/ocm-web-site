@@ -14,7 +14,7 @@ import {
 } from "bun:test";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { OverlayFrame, type OverlayFrameSize } from "./OverlayFrame";
+import { OverlayFrame, type OverlayFrameSize } from "@/components/observatory/modal/OverlayFrame";
 
 interface DomRegistrator {
   register: (options?: { url?: string }) => void;
@@ -442,14 +442,14 @@ describe("OverlayFrame", () => {
 describe("RunModal", () => {
   test("passes the lg size to OverlayFrame", async () => {
     let capturedSize: unknown;
-    mock.module("./OverlayFrame", () => ({
+    mock.module("@/components/observatory/modal/OverlayFrame", () => ({
       OverlayFrame: (props: { size?: unknown }) => {
         capturedSize = props.size;
         return null;
       },
     }));
 
-    const { RunModal } = await import("./RunModal");
+    const { RunModal } = await import("@/components/observatory/modal/RunModal");
 
     const onClose = mock(() => {});
     const onSelectRun = mock(() => {});
