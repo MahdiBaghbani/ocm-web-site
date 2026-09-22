@@ -1,60 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import type { FlowMetadata, MatrixRuleScenario, MatrixRules } from "./contracts";
+import type { FlowMetadata } from "./contracts";
 import {
   canRenderObservatory,
   canRenderRunModal,
   evaluateMatrixRulesLoad,
   runModalRenderContext,
 } from "./matrixRulesLoad";
-
-function makeFlow(overrides: Partial<FlowMetadata> = {}): FlowMetadata {
-  return {
-    flow_id: "login",
-    label: "Login",
-    subtitle: "",
-    glyph_id: "key",
-    display_order: 1,
-    enabled: true,
-    two_party: false,
-    mitm: false,
-    ...overrides,
-  };
-}
-
-function makeScenario(overrides: Partial<MatrixRuleScenario> = {}): MatrixRuleScenario {
-  return {
-    matrix_key: "login__nextcloud",
-    flow_id: "login",
-    pair: "nextcloud",
-    enabled: true,
-    browser: "chrome",
-    sender_platform: "nextcloud",
-    sender_version: "32",
-    receiver_platform: "",
-    receiver_version: "",
-    mitm: false,
-    cell_id: "login__nextcloud__chrome",
-    artifact_name: "login",
-    display_status: "supported",
-    ...overrides,
-  };
-}
-
-function makeRules(
-  flows: FlowMetadata[],
-  matrix: MatrixRuleScenario[],
-): MatrixRules {
-  return {
-    schema_version: 1,
-    generated_at: "2026-01-01T00:00:00Z",
-    generator: "test",
-    producer: { name: "test", version: "0" },
-    sources: [],
-    source: "test",
-    flows,
-    matrix,
-  };
-}
+import {
+  makeFlow,
+  makeRules,
+  makeScenario,
+} from "@/components/observatory/tests/lib/helpers/observatoryFactories";
 
 const openRunOverlay = {
   kind: "run" as const,
