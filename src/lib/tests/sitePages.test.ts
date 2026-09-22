@@ -16,7 +16,7 @@ import {
   landing,
   pagePath,
   primaryPage,
-} from "./sitePages";
+} from "@/lib/sitePages";
 
 const SITE_ENV_KEYS = [
   "SITE_PROFILE",
